@@ -28,10 +28,7 @@
         <button
           class="hoverable mr-2 rounded-md p-1 transition"
           @mousedown.stop.prevent
-          @click.stop.prevent="
-            state.hide = !state.hide;
-            clearConnectedPort();
-          "
+          @click.stop.prevent="state.hide = !state.hide"
         >
           <v-remixicon :name="state.hide ? 'riEyeOffLine' : 'riEyeLine'" />
         </button>
@@ -403,6 +400,13 @@ browser.runtime.onConnect.addListener((port) => {
   connectedPort = port;
   state.isSelectBlockElement = true;
 
+  // revive the UI for a new selection session on the same page
+  // (elementSelectorInstance() only flips display:block on the destroyed card)
+  state.hide = false;
+  state.showSettings = false;
+  state.elSelector = '';
+  state.selectedElements = [];
+
   port.onDisconnect.addListener(clearConnectedPort);
 });
 
@@ -447,6 +451,6 @@ onBeforeUnmount(() => {
   padding: 0 !important;
 }
 .main-tab .ui-tab.is-active.fill {
-  @apply bg-accent text-white !important;
+ @apply text-white !important;
 }
 </style>
