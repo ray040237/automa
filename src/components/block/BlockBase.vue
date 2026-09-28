@@ -141,7 +141,7 @@ function runWorkflow() {
   button {
     padding-left: 6px;
     padding-right: 6px;
-    @apply focus:ring-0 py-1;
+    @apply focus:ring-0 py-1 hover:text-primary;
   }
 }
 </style>

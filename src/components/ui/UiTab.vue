@@ -51,12 +51,12 @@ const uiTabs = inject('ui-tabs', {});
   @apply p-2;
 }
 .ui-tab.is-active {
- @apply dark:border-gray-100 text-gray-800 dark:text-white;
+  @apply border-accent dark:border-gray-100 text-gray-800 dark:text-white;
 }
 .ui-tab.is-active.fill {
   @apply bg-black bg-opacity-5 dark:bg-gray-200 dark:bg-opacity-5;
 }
 .ui-tab.is-active {
- @apply dark:border-gray-100 text-gray-800 dark:text-white;
+  @apply border-accent dark:border-gray-100 text-gray-800 dark:text-white;
 }
 </style>

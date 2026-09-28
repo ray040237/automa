@@ -212,6 +212,6 @@ td {
 }
 
 .to-do-type.is-active {
-  @apply dark:text-black text-gray-100 !important;
+  @apply bg-accent dark:text-black text-gray-100 !important;
 }
 </style>
