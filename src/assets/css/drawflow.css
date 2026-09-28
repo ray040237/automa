@@ -37,7 +37,7 @@
 
 .drawflow .drawflow-node.selected,
 .drawflow .drawflow-node.selected-list {
-  @apply ring-accent;
+
 }
 
 .drawflow .drawflow-node .inputs,
@@ -70,11 +70,10 @@
   z-index: 1;
   margin-bottom: 5px;
   border-width: 3px;
-  @apply border-accent bg-white dark:bg-gray-900;
+ @apply bg-white dark:bg-gray-900;
 }
 
 .drawflow .drawflow-node .input {
-  @apply bg-accent !important;
 }
 
 .drawflow .icon-ui {
@@ -94,17 +93,17 @@
 .drawflow .connection .main-path {
   fill: none;
   stroke-width: 5px;
-  stroke: theme('colors.accent');
+  stroke: #2563eb;
   transition: stroke 100ms ease-in-out;
 }
 
 .drawflow .connection .main-path:hover {
-  stroke: theme('colors.yellow.300');
+  stroke: #fde047;
   cursor: pointer
 }
 
 .drawflow .connection .main-path.selected {
-  stroke: theme('colors.green.300');
+  stroke: #86efac;
 }
 
 .drawflow .connection .point {
@@ -116,13 +115,13 @@
 
 .drawflow .connection .point.selected,
 .drawflow .connection .point:hover {
-  fill: theme('colors.blue.600');
+  fill: #2563eb;
 }
 
 .drawflow .main-path {
   fill: none;
   stroke-width: 5px;
-  stroke: theme('colors.accent');
+  stroke: #2563eb;
 }
 
 .drawflow-node .drawflow-delete {

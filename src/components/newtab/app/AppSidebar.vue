@@ -216,6 +216,6 @@ async function injectElementSelector() {
   top: 0;
   height: 100%;
   width: 4px;
-  @apply bg-accent dark:bg-gray-100;
+  @apply dark:bg-gray-100;
 }
 </style>

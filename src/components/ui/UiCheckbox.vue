@@ -75,7 +75,7 @@ export default {
 }
 .checkbox-ui__input:checked ~ .checkbox-ui__mark,
 .checkbox-ui__input.indeterminate ~ .checkbox-ui__mark {
-  @apply bg-accent border-accent bg-opacity-100;
+ @apply bg-opacity-100;
 }
 .checkbox-ui__mark {
   width: 100%;

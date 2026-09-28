@@ -52,7 +52,7 @@ textarea:focus,
 select:focus,
 [role='button']:focus {
   outline: none;
-  @apply ring-2 ring-accent dark:ring-gray-200;
+  @apply ring-2 dark:ring-gray-200;
 }
 
 .text-overflow {

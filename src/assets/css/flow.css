@@ -7,7 +7,7 @@
 		@apply rounded-lg transition;
 	}
 	&.selected .block-base__content {
-		@apply ring-2 ring-accent;
+		@apply ring-2;
 	}
 	&:hover {
 		.block-menu-container {
@@ -22,11 +22,11 @@
 	.vue-flow__handle {
 		@apply h-4 w-4 rounded-full border-0;
 		&.target {
-			@apply bg-accent -ml-4;
+			@apply -ml-4;
 		}
 		&.source {
 			border-width: 3px;
-			@apply border-accent -mr-4 bg-white dark:bg-black;
+			@apply -mr-4 bg-white dark:bg-black;
 		}
 	}
 }
@@ -38,25 +38,25 @@
 		}
 	}
 	svg g.connected-edges path {
-		stroke:  theme('colors.primary');
+		stroke: #2563eb;
 	}
 }
 
 .vue-flow__edge {
 	cursor: pointer;
 	&.selected .vue-flow__edge-path {
-		stroke: theme('colors.green.300');
+		stroke: #86efac;
 	}
 }
 
 .dark .vue-flow__edge-path:hover {
-	stroke: theme('colors.yellow.400');
+	stroke: #facc15;
 }
 .vue-flow__edge-path {
-  stroke: theme('colors.accent');
+  stroke: #2563eb;
   stroke-width: 4;
   transition: stroke 100ms ease;
   &:hover {
-		stroke: theme('colors.yellow.500');
+		stroke: #eab308;
   }
 }
