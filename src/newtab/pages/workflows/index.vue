@@ -36,6 +36,7 @@
                 {{ t('home.record.title') }}
               </ui-list-item>
               <ui-list-item
+                v-if="!isOffline"
                 v-close-popover
                 class="cursor-pointer"
                 @click="addHostedWorkflow"
@@ -47,6 +48,7 @@
         </div>
         <ui-list class="mt-6 space-y-2">
           <ui-list-item
+            v-if="!isOffline"
             tag="a"
             href="https://extension.automa.site/workflows"
             target="_blank"
@@ -396,6 +398,7 @@ const { t } = useI18n();
 const toast = useToast();
 const dialog = useDialog();
 const router = useRouter();
+const isOffline = IS_OFFLINE;
 const userStore = useUserStore();
 const workflowStore = useWorkflowStore();
 const teamWorkflowStore = useTeamWorkflowStore();

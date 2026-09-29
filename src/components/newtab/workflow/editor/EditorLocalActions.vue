@@ -57,7 +57,7 @@
         </transition-expand>
       </div>
     </ui-popover>
-    <ui-popover :disabled="userDontHaveTeamsAccess">
+    <ui-popover v-if="!isOffline" :disabled="userDontHaveTeamsAccess">
       <template #trigger>
         <button
           v-tooltip.group="t('workflow.share.title')"
@@ -383,6 +383,7 @@ const toast = useToast();
 const router = useRouter();
 const dialog = useDialog();
 const mainStore = useStore();
+const isOffline = IS_OFFLINE;
 const userStore = useUserStore();
 const packageStore = usePackageStore();
 const workflowStore = useWorkflowStore();

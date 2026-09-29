@@ -348,7 +348,8 @@ watch(
     }
 
     const { isFirstTime } = await browser.storage.local.get('isFirstTime');
-    isUpdated.value = !isFirstTime && compare(currentVersion, prevVersion, '>');
+    isUpdated.value =
+      !IS_OFFLINE && !isFirstTime && compare(currentVersion, prevVersion, '>');
 
     await Promise.allSettled([
       folderStore.load(),

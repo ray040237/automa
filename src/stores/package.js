@@ -90,7 +90,7 @@ export const usePackageStore = defineStore('packages', {
     },
     async loadShared() {
       try {
-        if (this.sharedRetrieved) return;
+        if (IS_OFFLINE || this.sharedRetrieved) return;
 
         const response = await fetchApi('/me/packages', { auth: true });
         const result = await response.json();

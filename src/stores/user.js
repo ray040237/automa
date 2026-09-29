@@ -25,6 +25,13 @@ export const useUserStore = defineStore('user', {
   },
   actions: {
     async loadUser(options = false) {
+      if (IS_OFFLINE) {
+        this.user = null;
+        this.retrieved = true;
+        await browser.storage.local.remove('user');
+        return;
+      }
+
       try {
         const user = await cacheApi(
           'user-profile',

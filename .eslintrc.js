@@ -31,6 +31,7 @@ module.exports = {
   // add your custom rules here
   globals: {
     BROWSER_TYPE: true,
+    IS_OFFLINE: true,
   },
   rules: {
     camelcase: 'off',

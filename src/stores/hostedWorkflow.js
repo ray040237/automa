@@ -57,7 +57,7 @@ export const useHostedWorkflowStore = defineStore('hosted-workflows', {
       return this.workflows[id];
     },
     async fetchWorkflows(ids) {
-      if (!ids || ids.length === 0) return null;
+      if (IS_OFFLINE || !ids || ids.length === 0) return null;
 
       const response = await fetchApi('/workflows/hosted', {
         auth: true,

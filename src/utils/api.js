@@ -3,6 +3,10 @@ import secrets from 'secrets';
 import { isObject, parseJSON } from './helper';
 
 export async function fetchApi(path, options = {}) {
+  if (IS_OFFLINE) {
+    throw new Error('Cloud API is disabled in offline mode');
+  }
+
   const urlPath = path.startsWith('/') ? path : `/${path}`;
   const headers = {
     'Content-Type': 'application/json',
@@ -77,6 +81,8 @@ export async function cacheApi(key, callback, useCache = true) {
 }
 
 export async function getSharedWorkflows(useCache = true) {
+  if (IS_OFFLINE) return {};
+
   return cacheApi(
     'shared-workflows',
     async () => {
@@ -108,6 +114,8 @@ export async function getSharedWorkflows(useCache = true) {
 }
 
 export async function getUserWorkflows(useCache = true) {
+  if (IS_OFFLINE) return {};
+
   return cacheApi(
     'user-workflows',
     async () => {
@@ -156,6 +164,8 @@ export async function getUserWorkflows(useCache = true) {
 }
 
 export function validateOauthToken() {
+  if (IS_OFFLINE) return Promise.resolve(null);
+
   let retryCount = 0;
 
   const startFetch = async () => {
@@ -197,6 +207,10 @@ export function validateOauthToken() {
 }
 
 export async function fetchGapi(url, resource = {}, options = {}) {
+  if (IS_OFFLINE) {
+    throw new Error('Google services are disabled in offline mode');
+  }
+
   const { sessionToken } = await BrowserAPIService.storage.local.get(
     'sessionToken'
   );

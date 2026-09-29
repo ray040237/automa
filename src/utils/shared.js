@@ -52,7 +52,9 @@ export const tasks = {
   'ai-workflow': {
     name: 'AI Workflow',
     description: 'A workflow that is created by AI-Power',
-    icon: 'https://winrobot-pub-a-1302949341.cos.ap-shanghai.myqcloud.com/image/20250717194249/10e0c06a7b243d15ac9a9385b07ce4e2.svg',
+    icon: IS_OFFLINE
+      ? 'riRobotLine'
+      : 'https://winrobot-pub-a-1302949341.cos.ap-shanghai.myqcloud.com/image/20250717194249/10e0c06a7b243d15ac9a9385b07ce4e2.svg',
     tag: 'AI',
     component: 'BlockBasic',
     editComponent: 'EditAiWorkflow',

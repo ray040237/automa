@@ -102,7 +102,8 @@ const routes = [
     component: Settings,
     children: [
       { path: '', component: SettingsIndex },
-      { path: '/profile', component: SettingsProfile },
+      // Profile page only manages the cloud account; excluded from offline builds
+      ...(IS_OFFLINE ? [] : [{ path: '/profile', component: SettingsProfile }]),
       { path: '/about', component: SettingsAbout },
       { path: '/backup', component: SettingsBackup },
       { path: '/editor', component: SettingsEditor },

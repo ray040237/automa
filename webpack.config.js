@@ -146,6 +146,9 @@ const options = {
     new VueLoaderPlugin(),
     new webpack.DefinePlugin({
       BROWSER_TYPE: JSON.stringify(env.BROWSER),
+      // Build-time flag for offline/intranet deployments: set OFFLINE_MODE=1
+      // (e.g. `npm run build:offline`) to strip cloud features at compile time.
+      IS_OFFLINE: JSON.stringify(process.env.OFFLINE_MODE === '1'),
     }),
     new webpack.ProgressPlugin(),
     // clean the build folder
@@ -181,6 +184,18 @@ const options = {
               } else {
                 manifestObj.version = `${version}${preRelease}`;
               }
+            }
+
+            // Offline builds must not permit remote scripts on extension pages
+            if (
+              process.env.OFFLINE_MODE === '1' &&
+              manifestObj.content_security_policy
+            ) {
+              manifestObj.content_security_policy =
+                manifestObj.content_security_policy.replace(
+                  " 'unsafe-inline' https:",
+                  ''
+                );
             }
 
             return Buffer.from(JSON.stringify(manifestObj));

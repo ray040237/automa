@@ -119,6 +119,8 @@ class WorkflowManager {
       }
     });
 
+    if (IS_OFFLINE) return engine;
+
     BrowserAPIService.storage.local
       .get('checkStatus')
       .then((res) => {

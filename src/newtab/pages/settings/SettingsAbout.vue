@@ -4,7 +4,15 @@
       <img src="@/assets/svg/logo.svg" class="w-14" />
     </div>
     <p class="text-2xl font-semibold">Automa</p>
-    <p class="mb-2 mt-1">Version: {{ extensionVersion }}</p>
+    <p class="mb-2 mt-1">
+      Version: {{ extensionVersion }}
+      <span
+        v-if="isOffline"
+        class="ml-1 rounded-md bg-teal-200 px-2 py-0.5 text-sm font-medium text-teal-800 dark:bg-teal-700 dark:text-teal-100"
+      >
+        Offline build
+      </span>
+    </p>
     <p class="text-gray-600 dark:text-gray-200">
       Automa is a chrome extension for browser automation. From auto-fill forms,
       doing a repetitive task, taking a screenshot, to scraping data of the
@@ -23,27 +31,29 @@
       </a>
     </div>
     <div class="my-8 border-b dark:border-gray-700"></div>
-    <h2 class="text-xl font-semibold">Contributors</h2>
-    <p class="mt-1 text-gray-600 dark:text-gray-200">
-      Thanks to everyone who has submitted issues, made suggestions, and
-      generally helped make this a better project.
-    </p>
-    <div class="mt-4 mb-12 grid grid-cols-7 gap-2">
-      <a
-        v-for="contributor in store.contributors"
-        :key="contributor.username"
-        v-tooltip.group="contributor.username"
-        :href="contributor.url"
-        target="_blank"
-        rel="noopener"
-      >
-        <img
-          :src="contributor.avatar"
-          :alt="`${contributor.username} avatar`"
-          class="w-16 rounded-lg"
-        />
-      </a>
-    </div>
+    <template v-if="!isOffline">
+      <h2 class="text-xl font-semibold">Contributors</h2>
+      <p class="mt-1 text-gray-600 dark:text-gray-200">
+        Thanks to everyone who has submitted issues, made suggestions, and
+        generally helped make this a better project.
+      </p>
+      <div class="mt-4 mb-12 grid grid-cols-7 gap-2">
+        <a
+          v-for="contributor in store.contributors"
+          :key="contributor.username"
+          v-tooltip.group="contributor.username"
+          :href="contributor.url"
+          target="_blank"
+          rel="noopener"
+        >
+          <img
+            :src="contributor.avatar"
+            :alt="`${contributor.username} avatar`"
+            class="w-16 rounded-lg"
+          />
+        </a>
+      </div>
+    </template>
   </div>
 </template>
 <script setup>
@@ -56,6 +66,7 @@ import browser from 'webextension-polyfill';
 
 useGroupTooltip();
 const store = useStore();
+const isOffline = IS_OFFLINE;
 
 const extensionVersion = browser.runtime.getManifest().version;
 const links = [
@@ -78,7 +89,7 @@ const links = [
 ];
 
 onMounted(async () => {
-  if (store.contributors) return;
+  if (IS_OFFLINE || store.contributors) return;
 
   try {
     const response = await fetch(

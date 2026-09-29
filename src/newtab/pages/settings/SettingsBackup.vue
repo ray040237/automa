@@ -1,6 +1,6 @@
 <template>
   <div class="max-w-xl">
-    <ui-card class="mb-12">
+    <ui-card v-if="!isOffline" class="mb-12">
       <h2 class="mb-2 font-semibold">
         {{ t('settings.backupWorkflows.cloud.title') }}
       </h2>
@@ -234,6 +234,7 @@ const BACKUP_ITEMS_INCLUDES = [
 ];
 
 const { t } = useI18n();
+const isOffline = IS_OFFLINE;
 const toast = useToast();
 const dialog = useDialog();
 const userStore = useUserStore();

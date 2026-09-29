@@ -52,7 +52,8 @@ export const useStore = defineStore('main', {
     },
     async checkGDriveIntegration(force = false, retryCount = 0) {
       try {
-        if (this.integrationsRetrieved.googleDrive && !force) return;
+        if (IS_OFFLINE || (this.integrationsRetrieved.googleDrive && !force))
+          return;
 
         const result = await fetchGapi(
           `https://www.googleapis.com/oauth2/v1/tokeninfo`
@@ -90,7 +91,7 @@ export const useStore = defineStore('main', {
     },
     async getConnectedSheets() {
       try {
-        if (this.connectedSheetsRetrieved) return;
+        if (IS_OFFLINE || this.connectedSheetsRetrieved) return;
 
         const result = await fetchGapi(
           'https://www.googleapis.com/drive/v3/files'

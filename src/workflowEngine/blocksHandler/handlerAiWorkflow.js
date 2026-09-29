@@ -11,6 +11,10 @@ async function aiWorkflow(block, { refData }) {
     dataColumn,
   } = block.data;
 
+  if (IS_OFFLINE) {
+    throw new Error('AI Workflow block is not available in offline mode');
+  }
+
   const replacedValueList = {};
   const aipowerToken = this.engine.workflow.settings?.aipowerToken;
 

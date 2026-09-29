@@ -127,6 +127,14 @@ const icons = [
 
 const copyBlocks = getBlocks();
 delete copyBlocks['block-package'];
+if (IS_OFFLINE) {
+  // Cloud-backed blocks are unusable offline; keep existing workflows
+  // renderable but stop offering them in the palette.
+  delete copyBlocks['ai-workflow'];
+  delete copyBlocks['google-sheets'];
+  delete copyBlocks['google-sheets-drive'];
+  delete copyBlocks['google-drive'];
+}
 
 const blocksArr = Object.entries(copyBlocks).map(([key, block]) => {
   const localeKey = `workflow.blocks.${key}.name`;
@@ -156,6 +164,7 @@ const blocks = computed(() =>
 );
 const pinnedBlocksList = computed(() =>
   pinnedBlocks.value
+    .filter((id) => copyBlocks[id])
     .map((id) => {
       const namePath = `workflow.blocks.${id}.name`;
 

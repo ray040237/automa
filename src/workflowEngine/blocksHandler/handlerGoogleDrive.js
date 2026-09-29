@@ -17,6 +17,10 @@ function getFilename(url) {
 }
 
 export async function googleDrive({ id, data }, { refData }) {
+  if (IS_OFFLINE) {
+    throw new Error('Google Drive block is not available in offline mode');
+  }
+
   const { sessionToken } = await BrowserAPIService.storage.local.get(
     'sessionToken'
   );
