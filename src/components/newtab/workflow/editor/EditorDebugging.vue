@@ -61,7 +61,7 @@
                 {{ getBlockName(block.name) }}
               </p>
               <v-remixicon
-                title="Go to block"
+                :title="t('components.editor.debugging.goToBlock')"
                 name="riEyeLine"
                 size="18"
                 class="text-gray-600 dark:text-gray-200 cursor-pointer"
@@ -80,8 +80,12 @@
     </div>
     <div class="w-64">
       <ui-tabs v-model="activeTab" class="-mt-1">
-        <ui-tab class="!py-2" value="workflow-data">Data</ui-tab>
-        <ui-tab class="!py-2" value="workflow-logs">Logs</ui-tab>
+        <ui-tab class="!py-2" value="workflow-data">
+          {{ t('components.editor.debugging.data') }}
+        </ui-tab>
+        <ui-tab class="!py-2" value="workflow-logs">
+          {{ t('components.editor.debugging.logs') }}
+        </ui-tab>
       </ui-tabs>
       <ui-tab-panels v-model="activeTab">
         <ui-tab-panel value="workflow-data">

@@ -14,7 +14,7 @@
     </ui-select>
     <ui-input
       :model-value="data.url"
-      placeholder="URL"
+      :placeholder="t('components.blockSettings.eventCodeHTTP.url')"
       type="url"
       class="flex-1"
       @change="emitData({ url: $event })"
@@ -35,14 +35,18 @@
           <ui-input
             v-model="header.name"
             :title="header.name"
-            :placeholder="`Header ${index + 1}`"
+            :placeholder="
+              t('components.blockSettings.eventCodeHTTP.header', {
+                index: index + 1,
+              })
+            "
             type="text"
             class="col-span-3"
           />
           <ui-input
             v-model="header.value"
             :title="header.value"
-            placeholder="Value"
+            :placeholder="t('components.blockSettings.eventCodeHTTP.value')"
             type="text"
             class="col-span-3"
           />

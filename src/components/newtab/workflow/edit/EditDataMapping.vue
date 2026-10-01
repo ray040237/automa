@@ -63,7 +63,9 @@
                     <ui-input
                       :model-value="source.name"
                       class="flex-1"
-                      placeholder="Source property"
+                      :placeholder="
+                        t('workflow.blocks.data-mapping.sourceProperty')
+                      "
                       @blur="updateSource({ index, source, event: $event })"
                     />
                   </ui-autocomplete>
@@ -89,7 +91,9 @@
                     <ui-input
                       :model-value="destination.name"
                       class="flex-1"
-                      placeholder="Destination property"
+                      :placeholder="
+                        t('workflow.blocks.data-mapping.destinationProperty')
+                      "
                       @blur="
                         updateDestination({
                           index,

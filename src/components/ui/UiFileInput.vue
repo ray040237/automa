@@ -28,7 +28,7 @@
         @click="fileInput.click()"
       >
         <v-remixicon name="riUploadLine" class="mr-2 -ml-1" />
-        Choose File
+        {{ t('components.ui.fileInput.chooseFile') }}
       </ui-button>
       <p
         class="mt-1 text-sm text-center text-gray-500 dark:text-gray-400"
@@ -48,6 +48,7 @@ import {
   ref,
   shallowRef,
 } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useToast } from 'vue-toastification';
 import UiButton from './UiButton.vue';
 
@@ -76,6 +77,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'change']);
 const toast = useToast();
+const { t } = useI18n();
 
 const uploading = ref(false);
 const fileInput = ref(null);
@@ -84,16 +86,17 @@ const hasError = ref(false);
 
 const tooltipContent = computed(() => ({
   allowHTML: true,
-  content: `Max size: ${
-    props.maxSize
-  }MB<br>Accepted types: ${props.accept.replace(/,/g, ', ')}`,
+  content: t('components.ui.fileInput.maxSizeTooltip', {
+    size: props.maxSize,
+    types: props.accept.replace(/,/g, ', '),
+  }),
   maxWidth: 250,
 }));
 
 const statusText = computed(() => {
-  if (uploading.value) return 'Uploading...';
-  if (hasError.value) return 'Upload failed. Please try again.';
-  return fileName.value || 'No file selected.';
+  if (uploading.value) return t('components.ui.fileInput.uploading');
+  if (hasError.value) return t('components.ui.fileInput.uploadFailed');
+  return fileName.value || t('components.ui.fileInput.noFileSelected');
 });
 
 const isFileTypeValid = (file) => {
@@ -136,17 +139,19 @@ const handleFileChange = async (event) => {
   fileName.value = file.name;
 
   if (!isFileTypeValid(file)) {
-    handleError('Invalid file type.');
+    handleError(t('components.ui.fileInput.invalidFileType'));
     return;
   }
 
   if (file.size > props.maxSize * 1024 * 1024) {
-    handleError(`File size should not exceed ${props.maxSize}MB`);
+    handleError(
+      t('components.ui.fileInput.maxSizeExceeded', { size: props.maxSize })
+    );
     return;
   }
 
   if (!props.onUpload) {
-    handleError('onUpload function is not provided');
+    handleError(t('components.ui.fileInput.onUploadNotProvided'));
     return;
   }
 
@@ -160,8 +165,8 @@ const handleFileChange = async (event) => {
     fileName.value = file.name; // Keep filename on success
   } catch (error) {
     console.error('Upload error:', error);
-    toast.error(error.message || 'An error occurred during file upload.');
-    handleError(error.message || 'An error occurred during file upload.');
+    toast.error(error.message || t('components.ui.fileInput.uploadError'));
+    handleError(error.message || t('components.ui.fileInput.uploadError'));
   } finally {
     uploading.value = false;
   }

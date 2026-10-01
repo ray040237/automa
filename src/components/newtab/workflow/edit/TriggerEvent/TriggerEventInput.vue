@@ -1,12 +1,19 @@
 <template>
   <div class="grid grid-cols-2 gap-2">
-    <ui-input v-model="defaultParams.data" label="Data" />
-    <ui-input v-model="defaultParams.inputType" label="Input type" />
+    <ui-input
+      v-model="defaultParams.data"
+      :label="t('workflow.blocks.trigger-event.inputData')"
+    />
+    <ui-input
+      v-model="defaultParams.inputType"
+      :label="t('workflow.blocks.trigger-event.inputType')"
+    />
   </div>
 </template>
 <script setup>
 import { shallowReactive, watch, onMounted } from 'vue';
 import { objectHasKey } from '@/utils/helper';
+import { useI18n } from 'vue-i18n';
 
 const props = defineProps({
   params: {
@@ -15,6 +22,8 @@ const props = defineProps({
   },
 });
 const emit = defineEmits(['update']);
+
+const { t } = useI18n();
 
 const defaultParams = shallowReactive({
   data: '',

@@ -16,7 +16,7 @@
         @click="scheduleState.showModal = true"
       >
         <v-remixicon name="riAddLine" class="-ml-1 mr-2" />
-        Schedule workflow
+        {{ t('scheduledWorkflow.new') }}
       </ui-button>
     </div>
     <div class="scroll w-full overflow-x-auto">
@@ -65,7 +65,7 @@
     </div>
     <ui-modal
       v-model="scheduleState.showModal"
-      title="Workflow Triggers"
+      :title="t('scheduledWorkflow.triggers')"
       persist
       content-class="max-w-2xl"
     >
@@ -97,7 +97,7 @@
           v-model="scheduleState.selectedWorkflow.query"
           class="w-full"
           autocomplete="off"
-          placeholder="Search workflow"
+          :placeholder="t('scheduledWorkflow.searchWorkflow')"
         />
       </ui-autocomplete>
       <template v-else>
@@ -186,7 +186,7 @@ const tableHeaders = [
   },
   {
     value: 'location',
-    text: 'Location',
+    text: t('scheduledWorkflow.location'),
   },
   {
     value: 'active',
@@ -466,7 +466,7 @@ async function updateWorkflowTrigger() {
     );
     if (triggersList.length !== 0) {
       triggersList.forEach((triggerData) => {
-        triggerData.location = 'Local';
+        triggerData.location = t('workflow.type.local');
         triggerData.path = `/workflows/${id}`;
         state.triggers.push(triggerData);
       });
@@ -481,12 +481,12 @@ async function updateWorkflowTrigger() {
 onMounted(async () => {
   try {
     await iterateWorkflows({
-      location: 'Local',
+      location: t('workflow.type.local'),
       path: ({ id }) => `/workflows/${id}`,
       workflows: workflowStore.getWorkflows,
     });
     await iterateWorkflows({
-      location: 'Hosted',
+      location: t('scheduledWorkflow.hosted'),
       workflows: hostedWorkflowStore.toArray,
       path: ({ id }) => `/workflows/${id}/hosted`,
     });
@@ -500,10 +500,12 @@ onMounted(async () => {
 
     Object.keys(teamWorkflowStore?.workflows || {}).forEach((teamId) => {
       const teamExist = objectHasKey(teamsObj);
-      const teamName = teamsObj[teamId] ?? '(unknown)';
+      const teamName = teamsObj[teamId] ?? t('scheduledWorkflow.unknown');
 
       iterateWorkflows({
-        location: `Team: ${teamName.slice(0, 24)}`,
+        location: t('scheduledWorkflow.team', {
+          name: teamName.slice(0, 24),
+        }),
         workflows: teamWorkflowStore.getByTeam(teamId),
         path: ({ id }) =>
           teamExist ? null : `/teams/${teamId}/workflows/${id}`,

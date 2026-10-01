@@ -15,19 +15,19 @@
     />
     <ui-select
       :model-value="data.method"
-      label="Method"
+      :label="t('workflow.blocks.regex-variable.method')"
       class="mt-2 w-full"
       @change="updateData({ method: $event })"
     >
-      <option v-for="method in methods" :key="method.id" :value="method.id">
-        {{ method.name }}
+      <option v-for="method in methods" :key="method" :value="method">
+        {{ t(`workflow.blocks.regex-variable.methods.${method}`) }}
       </option>
     </ui-select>
     <ui-input
       v-if="data.method === 'replace'"
       :model-value="data.replaceVal"
-      label="Replace with"
-      placeholder="(empty)"
+      :label="t('workflow.blocks.regex-variable.replaceWith')"
+      :placeholder="t('workflow.blocks.regex-variable.replacePlaceholder')"
       class="mt-2 w-full"
       @change="updateData({ replaceVal: $event })"
     />
@@ -37,7 +37,7 @@
           class="ml-1 block text-sm text-gray-600 dark:text-gray-200"
           for="var-expression"
         >
-          RegEx
+          {{ t('workflow.blocks.regex-variable.regex') }}
         </label>
         <div
           class="bg-input flex items-center rounded-lg px-4 transition-colors"
@@ -46,7 +46,9 @@
           <input
             id="var-expression"
             :value="data.expression"
-            placeholder="Expression"
+            :placeholder="
+              t('workflow.blocks.regex-variable.expressionPlaceholder')
+            "
             class="w-11/12 bg-transparent py-2 px-1 focus:ring-0"
             @input="updateData({ expression: $event.target.value })"
           />
@@ -55,18 +57,25 @@
       </div>
       <ui-popover>
         <template #trigger>
-          <button class="bg-input rounded-lg p-2" title="Flags">
-            {{ data.flag.length === 0 ? 'flags' : data.flag.join('') }}
+          <button
+            class="bg-input rounded-lg p-2"
+            :title="t('workflow.blocks.regex-variable.flagsTitle')"
+          >
+            {{
+              data.flag.length === 0
+                ? t('workflow.blocks.regex-variable.flagsEmpty')
+                : data.flag.join('')
+            }}
           </button>
         </template>
-        <p>Flags</p>
+        <p>{{ t('workflow.blocks.regex-variable.flagsTitle') }}</p>
         <ul class="mt-2 space-y-1">
-          <li v-for="flag in flags" :key="flag.id">
+          <li v-for="flag in flags" :key="flag">
             <ui-checkbox
-              :model-value="data.flag.includes(flag.id)"
-              @change="updateFlag($event, flag.id)"
+              :model-value="data.flag.includes(flag)"
+              @change="updateFlag($event, flag)"
             >
-              {{ flag.name }}
+              {{ t(`workflow.blocks.regex-variable.flags.${flag}`) }}
             </ui-checkbox>
           </li>
         </ul>
@@ -85,15 +94,8 @@ const props = defineProps({
 });
 const emit = defineEmits(['update:data']);
 
-const methods = [
-  { id: 'match', name: 'Match value' },
-  { id: 'replace', name: 'Replace value' },
-];
-const flags = [
-  { id: 'g', name: 'global' },
-  { id: 'i', name: 'ignore case' },
-  { id: 'm', name: 'multiline' },
-];
+const methods = ['match', 'replace'];
+const flags = ['g', 'i', 'm'];
 
 const { t } = useI18n();
 

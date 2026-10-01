@@ -48,7 +48,7 @@
           </p>
         </div>
         <span
-          title="Block id"
+          :title="t('components.editor.searchBlocks.blockId')"
           class="text-overflow text-center bg-box-transparent w-16 rounded-md p-1 text-xs text-gray-600 dark:text-gray-300"
         >
           {{ item.id }}

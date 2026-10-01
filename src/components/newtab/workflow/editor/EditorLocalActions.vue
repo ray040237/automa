@@ -68,7 +68,9 @@
           <v-remixicon name="riShareLine" />
         </button>
       </template>
-      <p class="font-semibold">Share the workflow</p>
+      <p class="font-semibold">
+        {{ t('components.editor.localActions.shareWorkflow') }}
+      </p>
       <ui-list class="mt-2 w-56 space-y-1">
         <ui-list-item
           v-close-popover
@@ -76,7 +78,7 @@
           @click="shareWorkflowWithTeam"
         >
           <v-remixicon name="riTeamLine" class="-ml-1 mr-2" />
-          With your team
+          {{ t('components.editor.localActions.withTeam') }}
         </ui-list-item>
         <ui-list-item
           v-close-popover
@@ -84,7 +86,7 @@
           @click="shareWorkflow()"
         >
           <v-remixicon name="riGroupLine" class="-ml-1 mr-2" />
-          With the community
+          {{ t('components.editor.localActions.withCommunity') }}
         </ui-list-item>
       </ui-list>
     </ui-popover>
@@ -181,7 +183,7 @@
           @click="copyWorkflowId"
         >
           <v-remixicon name="riFileCopyLine" class="mr-2 -ml-1" />
-          Copy workflow Id
+          {{ t('components.editor.localActions.copyWorkflowId') }}
         </ui-list-item>
         <ui-list-item
           v-if="isTeam && canEdit"
@@ -221,7 +223,7 @@
           @click="deleteFromTeam"
         >
           <v-remixicon name="riDeleteBin7Line" class="mr-2 -ml-1" />
-          <span>Delete from team</span>
+          <span>{{ t('components.editor.localActions.deleteFromTeam') }}</span>
         </ui-list-item>
       </ui-list>
     </ui-popover>
@@ -248,7 +250,7 @@
     </ui-button>
     <ui-button
       v-else-if="!canEdit"
-      v-tooltip.group="'Sync workflow'"
+      v-tooltip.group="t('components.editor.localActions.syncWorkflow')"
       :loading="state.loadingSync"
       variant="accent"
       @click="syncWorkflow"
@@ -260,7 +262,11 @@
     </ui-button>
     <template v-else>
       <ui-button
-        v-tooltip="`Save workflow (${shortcuts['editor:save'].readable})`"
+        v-tooltip="
+          t('components.editor.localActions.saveWorkflowShortcut', {
+            shortcut: shortcuts['editor:save'].readable,
+          })
+        "
         class="mr-2"
         icon
         @click="saveWorkflow"
@@ -279,12 +285,12 @@
         <v-remixicon name="riSaveLine" />
       </ui-button>
       <ui-button
-        v-tooltip="'Publish workflow update'"
+        v-tooltip="t('components.editor.localActions.publishWorkflowUpdate')"
         :loading="state.isPublishing"
         variant="accent"
         @click="publishWorkflow"
       >
-        Publish
+        {{ t('workflow.share.publish') }}
       </ui-button>
     </template>
   </ui-card>
@@ -296,7 +302,7 @@
       @close="state.showEditDescription = false"
     />
   </ui-modal>
-  <ui-modal v-model="renameState.showModal" title="Rename">
+  <ui-modal v-model="renameState.showModal" :title="t('common.rename')">
     <ui-input
       v-model="renameState.name"
       :placeholder="t('common.name')"
@@ -600,9 +606,11 @@ function shareWorkflow(disabled = false) {
 function deleteFromTeam() {
   dialog.confirm({
     async: true,
-    title: 'Delete workflow from team',
+    title: t('components.editor.localActions.deleteWorkflowFromTeam'),
     okVariant: 'danger',
-    body: `Are you sure want to delete the "${props.workflow.name}" workflow from this team?`,
+    body: t('components.editor.localActions.deleteFromTeamBody', {
+      name: props.workflow.name,
+    }),
     onConfirm: async () => {
       try {
         const response = await fetchApi(
@@ -619,7 +627,7 @@ function deleteFromTeam() {
 
         return true;
       } catch (error) {
-        toast.error('Something went wrong');
+        toast.error(t('message.somethingWrong'));
         console.error(error);
         return false;
       }
@@ -673,7 +681,7 @@ async function publishWorkflow() {
     }
   } catch (error) {
     console.error(error);
-    toast.error('Something went wrong');
+    toast.error(t('message.somethingWrong'));
   } finally {
     state.isPublishing = false;
   }
@@ -702,7 +710,9 @@ function deleteWorkflow() {
     title: props.isPackage ? t('common.delete') : t('workflow.delete'),
     okVariant: 'danger',
     body: props.isPackage
-      ? `Are you sure want to delete "${props.workflow.name}" package?`
+      ? t('components.editor.localSavedBlocks.deletePackageBody', {
+          name: props.workflow.name,
+        })
       : t('message.delete', { name: props.workflow.name }),
     onConfirm: async () => {
       if (props.isPackage) {
@@ -777,12 +787,15 @@ async function syncWorkflow() {
 
   if (props.canEdit) {
     dialog.confirm({
-      title: 'Sync workflow',
-      okText: 'Sync',
-      body: 'This action will overwrite the current workflow with the one that stored in cloud',
+      title: t('components.editor.localActions.syncWorkflow'),
+      okText: t('components.editor.localActions.sync'),
+      body: t('components.editor.localActions.syncBody'),
       onConfirm: () => {
         fetchSyncWorkflow();
-        toast('Syncing workflow...', { timeout: false, id: 'sync' });
+        toast(t('components.editor.localActions.syncing'), {
+          timeout: false,
+          id: 'sync',
+        });
       },
     });
   } else {
@@ -821,7 +834,9 @@ const moreActions = [
     id: 'rename',
     icon: 'riPencilLine',
     hasAccess: props.isTeam ? props.canEdit : true,
-    name: props.isTeam ? 'Edit detail' : t('common.rename'),
+    name: props.isTeam
+      ? t('components.editor.localActions.editDetail')
+      : t('common.rename'),
     action: initRenameWorkflow,
   },
   {

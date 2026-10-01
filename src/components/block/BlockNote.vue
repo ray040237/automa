@@ -6,7 +6,9 @@
   >
     <div class="flex items-center border-b pb-2">
       <v-remixicon name="riFileEditLine" size="20" />
-      <p class="mx-2 flex-1 font-semibold">Note</p>
+      <p class="mx-2 flex-1 font-semibold">
+        {{ t('components.blockNote.title') }}
+      </p>
       <ui-popover class="note-color">
         <template #trigger>
           <v-remixicon
@@ -15,7 +17,9 @@
             class="cursor-pointer"
           />
         </template>
-        <p class="mb-1 ml-1 text-sm text-gray-600 dark:text-gray-200">Colors</p>
+        <p class="mb-1 ml-1 text-sm text-gray-600 dark:text-gray-200">
+          {{ t('components.blockNote.colors') }}
+        </p>
         <div class="flex items-center space-x-2">
           <span
             v-for="(color, colorId) in colors"
@@ -28,7 +32,7 @@
         </div>
         <ui-select
           :model-value="data.fontSize"
-          label="Font size"
+          :label="t('components.blockNote.fontSize')"
           class="mt-2 w-full"
           @change="updateData({ fontSize: $event })"
         >
@@ -37,7 +41,7 @@
             :key="fontId"
             :value="fontId"
           >
-            {{ size.name }}
+            {{ t(`components.blockNote.fontSizes.${fontId}`) }}
           </option>
         </ui-select>
       </ui-popover>
@@ -53,7 +57,7 @@
       :value="data.note"
       :style="initialSize"
       :class="[fontSize[data.fontSize || 'regular'].class]"
-      placeholder="Write a note here..."
+      :placeholder="t('components.blockNote.notePlaceholder')"
       cols="30"
       rows="7"
       style="resize: both; min-width: 280px; min-height: 168px"
@@ -66,6 +70,7 @@
   </div>
 </template>
 <script setup>
+import { useI18n } from 'vue-i18n';
 import { debounce } from '@/utils/helper';
 
 const props = defineProps({
@@ -83,6 +88,8 @@ const props = defineProps({
   },
 });
 const emit = defineEmits(['update', 'delete']);
+
+const { t } = useI18n();
 
 const initialSize = {
   width: `${props.data.width}px`,

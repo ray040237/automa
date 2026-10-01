@@ -5,7 +5,7 @@
       :key="item"
       v-model="defaultParams[item]"
     >
-      {{ item }}
+      {{ t(`workflow.blocks.trigger.keyboard.modifier.${item}`) }}
     </ui-checkbox>
   </div>
   <ui-input
@@ -30,11 +30,12 @@
     />
   </div>
   <ui-checkbox v-model="defaultParams.repeat" class="mt-4">
-    Repeat
+    {{ t('workflow.blocks.trigger.keyboard.repeat') }}
   </ui-checkbox>
 </template>
 <script setup>
 import { shallowReactive, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { objectHasKey } from '@/utils/helper';
 import { keyDefinitions } from '@/utils/USKeyboardLayout';
 
@@ -45,6 +46,8 @@ const props = defineProps({
   },
 });
 const emit = defineEmits(['update']);
+
+const { t } = useI18n();
 
 const defaultParams = shallowReactive({
   altKey: false,

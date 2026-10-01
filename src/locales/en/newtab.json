@@ -6,7 +6,8 @@
   "welcome": {
     "title": "Welcome to Automa! 🎉",
     "text": "Get started by reading the documentation or browsing workflows in the Automa Marketplace.",
-    "marketplace": "Marketplace"
+    "marketplace": "Marketplace",
+    "tutorials": "To learn how to use Automa, watch the tutorials on our YouTube Channel."
   },
   "packages": {
     "name": "Package | Packages",
@@ -17,11 +18,48 @@
     "import": "Import package",
     "set": "Set as a package",
     "settings": {
-      "asBlock": "Set package as block"
+      "asBlock": "Set package as block",
+      "blockInputs": "Block inputs",
+      "blockOutputs": "Block outputs",
+      "inputName": "Input name",
+      "outputName": "Output name",
+      "block": "Block",
+      "inputPlaceholder": "Input {index}",
+      "outputPlaceholder": "Output {index}",
+      "goToBlock": "Go to block",
+      "blockNotFound": "Block not found",
+      "notFound": "Not found",
+      "handleName": "{type} {index}",
+      "input": "input",
+      "output": "output"
     },
     "categories": {
       "my": "My Packages",
       "installed": "Installed Packages"
+    },
+    "imageError": "Can not display",
+    "openPage": "Open package page",
+    "byAuthor": "By {author}",
+    "copySuffix": "- copy",
+    "delete": "Delete package",
+    "deleteConfirm": "Are you sure want to delete \"{name}\" package?",
+    "unnamed": "Unnamed",
+    "alreadyAdded": "You already add this as an {type}",
+    "input": "input",
+    "output": "output",
+    "package": "package",
+    "details": {
+      "name": "Package name",
+      "namePlaceholder": "My package",
+      "shortDescription": "Short description"
+    },
+    "ioSelect": {
+      "selectBlock": "Select block {id}",
+      "goBack": "Go back",
+      "selectType": "Select {type}",
+      "inputs": "inputs",
+      "outputs": "outputs",
+      "typeIndex": "{type} {index}"
     }
   },
   "scheduledWorkflow": {
@@ -36,7 +74,14 @@
         "general": "Every {time}",
         "interval": "Every {time} minutes"
       }
-    }
+    },
+    "new": "Schedule workflow",
+    "triggers": "Workflow Triggers",
+    "searchWorkflow": "Search workflow",
+    "location": "Location",
+    "hosted": "Hosted",
+    "unknown": "(unknown)",
+    "team": "Team: {name}"
   },
   "storage": {
     "title": "Storage",
@@ -46,7 +91,28 @@
       "createdAt": "Created at",
       "modifiedAt": "Modified at",
       "rowsCount": "Rows count",
-      "delete": "Delete table"
+      "delete": "Delete table",
+      "name": "Table name",
+      "namePlaceholder": "My table",
+      "columns": "Columns",
+      "dataTypes": {
+        "any": "Any",
+        "string": "Text",
+        "integer": "Number",
+        "boolean": "Boolean",
+        "array": "Array"
+      }
+    },
+    "clearData": "Clear data",
+    "clearDataBody": "Are you sure want to clear the table data?",
+    "deleteRow": "Delete row",
+    "tables": "Storage tables",
+    "variables": "Storage variables",
+    "variable": {
+      "add": "Add variable",
+      "edit": "Edit variable",
+      "value": "Value",
+      "duplicateName": "You alread add \"{name}\" variable"
     }
   },
   "credential": {
@@ -55,7 +121,10 @@
     "use": {
       "title": "Used credentials",
       "description": "This workflow uses these credentials"
-    }
+    },
+    "value": "Value",
+    "createdDate": "Created date",
+    "duplicateName": "You alread add \"{name}\" credential"
   },
   "workflowPermissions": {
     "title": "Workflow permissions",
@@ -91,6 +160,30 @@
       "name": "Folder name",
       "delete": "Delete folder",
       "rename": "Rename folder"
+    },
+    "closeTab": "Close tab",
+    "teamWorkflows": "Team Workflows",
+    "unknownTeam": "(unknown)",
+    "copyWorkflowId": "Copy workflow id",
+    "copySuffix": "- copy",
+    "deleteFromTeam": "Delete from team",
+    "deleteFromTeamTitle": "Delete workflow from team",
+    "deleteFromTeamConfirm": "Are you sure want to delete the \"{name}\" workflow from this team?",
+    "loginRequired": "You must",
+    "login": "login",
+    "loginRequiredSuffix": "to use these workflows",
+    "emptyTitle": "Nothing to see here",
+    "emptyDescription": "Browse workflows that been shared by your team",
+    "selectedCount": "{count} workflows",
+    "firstCard": {
+      "title": "Create your first workflow by recording your actions:",
+      "step1": "Open your browser and go to your destination URL",
+      "step2": "Click the \"Record workflow\" button, and do your simple repetitive task",
+      "help": "Need more help? Join",
+      "community": "the community",
+      "helpAfter": ", or email us at",
+      "recording": "Learn more about recording in",
+      "docs": "the documentation"
     }
   },
   "auth": {
@@ -107,7 +200,9 @@
   "settings": {
     "theme": "Theme",
     "shortcuts": {
-      "duplicate": "Shortcut already use by \"{name}\""
+      "duplicate": "Shortcut already use by \"{name}\"",
+      "shortcut": "Shortcut",
+      "remove": "Remove shortcut"
     },
     "editor": {
       "title": "Title",
@@ -128,7 +223,12 @@
       "saveWhenExecute": {
         "title": "Auto-save when execute workflow",
         "description": "Workflow changes will be saved when executing the workflow"
-      }
+      },
+      "zoom": "Zoom",
+      "minZoom": "Min zoom",
+      "maxZoom": "Max zoom",
+      "xAxis": "X Axis",
+      "yAxis": "Y Axis"
     },
     "deleteLog": {
       "title": "Auto-delete workflow logs",
@@ -136,7 +236,9 @@
       "deleteAfter": {
         "never": "Never",
         "days": "{day} days"
-      }
+      },
+      "workflowLogs": "Workflow Logs",
+      "logsLimit": "Logs limit"
     },
     "language": {
       "label": "Language",
@@ -161,7 +263,15 @@
         "button": "Backup",
         "settings": "Backup settings",
         "encrypt": "Encrypt with password",
-        "schedule": "Schedule local backup"
+        "schedule": "Schedule local backup",
+        "alsoBackup": "Also backup",
+        "permissionRequired": "Automa requires the \"Downloads\" permission for the schedule backup to work",
+        "allowPermission": "Allow \"Downloads\" permission",
+        "everyDay": "Every day",
+        "everyWeek": "Every week",
+        "custom": "Custom",
+        "cronExpression": "Cron Expression",
+        "folderName": "Folder name"
       },
       "restore": {
         "title": "Restore workflows",
@@ -185,7 +295,13 @@
         "selectText": "Select workflows that you want to backup",
         "selectAll": "Select all",
         "deselectAll": "Deselect all",
-        "needSelectWorkflow": "You need to select workflows that you want to backup"
+        "needSelectWorkflow": "You need to select workflows that you want to backup",
+        "cannotDisplay": "Can not display",
+        "lastUpdated": "Last updated: {time}",
+        "syncToLocal": "Sync cloud backup to local",
+        "addToLocal": "Add to local",
+        "syncToCloud": "Sync local workflow to cloud backup",
+        "backupWorkflow": "Backup workflow"
       }
     },
     "profile": {
@@ -205,7 +321,26 @@
       "teamsCount": "{count} team(s)",
       "avatar": "Profile picture",
       "username": "Username",
-      "email": "Email"
+      "email": "Email",
+      "avatarAlt": "{name}'s avatar",
+      "defaultName": "User"
+    },
+    "about": {
+      "version": "Version: {version}",
+      "offlineBuild": "Offline build",
+      "description": "Automa is a chrome extension for browser automation. From auto-fill forms, doing a repetitive task, taking a screenshot, to scraping data of the website, it's up to you what you want to do with this extension.",
+      "contributors": "Contributors",
+      "contributorsDescription": "Thanks to everyone who has submitted issues, made suggestions, and generally helped make this a better project.",
+      "contributorAvatar": "{name} avatar",
+      "links": {
+        "github": "GitHub",
+        "twitter": "Twitter",
+        "discord": "Discord",
+        "youtube": "YouTube",
+        "website": "Website",
+        "documentation": "Documentation",
+        "blog": "Blog"
+      }
     }
   },
   "workflow": {
@@ -283,7 +418,59 @@
       "add": "Add condition",
       "and": "AND",
       "or": "OR",
-      "topAwait": "Support top-level await and \"automaRefData\" function"
+      "topAwait": "Support top-level await and \"automaRefData\" function",
+      "categories": {
+        "value": "Value",
+        "element": "Element",
+        "basic": "Basic",
+        "number": "Number",
+        "text": "Text",
+        "boolean": "Boolean"
+      },
+      "valueTypes": {
+        "value": "Value",
+        "code": "Code",
+        "data#exists": "Data exists",
+        "element#text": "Element text",
+        "element#exists": "Element exists",
+        "element#notExists": "Element not exists",
+        "element#visible": "Element visible",
+        "element#visibleScreen": "Element visible in screen",
+        "element#invisible": "Element hidden in screen",
+        "element#attribute": "Element attribute value"
+      },
+      "compareTypes": {
+        "eq": "Equals",
+        "eqi": "Equals (case insensitive)",
+        "nq": "Not equals",
+        "gt": "Greater than",
+        "gte": "Greater than or equal",
+        "lt": "Less than",
+        "lte": "Less than or equal",
+        "cnt": "Contains",
+        "cni": "Contains (case insensitive)",
+        "nct": "Not contains",
+        "nci": "Not contains (case insensitive)",
+        "stw": "Starts with",
+        "enw": "Ends with",
+        "rgx": "Match with RegEx",
+        "itr": "Is truthy",
+        "ifl": "Is falsy"
+      },
+      "inputTypes": {
+        "selector": {
+          "label": "CSS selector or XPath"
+        },
+        "value": {
+          "label": "Value"
+        },
+        "attrName": {
+          "label": "Attribute name"
+        },
+        "dataPath": {
+          "label": "variables{'@'}variableName"
+        }
+      }
     },
     "host": {
       "title": "Host workflow",
@@ -320,7 +507,10 @@
       "fetchLocal": "Fetch local workflow",
       "update": "Update",
       "unpublish": "Unpublish",
-      "linkCopied": "Link copied to clipboard"
+      "linkCopied": "Link copied to clipboard",
+      "saveDraft": "Save draft",
+      "categoryNone": "Category (none)",
+      "description": "Short description"
     },
     "variables": {
       "title": "Variable | Variables",
@@ -430,6 +620,32 @@
         "title": "Tab load timeout",
         "description": "Maximum time to load a tab in milliseconds, input 0 to disable the timeout"
       }
+    },
+    "url": "Workflow URL",
+    "clipboardPermission": "Automa require clipboard permission to paste blocks",
+    "dataTable": {
+      "connectTable": "Connect to a storage table",
+      "selectTable": "Select a table",
+      "connectedTo": "This workflow is connected to the",
+      "table": "table",
+      "disconnectTable": "Disconnect table"
+    },
+    "detailsCard": {
+      "iconUrl": "Icon URL",
+      "pinnedBlocks": "Pinned blocks"
+    },
+    "shareTeam": {
+      "title": "Share workflow with team",
+      "description": "This workflow will be shared with your team",
+      "updateWorkflow": "Update workflow",
+      "selectTeam": "Select team",
+      "descriptionPlaceholder": "Write here...",
+      "saveAsDraft": "Save as draft",
+      "none": "(none)",
+      "environment": "Environment",
+      "stage": "Stage",
+      "production": "Production",
+      "shareSuccess": "Share the workflow with your team successfully."
     }
   },
   "collection": {
@@ -527,6 +743,33 @@
           "last30Days": "Last thirty days"
         }
       }
+    },
+    "hello": "Hello :)",
+    "aboutError": "About the error",
+    "jumpToItem": "Jump to item",
+    "onBlock": "On the {name} block",
+    "logs": "logs",
+    "emptyHistory": "The workflow log is not saved",
+    "openLogDetail": "Open log detail",
+    "goToBlock": "Go to block",
+    "status": "Status",
+    "timestampDuration": "Timestamp/Duration",
+    "message": "Message",
+    "logData": "Log data",
+    "value": "Value",
+    "empty": "EMPTY",
+    "dataTabs": {
+      "all": "All",
+      "replacedValue": "Replaced value",
+      "referenceData": {
+        "loopData": "Loop data",
+        "variables": "Variables",
+        "prevBlockData": "Previous block data"
+      }
+    },
+    "dataView": {
+      "gui": "GUI",
+      "raw": "Raw"
     }
   },
   "components": {
@@ -537,6 +780,177 @@
       "currentPage": "Current page",
       "prevPage": "Previous page",
       "of": "of {page}"
+    },
+    "appSurvey": {
+      "testimonial": {
+        "title": "Hi There 👋",
+        "body": "Thank you for using Automa, and if you have a great experience. Would you like to give us a testimonial?",
+        "button": "Give Testimonial"
+      },
+      "survey": {
+        "title": "How do you think we're doing?",
+        "body": "To help us make Automa as best it can be, we need a few minutes of your time to get your feedback.",
+        "button": "Take Survey"
+      }
+    },
+    "appSidebar": {
+      "userAvatar": "User avatar"
+    },
+    "appLogsItems": {
+      "clear": "Clear",
+      "allWorkflows": "All workflows"
+    },
+    "wysiwyg": {
+      "heading1": "Heading 1",
+      "heading2": "Heading 2",
+      "bold": "Bold",
+      "italic": "Italic",
+      "strikethrough": "Strikethrough",
+      "blockquote": "Blockquote",
+      "insertImage": "Insert image",
+      "link": "Link",
+      "removeLink": "Remove link",
+      "url": "URL"
+    },
+    "logsTable": {
+      "stopSelected": "Stop selected",
+      "executingBlock": "Executing block"
+    },
+    "workflowState": {
+      "startedAt": "Started at: {time}",
+      "openTab": "Open tab"
+    },
+    "card": {
+      "canNotDisplay": "Can not display"
+    },
+    "elSelectorActions": {
+      "elementNotFound": "Element not found"
+    },
+    "workflowTriggers": {
+      "addTrigger": "Add trigger"
+    },
+    "conditionBuilder": {
+      "empty": "Empty",
+      "jsCode": "JS Code",
+      "dataExists": "Data exists ({path})"
+    },
+    "blockBase": {
+      "blockId": "Block id (click to copy)",
+      "copied": "✅ Copied",
+      "deleteBlock": "Delete block",
+      "enableDisableBlock": "Enable/Disable block",
+      "runWorkflowFromHere": "Run workflow from here",
+      "editBlock": "Edit block",
+      "setAsBreakpoint": "Set as breakpoint"
+    },
+    "blockConditions": {
+      "fallback": "Fallback"
+    },
+    "blockLoopBreakpoint": {
+      "loopId": "Loop ID",
+      "stopLoop": "Stop loop"
+    },
+    "blockNote": {
+      "title": "Note",
+      "colors": "Colors",
+      "fontSize": "Font size",
+      "notePlaceholder": "Write a note here...",
+      "fontSizes": {
+        "regular": "Regular",
+        "medium": "Medium",
+        "large": "Large",
+        "extra-large": "Extra Large"
+      }
+    },
+    "blockPackage": {
+      "unnamedPackage": "Unnamed package",
+      "updatePackage": "Update package",
+      "installPackage": "Install package",
+      "by": "By {name}",
+      "openPage": "Open package page"
+    },
+    "editor": {
+      "addPackage": {
+        "iconUrl": "Icon URL",
+        "descriptionPlaceholder": "Description..."
+      },
+      "debugging": {
+        "goToBlock": "Go to block",
+        "data": "Data",
+        "logs": "Logs"
+      },
+      "localActions": {
+        "shareWorkflow": "Share the workflow",
+        "withTeam": "With your team",
+        "withCommunity": "With the community",
+        "copyWorkflowId": "Copy workflow Id",
+        "deleteFromTeam": "Delete from team",
+        "deleteWorkflowFromTeam": "Delete workflow from team",
+        "deleteFromTeamBody": "Are you sure want to delete the \"{name}\" workflow from this team?",
+        "syncWorkflow": "Sync workflow",
+        "sync": "Sync",
+        "syncBody": "This action will overwrite the current workflow with the one that stored in cloud",
+        "syncing": "Syncing workflow...",
+        "saveWorkflowShortcut": "Save workflow ({shortcut})",
+        "publishWorkflowUpdate": "Publish workflow update",
+        "editDetail": "Edit detail"
+      },
+      "localSavedBlocks": {
+        "updatePackages": "Update packages",
+        "updatePackagesHint": "Update the current package inside the workflow.",
+        "deletePackage": "Delete package",
+        "deletePackageBody": "Are you sure want to delete \"{name}\" package?"
+      },
+      "pkgActions": {
+        "sharePackage": "Share package",
+        "unpublishPackage": "Unpublish package",
+        "url": "URL",
+        "deletePackageBody": "Are you sure want to delete the \"{name}\" package?"
+      },
+      "searchBlocks": {
+        "blockId": "Block id"
+      },
+      "usedCredentials": {
+        "jumpToBlock": "Jump to block",
+        "credentialName": "Credential name: {name}"
+      }
+    },
+    "blockSettings": {
+      "events": {
+        "untitled": "Untitled action",
+        "untitledPlaceholder": "Untitled"
+      },
+      "general": {
+        "execution": "Workflow Execution",
+        "executionDescription": "Workflow execution environment (Use \"Popup\" if workflow runs more than 5 minutes)",
+        "popup": "Popup",
+        "background": "Background"
+      },
+      "eventCodeHTTP": {
+        "url": "URL",
+        "header": "Header {index}",
+        "value": "Value"
+      }
+    },
+    "ui": {
+      "fileInput": {
+        "chooseFile": "Choose File",
+        "maxSizeTooltip": "Max size: {size}MB<br>Accepted types: {types}",
+        "uploading": "Uploading...",
+        "uploadFailed": "Upload failed. Please try again.",
+        "noFileSelected": "No file selected.",
+        "invalidFileType": "Invalid file type.",
+        "maxSizeExceeded": "File size should not exceed {size}MB",
+        "onUploadNotProvided": "onUpload function is not provided",
+        "uploadError": "An error occurred during file upload."
+      },
+      "paginatedSelect": {
+        "selectAnOption": "Select an option",
+        "searchPlaceholder": "Search...",
+        "loading": "Loading...",
+        "noMoreResults": "No more results",
+        "noResults": "No results found"
+      }
     }
   }
 }

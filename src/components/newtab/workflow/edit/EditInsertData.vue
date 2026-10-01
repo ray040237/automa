@@ -11,11 +11,13 @@
       variant="accent"
       @click="showModal = !showModal"
     >
-      Insert data ({{ dataList.length }})
+      {{
+        t('workflow.blocks.insert-data.insertCount', { count: dataList.length })
+      }}
     </ui-button>
     <ui-modal
       v-model="showModal"
-      title="Insert data"
+      :title="t('workflow.blocks.insert-data.name')"
       padding="p-0"
       content-class="max-w-3xl insert-data-modal"
     >
@@ -75,7 +77,9 @@
                   v-model="item.filePath"
                   class="w-full"
                   :placeholder="
-                    isFirefox ? 'File URL' : 'File absolute path/File URL'
+                    isFirefox
+                      ? t('workflow.blocks.insert-data.fileUrl')
+                      : t('workflow.blocks.insert-data.filePath')
                   "
                 />
               </edit-autocomplete>
@@ -87,13 +91,13 @@
               >
                 <ui-input
                   v-model="item.xlsSheet"
-                  label="Sheet (optional)"
+                  :label="t('workflow.blocks.insert-data.sheetOptional')"
                   class="ml-2"
                   placeholder="Sheet1"
                 />
                 <ui-input
                   v-model="item.xlsRange"
-                  label="Range (optional)"
+                  :label="t('workflow.blocks.insert-data.rangeOptional')"
                   class="ml-2"
                   placeholder="A1:C10"
                 />
@@ -111,8 +115,8 @@
               <ui-button
                 v-tooltip="
                   hasFileAccess
-                    ? 'Import file'
-                    : 'Don\'t have access, click to learn more'
+                    ? t('workflow.blocks.insert-data.tooltip.importFile')
+                    : t('workflow.blocks.insert-data.tooltip.noAccess')
                 "
                 :class="{ 'text-primary': item.isFile }"
                 icon
@@ -122,11 +126,11 @@
               </ui-button>
               <template v-if="hasFileAccess && item.isFile">
                 <ui-button class="ml-2" @click="previewData(index, item)">
-                  Preview data
+                  {{ t('workflow.blocks.insert-data.previewData') }}
                 </ui-button>
                 <ui-button
                   v-if="previewState.itemId === index"
-                  v-tooltip="'Clear preview'"
+                  v-tooltip="t('workflow.blocks.insert-data.clearPreview')"
                   class="ml-2"
                   icon
                   @click="clearPreview"
@@ -136,18 +140,30 @@
                 <div class="grow" />
                 <ui-select
                   :model-value="item.action || item.csvAction"
-                  placeholder="File Action"
+                  :placeholder="
+                    t('workflow.blocks.insert-data.fileAction.placeholder')
+                  "
                   @change="item.action = $event"
                 >
-                  <option value="default">Default</option>
-                  <option value="base64">Read as base64</option>
+                  <option value="default">
+                    {{ t('workflow.blocks.insert-data.fileAction.default') }}
+                  </option>
+                  <option value="base64">
+                    {{ t('workflow.blocks.insert-data.fileAction.base64') }}
+                  </option>
                   <optgroup
                     v-if="/.(csv|xlsx?)$/.test(item.filePath)"
-                    label="CSV/Excel File"
+                    :label="
+                      t('workflow.blocks.insert-data.fileAction.csvExcel')
+                    "
                   >
-                    <option value="json">Read as JSON</option>
+                    <option value="json">
+                      {{ t('workflow.blocks.insert-data.fileAction.json') }}
+                    </option>
                     <option value="json-header">
-                      Read as JSON with headers
+                      {{
+                        t('workflow.blocks.insert-data.fileAction.jsonHeader')
+                      }}
                     </option>
                   </optgroup>
                 </ui-select>

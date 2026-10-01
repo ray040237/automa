@@ -21,7 +21,11 @@
         :disabled="disabled"
         @click="toggleDropdown"
       >
-        {{ selectedOptionLabel || placeholder }}
+        {{
+          selectedOptionLabel ||
+          placeholder ||
+          t('components.ui.paginatedSelect.selectAnOption')
+        }}
       </button>
       <v-remixicon
         name="riArrowDropDownLine"
@@ -38,7 +42,10 @@
       <div class="px-2 my-2 w-full">
         <ui-input
           v-model="searchKeyword"
-          :placeholder="searchPlaceholder"
+          :placeholder="
+            searchPlaceholder ||
+            t('components.ui.paginatedSelect.searchPlaceholder')
+          "
           prepend-icon="riSearch2Line"
           autofocus
           class="w-full"
@@ -62,19 +69,19 @@
           {{ option[optionLabelKey] }}
         </li>
         <li v-if="isLoading" class="px-4 py-2 text-center text-gray-500">
-          Loading...
+          {{ t('components.ui.paginatedSelect.loading') }}
         </li>
         <li
           v-if="!haveMore && !isLoading && options.length > 0"
           class="px-4 py-2 text-center text-sm text-gray-500"
         >
-          No more results
+          {{ t('components.ui.paginatedSelect.noMoreResults') }}
         </li>
         <li
           v-if="!isLoading && options.length === 0"
           class="px-4 py-2 text-center text-gray-500"
         >
-          No results found
+          {{ t('components.ui.paginatedSelect.noResults') }}
         </li>
       </ul>
       <div
@@ -88,6 +95,7 @@
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n';
 import { useComponentId } from '@/composable/componentId';
 import {
   computed,
@@ -110,11 +118,11 @@ const props = defineProps({
   },
   placeholder: {
     type: String,
-    default: 'Select an option',
+    default: '',
   },
   searchPlaceholder: {
     type: String,
-    default: 'Search...',
+    default: '',
   },
   disabled: Boolean,
   loadOptions: {
@@ -137,6 +145,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'change']);
 
+const { t } = useI18n();
 const componentId = useComponentId('paginated-select');
 
 const root = ref(null);

@@ -65,10 +65,11 @@
           @select="selectAllCloud"
         >
           <p
-            :title="`Last updated: ${formatDate(
-              workflow,
-              'DD MMMM YYYY, hh:mm A'
-            )}`"
+            :title="
+              t('settings.backupWorkflows.cloud.lastUpdated', {
+                time: formatDate(workflow, 'DD MMMM YYYY, hh:mm A'),
+              })
+            "
             class="ml-4 mr-8 w-3/12"
           >
             {{ formatDate(workflow, 'DD MMM YYYY') }}
@@ -81,14 +82,14 @@
           <div v-else class="invisible ml-4 group-hover:visible">
             <button
               v-if="workflow.hasLocalCopy"
-              title="Sync cloud backup to local"
+              :title="t('settings.backupWorkflows.cloud.syncToLocal')"
               @click="syncCloudToLocal(workflow)"
             >
               <v-remixicon name="riRefreshLine" />
             </button>
             <button
               v-else
-              title="Add to local"
+              :title="t('settings.backupWorkflows.cloud.addToLocal')"
               @click="syncCloudToLocal(workflow)"
             >
               <v-remixicon name="riDownloadCloud2Line" />
@@ -97,7 +98,7 @@
               v-if="!backupState.deleting"
               :aria-label="t('settings.backupWorkflows.cloud.delete')"
               class="ml-4"
-              title="Delete backup"
+              :title="t('settings.backupWorkflows.cloud.delete')"
               @click="deleteBackup(workflow.id)"
             >
               <v-remixicon name="riDeleteBin7Line" />
@@ -130,7 +131,7 @@
             >
               <v-remixicon
                 name="riRefreshLine"
-                title="Sync local workflow to cloud backup"
+                :title="t('settings.backupWorkflows.cloud.syncToCloud')"
               />
             </button>
             <button
@@ -139,7 +140,7 @@
                 state.selectedWorkflows.length <= workflowLimit
               "
               class="invisible ml-4 group-hover:visible"
-              title="Backup workflow"
+              :title="t('settings.backupWorkflows.cloud.backupWorkflow')"
               @click="backupWorkflowsToCloud(workflow.id)"
             >
               <v-remixicon name="riUploadCloud2Line" />
@@ -236,7 +237,7 @@ async function syncCloudToLocal(workflow) {
     }
   } catch (error) {
     console.error(error);
-    toast.error('Something went wrong');
+    toast.error(t('message.somethingWrong'));
   } finally {
     backupState.workflowId = '';
     backupState.loading = false;
@@ -375,7 +376,7 @@ async function updateCloudBackup(workflow) {
     }
   } catch (error) {
     console.error(error);
-    toast.error('Something went wrong!');
+    toast.error(t('message.somethingWrong'));
   } finally {
     backupState.workflowId = '';
     backupState.loading = false;

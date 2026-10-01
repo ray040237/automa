@@ -1,12 +1,16 @@
 <template>
   <ui-card class="share-workflow scroll w-full max-w-4xl overflow-auto">
     <template v-if="!isUpdate">
-      <h1 class="text-xl font-semibold">Share workflow with team</h1>
+      <h1 class="text-xl font-semibold">
+        {{ t('workflow.shareTeam.title') }}
+      </h1>
       <p class="text-gray-600 dark:text-gray-200">
-        This workflow will be shared with your team
+        {{ t('workflow.shareTeam.description') }}
       </p>
     </template>
-    <p v-else class="font-semibold">Update workflow</p>
+    <p v-else class="font-semibold">
+      {{ t('workflow.shareTeam.updateWorkflow') }}
+    </p>
     <div class="mt-4 flex items-start">
       <div class="mr-8 flex-1">
         <div class="flex items-center">
@@ -20,7 +24,7 @@
           <ui-select
             v-if="!isUpdate"
             v-model="state.activeTeam"
-            label="Select team"
+            :label="t('workflow.shareTeam.selectTeam')"
             class="ml-4"
             style="max-width: 220px"
           >
@@ -38,14 +42,14 @@
             for="short-description"
             class="ml-2 text-sm text-gray-600 dark:text-gray-200"
           >
-            Short description
+            {{ t('workflow.share.description') }}
           </label>
           <ui-textarea
             id="short-description"
             v-model="state.workflow.description"
             :max="300"
-            label="Short description"
-            placeholder="Write here..."
+            :label="t('workflow.share.description')"
+            :placeholder="t('workflow.shareTeam.descriptionPlaceholder')"
             class="scroll h-28 w-full resize-none"
           />
           <p
@@ -77,7 +81,7 @@
             class="w-full"
             @click="$emit('update', state.workflow)"
           >
-            Save
+            {{ t('common.save') }}
           </ui-button>
           <ui-button class="mt-2 w-full" @click="$emit('close')">
             {{ t('common.cancel') }}
@@ -86,7 +90,7 @@
         <template v-else>
           <div class="flex">
             <ui-button
-              v-tooltip="'Save as draft'"
+              v-tooltip="t('workflow.shareTeam.saveAsDraft')"
               :disabled="state.isPublishing"
               icon
               @click="saveDraft"
@@ -100,7 +104,7 @@
               class="ml-2 w-full"
               @click="publishWorkflow"
             >
-              Publish
+              {{ t('workflow.share.publish') }}
             </ui-button>
           </div>
           <ui-button
@@ -108,7 +112,7 @@
             class="mt-2 w-full"
             @click="$emit('close')"
           >
-            Cancel
+            {{ t('common.cancel') }}
           </ui-button>
         </template>
         <ui-select
@@ -116,7 +120,9 @@
           class="mt-4 w-full"
           :label="t('common.category')"
         >
-          <option value="">(none)</option>
+          <option value="">
+            {{ t('workflow.shareTeam.none') }}
+          </option>
           <option
             v-for="(category, id) in workflowCategories"
             :key="id"
@@ -126,11 +132,15 @@
           </option>
         </ui-select>
         <span class="ml-2 mt-5 block text-sm text-gray-600 dark:text-gray-200">
-          Environment
+          {{ t('workflow.shareTeam.environment') }}
         </span>
         <ui-tabs v-model="state.workflow.tag" type="fill" fill>
-          <ui-tab value="stage"> Stage </ui-tab>
-          <ui-tab value="production"> Production </ui-tab>
+          <ui-tab value="stage">
+            {{ t('workflow.shareTeam.stage') }}
+          </ui-tab>
+          <ui-tab value="production">
+            {{ t('workflow.shareTeam.production') }}
+          </ui-tab>
         </ui-tabs>
       </div>
     </div>
@@ -215,7 +225,7 @@ async function publishWorkflow() {
       await registerWorkflowTrigger(workflow.id, triggerBlock);
     }
 
-    toast('Share the workflow with your team successfully.');
+    toast(t('workflow.shareTeam.shareSuccess'));
 
     emit('publish');
   } catch (error) {

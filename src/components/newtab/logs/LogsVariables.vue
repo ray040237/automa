@@ -11,8 +11,12 @@
       color=""
       style="padding: 0"
     >
-      <ui-tab value="gui"> GUI </ui-tab>
-      <ui-tab value="raw"> Raw </ui-tab>
+      <ui-tab value="gui">
+        {{ t('log.dataView.gui') }}
+      </ui-tab>
+      <ui-tab value="raw">
+        {{ t('log.dataView.raw') }}
+      </ui-tab>
     </ui-tabs>
     <div v-if="state.activeTab === 'gui'" class="mt-4">
       <ul class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -25,16 +29,16 @@
             :model-value="varName"
             :label="t('common.name')"
             class="w-full"
-            placeholder="EMPTY"
+            :placeholder="t('log.empty')"
             readonly
           />
           <ui-input
             :model-value="
               typeof varValue === 'string' ? varValue : JSON.stringify(varValue)
             "
-            label="Value"
+            :label="t('log.value')"
             class="w-full"
-            placeholder="EMPTY"
+            :placeholder="t('log.empty')"
             readonly
           />
         </li>

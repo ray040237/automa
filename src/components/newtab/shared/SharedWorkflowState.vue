@@ -5,10 +5,11 @@
         <p class="text-overflow mr-2 w-full">{{ data.state.name }}</p>
         <p
           class="text-overflow mr-2 w-full leading-tight text-gray-600 dark:text-gray-200"
-          :title="`Started at: ${formatDate(
-            data.state.startedTimestamp,
-            'DD MMM, hh:mm A'
-          )}`"
+          :title="
+            t('components.workflowState.startedAt', {
+              time: formatDate(data.state.startedTimestamp, 'DD MMM, hh:mm A'),
+            })
+          "
         >
           {{ formatDate(data.state.startedTimestamp, 'relative') }}
         </p>
@@ -17,7 +18,7 @@
         v-if="data.state.tabId"
         icon
         class="mr-2"
-        title="Open tab"
+        :title="t('components.workflowState.openTab')"
         @click="openTab"
       >
         <v-remixicon name="riExternalLinkLine" />

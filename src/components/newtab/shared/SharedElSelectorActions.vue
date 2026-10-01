@@ -20,6 +20,7 @@
 </template>
 <script setup>
 import { useToast } from 'vue-toastification';
+import { useI18n } from 'vue-i18n';
 import { useGroupTooltip } from '@/composable/groupTooltip';
 import elementSelector from '@/newtab/utils/elementSelector';
 
@@ -41,6 +42,7 @@ const emit = defineEmits(['update:selector']);
 
 useGroupTooltip();
 const toast = useToast();
+const { t } = useI18n();
 
 function selectElement() {
   elementSelector.selectElement().then((selector) => {
@@ -57,7 +59,7 @@ function verifySelector() {
     .then((result) => {
       if (!result.notFound) return;
 
-      toast.error('Element not found');
+      toast.error(t('components.elSelectorActions.elementNotFound'));
     });
 }
 </script>

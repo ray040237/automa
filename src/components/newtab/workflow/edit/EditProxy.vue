@@ -13,9 +13,11 @@
       @change="updateData({ host: $event })"
     >
       <template #label>
-        <span class="input-label"> Host </span>
+        <span class="input-label">
+          {{ t('workflow.blocks.proxy.host') }}
+        </span>
         <v-remixicon
-          title="Supported protocols: http, https, socks4, and socks5"
+          :title="t('workflow.blocks.proxy.protocolsTitle')"
           name="riInformationLine"
           class="inline-block"
           size="18"
@@ -24,7 +26,7 @@
     </ui-input>
     <ui-input
       :model-value="data.port"
-      label="Port"
+      :label="t('workflow.blocks.proxy.port')"
       placeholder="443"
       class="mb-2 w-full"
       @change="updateData({ port: $event })"

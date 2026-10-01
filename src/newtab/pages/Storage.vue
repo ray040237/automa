@@ -6,7 +6,7 @@
       </h1>
       <a
         href="https://docs.extension.automa.site/reference/storage.html"
-        title="Docs"
+        :title="t('common.docs')"
         class="ml-2 text-gray-600 dark:text-gray-200"
         target="_blank"
       >

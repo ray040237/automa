@@ -31,7 +31,7 @@
             <ui-input
               v-model="filtersBuilder.workflowQuery"
               autofocus
-              placeholder="Search..."
+              :placeholder="`${t('common.search')}...`"
               class="w-full"
               prepend-icon="riSearch2Line"
             />
@@ -40,7 +40,7 @@
                 class="cursor-pointer text-sm text-gray-600 underline dark:text-gray-300"
                 @click="filtersBuilder.workflowId = ''"
               >
-                Clear
+                {{ t('components.appLogsItems.clear') }}
               </span>
             </div>
           </div>
@@ -194,13 +194,15 @@ const workflows = computed(() =>
   )
 );
 const activeWorkflowName = computed(() => {
-  if (!filtersBuilder.workflowId) return 'All workflows';
+  if (!filtersBuilder.workflowId) {
+    return t('components.appLogsItems.allWorkflows');
+  }
 
   const workflow = allWorkflows.value.find(
     (item) => item.id === filtersBuilder.workflowId
   );
 
-  return workflow?.name ?? 'All workflows';
+  return workflow?.name ?? t('components.appLogsItems.allWorkflows');
 });
 
 const workflowStates = computed(() => {

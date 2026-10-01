@@ -7,14 +7,22 @@
       v-if="state.parameters.length === 0"
       class="my-4 text-center text-gray-600 dark:text-gray-200"
     >
-      No parameters
+      {{ t('workflow.blocks.workflow-parameters.noParameters') }}
     </p>
     <section v-else class="w-full">
       <div class="grid grid-cols-12 space-x-2 text-sm">
-        <div class="col-span-3" style="padding-left: 28px">Name</div>
-        <div class="col-span-2">Type</div>
-        <div class="col-span-3">Placeholder</div>
-        <div class="col-span-4">Default Value</div>
+        <div class="col-span-3" style="padding-left: 28px">
+          {{ t('workflow.blocks.workflow-parameters.headers.name') }}
+        </div>
+        <div class="col-span-2">
+          {{ t('workflow.blocks.workflow-parameters.headers.type') }}
+        </div>
+        <div class="col-span-3">
+          {{ t('workflow.blocks.workflow-parameters.headers.placeholder') }}
+        </div>
+        <div class="col-span-4">
+          {{ t('workflow.blocks.workflow-parameters.headers.defaultValue') }}
+        </div>
       </div>
       <draggable
         v-model="state.parameters"
@@ -29,7 +37,9 @@
                 <v-remixicon name="mdiDrag" class="handle mr-2 cursor-move" />
                 <ui-input
                   :model-value="param.name"
-                  placeholder="Parameter name"
+                  :placeholder="
+                    t('workflow.blocks.workflow-parameters.namePlaceholder')
+                  "
                   @change="updateParam(index, $event)"
                 />
               </div>
@@ -50,7 +60,9 @@
               <div class="col-span-3">
                 <ui-input
                   v-model="param.placeholder"
-                  placeholder="A parameter"
+                  :placeholder="
+                    t('workflow.blocks.workflow-parameters.paramPlaceholder')
+                  "
                 />
               </div>
               <div class="col-span-4 flex items-center">
@@ -67,7 +79,11 @@
                   v-else
                   v-model="param.defaultValue"
                   :type="param.type === 'number' ? 'number' : 'text'"
-                  placeholder="NULL"
+                  :placeholder="
+                    t(
+                      'workflow.blocks.workflow-parameters.defaultValuePlaceholder'
+                    )
+                  "
                 />
                 <ui-button
                   icon
@@ -89,14 +105,14 @@
                     name="riArrowLeftSLine"
                     class="mr-2 -ml-1 transition-transform"
                   />
-                  <span>Options</span>
+                  <span>{{ t('common.options') }}</span>
                 </template>
                 <div class="mt-2 mb-4 pl-[28px]">
                   <div class="mb-2 flex items-start">
                     <ui-textarea
                       v-model="param.description"
-                      placeholder="Description"
-                      title="Description"
+                      :placeholder="t('common.description')"
+                      :title="t('common.description')"
                       style="max-width: 400px"
                     />
                     <ui-checkbox
@@ -105,7 +121,7 @@
                       class="ml-6"
                       @change="param.data.required = $event"
                     >
-                      Parameter required
+                      {{ t('workflow.blocks.workflow-parameters.required') }}
                     </ui-checkbox>
                   </div>
                   <component

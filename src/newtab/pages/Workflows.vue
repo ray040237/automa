@@ -29,7 +29,7 @@
             </p>
             <span
               class="hoverable rounded-full p-0.5 text-gray-600 dark:text-gray-300"
-              title="Close tab"
+              :title="t('workflows.closeTab')"
               @click.stop="closeTab(index, tab)"
             >
               <v-remixicon name="riCloseLine" size="20" />
@@ -54,11 +54,13 @@
 import { parseJSON } from '@/utils/helper';
 import { nanoid } from 'nanoid/non-secure';
 import { onMounted, reactive, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import Draggable from 'vuedraggable';
 
 let tabTitleTimeout = null;
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 
@@ -83,7 +85,7 @@ function addTab(detail = {}) {
   state.tabs.push({
     id: tabId,
     path: '/',
-    name: 'Workflows',
+    name: t('common.workflow', 2),
     ...detail,
   });
   state.activeTab = tabId;
@@ -93,7 +95,7 @@ function closeTab(index, tab) {
     state.tabs[0] = {
       path: '/',
       id: nanoid(),
-      name: 'Workflows',
+      name: t('common.workflow', 2),
     };
   } else {
     state.tabs.splice(index, 1);
@@ -104,7 +106,7 @@ function closeTab(index, tab) {
   }
 }
 function getTabTitle() {
-  if (route.name === 'workflows') return 'Workflows';
+  if (route.name === 'workflows') return t('common.workflow', 2);
 
   return `${document.title}`.replace(' - Automa', '');
 }

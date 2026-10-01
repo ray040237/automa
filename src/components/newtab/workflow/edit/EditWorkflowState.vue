@@ -8,17 +8,17 @@
     />
     <ui-select
       :model-value="data.type"
-      label="Action"
+      :label="t('workflow.blocks.base.action')"
       class="mt-4 w-full"
       @change="updateData({ type: $event })"
     >
       <optgroup v-for="action in actions" :key="action.id" :label="action.name">
         <option
           v-for="item in actionsItems[action.id]"
-          :key="item.id"
-          :value="item.id"
+          :key="item"
+          :value="item"
         >
-          {{ item.name }}
+          {{ t(`workflow.blocks.workflow-state.actions.items.${item}`) }}
         </option>
       </optgroup>
     </ui-select>
@@ -28,7 +28,7 @@
       class="mt-2"
       @change="updateData({ exceptCurrent: $event })"
     >
-      Execpt for the current workflow
+      {{ t('workflow.blocks.workflow-state.exceptCurrent') }}
     </ui-checkbox>
     <!-- 停止当前工作流 是否抛出错误及自定义错误信息 -->
     <template v-if="data.type === 'stop-current'">
@@ -85,7 +85,7 @@
         <input
           v-model="query"
           type="text"
-          placeholder="Select a workflow"
+          :placeholder="t('workflow.blocks.workflow-state.selectWorkflow')"
           class="w-full rounded-lg bg-transparent py-2 px-4"
         />
       </ui-autocomplete>
@@ -115,11 +115,7 @@ const actions = [
   { id: 'stop', name: t('workflow.blocks.workflow-state.actions.stop') },
 ];
 const actionsItems = {
-  stop: [
-    { id: 'stop-all', name: 'Stop all workflows' },
-    { id: 'stop-current', name: 'Stop current workflow' },
-    { id: 'stop-specific', name: 'Stop specific workflows' },
-  ],
+  stop: ['stop-all', 'stop-current', 'stop-specific'],
 };
 
 const query = ref('');

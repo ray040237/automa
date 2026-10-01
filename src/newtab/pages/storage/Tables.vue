@@ -6,7 +6,7 @@
       </h1>
       <div class="grow"></div>
       <ui-button
-        v-tooltip.group="'Clear data'"
+        v-tooltip.group="t('storage.clearData')"
         icon
         class="ml-2"
         @click="clearData"
@@ -14,7 +14,7 @@
         <v-remixicon name="riFileShredLine" />
       </ui-button>
       <ui-button
-        v-tooltip="'Delete table'"
+        v-tooltip="t('storage.table.delete')"
         icon
         class="ml-4 text-red-400 dark:text-red-300"
         @click="deleteTable"
@@ -32,7 +32,7 @@
       <div class="grow" />
       <ui-button class="md:ml-4" @click="editTable">
         <v-remixicon name="riPencilLine" class="mr-2 -ml-1" />
-        <span>Edit table</span>
+        <span>{{ t('storage.table.edit') }}</span>
       </ui-button>
       <ui-popover trigger-width class="ml-4">
         <template #trigger>
@@ -65,7 +65,7 @@
       >
         <template #item-action="{ item }">
           <v-remixicon
-            title="Delete row"
+            :title="t('storage.deleteRow')"
             class="cursor-pointer"
             name="riDeleteBin7Line"
             @click="deleteRow(item)"
@@ -256,9 +256,9 @@ function deleteRow(item) {
 }
 function clearData() {
   dialog.confirm({
-    title: 'Clear data',
+    title: t('storage.clearData'),
     okVariant: 'danger',
-    body: 'Are you sure want to clear the table data?',
+    body: t('storage.clearDataBody'),
     onConfirm: async () => {
       await dbStorage.tablesItems.update(tableId, {
         rowsCount: 0,

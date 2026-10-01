@@ -30,7 +30,7 @@
     <edit-autocomplete v-if="data.type === 'url'">
       <ui-input
         :model-value="data.url"
-        label="URL"
+        :label="t('workflow.blocks.save-assets.url')"
         class="w-full"
         autocomplete="off"
         placeholder="https://example.com/picture.png"

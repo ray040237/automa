@@ -24,14 +24,20 @@
           >
             <div class="mr-2 flex-1">
               <p
-                title="Jump to block"
+                :title="t('components.editor.usedCredentials.jumpToBlock')"
                 class="cursor-pointer text-sm text-gray-600 dark:text-gray-200"
                 @click="jumpToBlock(item.nodeId)"
               >
                 {{ item.nodeName }}
               </p>
               <ul v-for="name in item.items" :key="name">
-                <li :title="`Credential name: ${name}`">
+                <li
+                  :title="
+                    t('components.editor.usedCredentials.credentialName', {
+                      name,
+                    })
+                  "
+                >
                   <p class="text-overflow">- {{ name }}</p>
                 </li>
               </ul>
@@ -39,7 +45,7 @@
             <v-remixicon
               name="riArrowGoForwardLine"
               size="18"
-              title="Jump to block"
+              :title="t('components.editor.usedCredentials.jumpToBlock')"
               class="invisible cursor-pointer text-gray-600 group-hover:visible dark:text-gray-200"
               @click="jumpToBlock(item.nodeId)"
             />

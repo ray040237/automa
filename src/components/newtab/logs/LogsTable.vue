@@ -12,8 +12,12 @@
         color=""
         style="padding: 0"
       >
-        <ui-tab value="table"> Table </ui-tab>
-        <ui-tab value="raw"> Raw </ui-tab>
+        <ui-tab value="table">
+          {{ t('workflow.table.title') }}
+        </ui-tab>
+        <ui-tab value="raw">
+          {{ t('log.dataView.raw') }}
+        </ui-tab>
       </ui-tabs>
       <div class="grow"></div>
       <ui-input

@@ -11,7 +11,7 @@
             level: 1,
           }),
         }"
-        title="Heading 1"
+        :title="t('components.wysiwyg.heading1')"
         class="editor-menu-btn hoverable"
         @click="editor.commands.toggleHeading({ level: 1 })"
       >
@@ -23,7 +23,7 @@
             level: 2,
           }),
         }"
-        title="Heading 2"
+        :title="t('components.wysiwyg.heading2')"
         class="editor-menu-btn hoverable"
         @click="editor.commands.toggleHeading({ level: 2 })"
       >
@@ -53,14 +53,14 @@
         :class="{
           'bg-box-transparent text-primary': editor.isActive('blockquote'),
         }"
-        title="Blockquote"
+        :title="t('components.wysiwyg.blockquote')"
         class="editor-menu-btn hoverable"
         @click="editor.commands.toggleBlockquote()"
       >
         <v-remixicon name="riDoubleQuotesL" />
       </button>
       <button
-        title="Insert image"
+        :title="t('components.wysiwyg.insertImage')"
         class="editor-menu-btn hoverable"
         @click="insertImage(editor)"
       >
@@ -70,7 +70,7 @@
         :class="{
           'bg-box-transparent text-primary': editor.isActive('link'),
         }"
-        title="Link"
+        :title="t('components.wysiwyg.link')"
         class="editor-menu-btn hoverable"
         @click="setLink(editor)"
       >
@@ -78,7 +78,7 @@
       </button>
       <button
         v-show="editor.isActive('link')"
-        title="Remove link"
+        :title="t('components.wysiwyg.removeLink')"
         class="editor-menu-btn hoverable"
         @click="editor.commands.unsetLink()"
       >
@@ -91,6 +91,7 @@
 </template>
 <script setup>
 import { shallowRef, onMounted, onBeforeUnmount, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Editor, EditorContent } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -123,13 +124,25 @@ const props = defineProps({
 });
 const emit = defineEmits(['update:modelValue', 'count', 'change']);
 
+const { t } = useI18n();
+
 const editor = shallowRef(null);
 const menuItems = [
-  { id: 'bold', name: 'Bold', icon: 'riBold', action: 'toggleBold' },
-  { id: 'italic', name: 'Italic', icon: 'riItalic', action: 'toggleItalic' },
+  {
+    id: 'bold',
+    name: t('components.wysiwyg.bold'),
+    icon: 'riBold',
+    action: 'toggleBold',
+  },
+  {
+    id: 'italic',
+    name: t('components.wysiwyg.italic'),
+    icon: 'riItalic',
+    action: 'toggleItalic',
+  },
   {
     id: 'strike',
-    name: 'Strikethrough',
+    name: t('components.wysiwyg.strikethrough'),
     icon: 'riStrikethrough2',
     action: 'toggleStrike',
   },
@@ -137,7 +150,7 @@ const menuItems = [
 
 function setLink() {
   const previousUrl = editor.value.getAttributes('link').href;
-  const url = window.prompt('URL', previousUrl);
+  const url = window.prompt(t('components.wysiwyg.url'), previousUrl);
 
   if (url === null) return;
 
@@ -155,7 +168,7 @@ function setLink() {
     .run();
 }
 function insertImage() {
-  const url = window.prompt('URL');
+  const url = window.prompt(t('components.wysiwyg.url'));
 
   if (url) {
     editor.value.chain().focus().setImage({ src: url }).run();

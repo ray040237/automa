@@ -98,16 +98,20 @@
             class="text-sm"
             @click="addDataToInsert"
           >
-            Add item
+            {{ t('workflow.blocks.base.onError.insertData.addItem') }}
           </ui-button>
         </div>
         <transition-expand>
           <table v-if="state.insertData" class="mt-2 w-full">
             <thead>
               <tr class="text-left text-sm">
-                <th>Type</th>
-                <th>Name</th>
-                <th>Value</th>
+                <th>
+                  {{ t('workflow.blocks.base.onError.insertData.type') }}
+                </th>
+                <th>{{ t('common.name') }}</th>
+                <th>
+                  {{ t('workflow.blocks.base.onError.insertData.value') }}
+                </th>
                 <th></th>
               </tr>
             </thead>
@@ -127,7 +131,9 @@
                   <ui-select
                     v-if="item.type === 'table'"
                     v-model="item.name"
-                    placeholder="Select column"
+                    :placeholder="
+                      t('workflow.blocks.base.onError.insertData.selectColumn')
+                    "
                     class="mt-1 w-full"
                   >
                     <option
@@ -141,7 +147,7 @@
                   <ui-input
                     v-else
                     v-model="item.name"
-                    placeholder="Variable name"
+                    :placeholder="t('workflow.variables.name')"
                   />
                 </td>
                 <td>

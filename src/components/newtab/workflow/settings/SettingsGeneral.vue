@@ -34,10 +34,9 @@
   </div>
   <div v-if="!isFirefox" class="flex items-center pt-4">
     <div class="mr-4 flex-1">
-      <p>Workflow Execution</p>
+      <p>{{ t('components.blockSettings.general.execution') }}</p>
       <p class="text-sm leading-tight text-gray-600 dark:text-gray-200">
-        Workflow execution environment (Use "Popup" if workflow runs more than 5
-        minutes)
+        {{ t('components.blockSettings.general.executionDescription') }}
       </p>
     </div>
     <a
@@ -51,8 +50,12 @@
       :model-value="settings.execContext || 'popup'"
       @change="updateSetting('execContext', $event)"
     >
-      <option value="popup">Popup</option>
-      <option value="background">Background</option>
+      <option value="popup">
+        {{ t('components.blockSettings.general.popup') }}
+      </option>
+      <option value="background">
+        {{ t('components.blockSettings.general.background') }}
+      </option>
     </ui-select>
   </div>
   <div class="flex items-center pt-4">

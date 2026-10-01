@@ -34,7 +34,8 @@
             "animated": "动画",
             "select": "选择线段",
             "to": "连线到 {name} 模块",
-            "lineColor": "线段颜色"
+            "lineColor": "线段颜色",
+            "labelPlaceholder": "标签"
           }
         },
         "toggle": {
@@ -63,7 +64,11 @@
             "restart": "重启流程"
           },
           "insertData": {
-            "name": "插入数据"
+            "name": "插入数据",
+            "addItem": "添加项",
+            "type": "类型",
+            "value": "值",
+            "selectColumn": "选择列"
           }
         },
         "table": {
@@ -117,7 +122,19 @@
           "remove": "移除 cookies",
           "getAll": "获取所有 cookies"
         },
-        "useJson": "使用 JSON 格式"
+        "useJson": "使用 JSON 格式",
+        "seeProperties": "查看所有可用属性",
+        "permissionRequired": "此块需要“Cookie”权限才能正常工作",
+        "forms": {
+          "url": "URL",
+          "name": "名称",
+          "nameOptional": "名称（可选）",
+          "value": "值（可选）",
+          "path": "路径（可选）",
+          "domain": "域（可选）",
+          "sameSite": "sameSite（可选）",
+          "expirationDate": "expirationDate（秒）（可选）"
+        }
       },
       "note": {
         "name": "注释"
@@ -132,16 +149,39 @@
         "name": "工作流状态",
         "description": "管理工作流状态",
         "actions": {
-          "stop": "停止工作流"
+          "stop": "停止工作流",
+          "items": {
+            "stop-all": "停止所有工作流",
+            "stop-current": "停止当前工作流",
+            "stop-specific": "停止指定工作流"
+          }
         },
         "error": {
           "throwError": "抛出错误",
           "message": "错误消息"
-        }
+        },
+        "exceptCurrent": "不包括当前工作流",
+        "selectWorkflow": "选择工作流"
       },
       "regex-variable": {
         "name": "RegEx 变量",
-        "description": "将变量值与正则表达式匹配"
+        "description": "将变量值与正则表达式匹配",
+        "method": "方法",
+        "methods": {
+          "match": "匹配值",
+          "replace": "替换值"
+        },
+        "replaceWith": "替换为",
+        "replacePlaceholder": "（空）",
+        "regex": "正则表达式",
+        "expressionPlaceholder": "表达式",
+        "flagsTitle": "标志",
+        "flags": {
+          "global": "全局匹配",
+          "ignoreCase": "忽略大小写",
+          "multiline": "多行模式"
+        },
+        "flagsEmpty": "无标志"
       },
       "data-mapping": {
         "source": "源",
@@ -151,13 +191,18 @@
         "dataSource": "数据源",
         "description": "映射变量或表的数据",
         "addSource": "添加源",
-        "addDestination": "添加目的"
+        "addDestination": "添加目的",
+        "sourceProperty": "源属性",
+        "destinationProperty": "目标属性"
       },
       "sort-data": {
         "name": "排序数据",
         "description": "对数据项进行排序",
         "property": "根据属性排序数据项",
-        "addProperty": "添加属性"
+        "addProperty": "添加属性",
+        "propertyPlaceholder": "属性 {index}",
+        "ascending": "升序",
+        "descending": "降序"
       },
       "increase-variable": {
         "name": "增加变量",
@@ -170,13 +215,16 @@
         "title": "标题",
         "message": "消息",
         "imageUrl": "图片 URL (可选项)",
-        "iconUrl": "图标 URL (可选项)"
+        "iconUrl": "图标 URL (可选项)",
+        "titlePlaceholder": "您好，世界！",
+        "messagePlaceholder": "通知内容"
       },
       "delete-data": {
         "name": "删除数据",
         "description": "删除表格或变量",
         "from": "数据来自",
-        "allColumns": "[全部列]"
+        "allColumns": "[全部列]",
+        "column": "列"
       },
       "log-data": {
         "name": "获取日志数据",
@@ -211,7 +259,8 @@
           "press-key": "按下一个按键",
           "multiple-keys": "按下多个按键"
         },
-        "press-time": "按下时间 (毫秒)"
+        "press-time": "按下时间 (毫秒)",
+        "keysPlaceholder": "按键"
       },
       "save-assets": {
         "name": "保存资源",
@@ -222,7 +271,8 @@
           "title": "类型",
           "element": "多媒体元素 (图像, 音频, 或视频)",
           "url": "URL"
-        }
+        },
+        "url": "URL"
       },
       "handle-dialog": {
         "name": "处理对话框",
@@ -230,7 +280,8 @@
         "accept": "接受对话框",
         "promptText": {
           "label": "提示文本 (可选项)",
-          "description": "接受前要输入对话框提示的文本"
+          "description": "接受前要输入对话框提示的文本",
+          "placeholder": "文本"
         }
       },
       "handle-download": {
@@ -245,7 +296,26 @@
       },
       "insert-data": {
         "name": "插入数据",
-        "description": "将数据插入表或变量"
+        "description": "将数据插入表或变量",
+        "insertCount": "插入数据（{count}）",
+        "fileUrl": "文件 URL",
+        "filePath": "文件绝对路径/文件 URL",
+        "sheetOptional": "工作表（可选）",
+        "rangeOptional": "范围（可选）",
+        "tooltip": {
+          "importFile": "导入文件",
+          "noAccess": "无权访问，点击了解更多"
+        },
+        "previewData": "预览数据",
+        "clearPreview": "清除预览",
+        "fileAction": {
+          "placeholder": "文件操作",
+          "default": "默认",
+          "base64": "读取为 base64",
+          "csvExcel": "CSV/Excel 文件",
+          "json": "读取为 JSON",
+          "jsonHeader": "读取为 JSON（含表头）"
+        }
       },
       "clipboard": {
         "name": "剪贴板",
@@ -257,7 +327,8 @@
         "types": {
           "get": "获取剪贴板数据",
           "insert": "将文本插入剪贴板"
-        }
+        },
+        "textPlaceholder": "文本"
       },
       "hover-element": {
         "name": "悬停元素",
@@ -277,6 +348,13 @@
             "prev-sibling": "为上一个同级元素",
             "replace": "替换目标元素"
           }
+        },
+        "runBeforeLoad": "在页面加载完成前运行",
+        "preloadScript": {
+          "type": "类型",
+          "style": "样式",
+          "script": "脚本",
+          "add": "添加脚本"
         }
       },
       "upload-file": {
@@ -286,7 +364,8 @@
         "addFile": "添加文件",
         "onlyURL": "仅支持从 Firefox 浏览器中的 URL 上传文件",
         "requirement": "使用本模块前，请参看要求",
-        "noFileAccess": "Automa 没有文件访问权限"
+        "noFileAccess": "Automa 没有文件访问权限",
+        "pathPlaceholder": "URL/文件路径/base64"
       },
       "browser-event": {
         "name": "浏览器事件",
@@ -294,7 +373,22 @@
         "events": "事件",
         "timeout": "超时 (毫秒)",
         "activeTabLoaded": "活动标签页",
-        "setAsActiveTab": "设为活动标签页"
+        "setAsActiveTab": "设为活动标签页",
+        "matchPattern": "匹配模式",
+        "matchPatternExamples": "示例",
+        "filter": "筛选",
+        "filterPlaceholder": "URL 或正则表达式",
+        "groups": {
+          "tab": "标签页",
+          "window": "窗口"
+        },
+        "eventNames": {
+          "tabClosed": "标签页已关闭",
+          "tabLoaded": "标签页已加载",
+          "tabCreated": "标签页已创建",
+          "windowCreated": "窗口已创建",
+          "windowClosed": "窗口已关闭"
+        }
       },
       "blocks-group-2": {
         "name": "@:workflow.blocks.blocks-group.name 2",
@@ -318,7 +412,17 @@
           "noPermission": "此触发器需要 \"contextMenus\" 权限才能工作",
           "grantPermission": "授予权限",
           "appearIn": "会使",
-          "contextName": "工作流名称出现在上下文菜单中"
+          "contextName": "工作流名称出现在上下文菜单中",
+          "types": {
+            "audio": "音频",
+            "editable": "可编辑元素",
+            "image": "图片",
+            "link": "链接",
+            "page": "页面",
+            "password": "密码框",
+            "selection": "选中文本",
+            "video": "视频"
+          }
         },
         "days": [
           "星期日",
@@ -388,7 +492,28 @@
           "visit-web": "访问网站时",
           "on-startup": "浏览器启动时",
           "keyboard-shortcut": "键盘快捷键"
-        }
+        },
+        "keyboard": {
+          "repeat": "重复",
+          "modifier": {
+            "altKey": "Alt 键",
+            "ctrlKey": "Ctrl 键",
+            "metaKey": "Meta 键",
+            "shiftKey": "Shift 键"
+          }
+        },
+        "mouse": {
+          "buttons": {
+            "0": "左键单击",
+            "1": "中键单击",
+            "2": "右键单击"
+          },
+          "button": "鼠标按键"
+        },
+        "editTriggers": "编辑触发器",
+        "parameters": "参数",
+        "workflowTriggers": "工作流触发器",
+        "supportSPA": "支持 SPA 网站"
       },
       "execute-workflow": {
         "name": "执行工作流",
@@ -399,21 +524,46 @@
         "insertAllVars": "插入所有当前工作流变量",
         "insertVars": "插入当前工作流变量",
         "useCommas": "使用逗号分隔变量名",
-        "insertAllGlobalData": "插入当前工作流的 GlobalData"
+        "insertAllGlobalData": "插入当前工作流的 GlobalData",
+        "groups": {
+          "local": "本地",
+          "team": "团队"
+        }
       },
       "google-sheets-drive": {
         "name": "@:workflow.blocks.google-sheets.name (GDrive)",
         "description": "@:workflow.blocks.google-sheets.description",
         "connected": "已连接工作簿",
         "select": "选择工作簿",
-        "connect": "连接工作簿"
+        "connect": "连接工作簿",
+        "notConnectedPrefix": "您尚未",
+        "notConnectedLink": "将 Automa 连接到 Google Drive",
+        "notConnectedSuffix": "。",
+        "tabs": {
+          "connected": "已连接",
+          "manually": "手动"
+        },
+        "sheetName": "表格名称",
+        "sheetNamePlaceholder": "电子表格",
+        "errors": {
+          "noGoogleAuth": "未获取到 Google 授权",
+          "notSpreadsheet": "文件不是 Google 电子表格",
+          "selectFailed": "未选择文件或授权失败"
+        }
       },
       "google-drive": {
         "name": "Google Drive",
         "description": "上传文件到 Google Drive",
         "actions": {
           "upload": "上传文件"
-        }
+        },
+        "notConnectedPrefix": "您尚未",
+        "notConnectedLink": "将 Automa 连接到 Google Drive",
+        "notConnectedSuffix": "。",
+        "fileLocation": "文件位置",
+        "localComputer": "本地计算机",
+        "downloadId": "下载 ID",
+        "addFile": "添加文件"
       },
       "google-sheets": {
         "name": "Google sheets",
@@ -438,11 +588,13 @@
         },
         "spreadsheetId": {
           "label": "电子表格 Id",
-          "link": "查看如何获取电子表格 Id"
+          "link": "查看如何获取电子表格 Id",
+          "required": "Spreadsheet ID 为必填项"
         },
         "range": {
           "label": "范围",
-          "link": "点击查看更多示例"
+          "link": "点击查看更多示例",
+          "required": "数据范围为必填项"
         },
         "select": {
           "get": "获取电子表格单元格值",
@@ -452,6 +604,16 @@
           "clear": "清除电子表格单元格值",
           "create": "创建电子表格",
           "add-sheet": "添加工作簿"
+        },
+        "noAccess": "Automa 无权访问该电子表格。",
+        "readMore": "点击这里了解更多。",
+        "customData": "自定义数据",
+        "messages": {
+          "spreadsheetIdEmpty": "电子表格 ID 为空",
+          "spreadsheetIdInvalid": "电子表格 ID 无效",
+          "noSpreadsheetSelected": "未选择电子表格",
+          "spreadsheetIdInvalidCheck": "电子表格 ID 无效，请检查",
+          "rangeEmpty": "电子表格范围为空"
         }
       },
       "active-tab": {
@@ -465,7 +627,10 @@
         "bypass": {
           "label": "免过滤清单",
           "note": "使用英文逗号 (,) 分隔 URL"
-        }
+        },
+        "host": "主机",
+        "protocolsTitle": "支持的协议：http、https、socks4 和 socks5",
+        "port": "端口"
       },
       "new-window": {
         "name": "新建窗口",
@@ -489,6 +654,13 @@
         "incognito": {
           "text": "设置为无痕窗口",
           "note": "您必须为此扩展启用“在无痕模式下启用”才能使用该选项"
+        },
+        "type": "类型",
+        "urlOptional": "URL（可选）",
+        "windowType": {
+          "normal": "普通窗口",
+          "popup": "弹出窗口",
+          "panel": "面板"
         }
       },
       "go-back": {
@@ -504,7 +676,12 @@
         "description": "",
         "url": "匹配模式",
         "activeTab": "关闭活动标签页",
-        "allWindows": "关闭所有窗口"
+        "allWindows": "关闭所有窗口",
+        "placeholder": "关闭",
+        "types": {
+          "tab": "标签页",
+          "window": "窗口"
+        }
       },
       "event-click": {
         "name": "点击元素",
@@ -516,10 +693,14 @@
         "input": {
           "title": "延迟毫秒",
           "placeholder": "(毫秒)"
-        }
+        },
+        "label": "延迟时间（毫秒）"
       },
       "parameter-prompt": {
-        "name": "参数提示"
+        "name": "参数提示",
+        "timeoutLabel": "超时时间（毫秒）（0 为禁用）",
+        "insertParameters": "插入参数",
+        "parameters": "参数"
       },
       "get-text": {
         "name": "获取文本",
@@ -533,6 +714,15 @@
         "suffixText": {
           "placeholder": "文本后缀",
           "title": "为文本添加后缀"
+        },
+        "regexPlaceholder": "正则表达式",
+        "expressionFlags": "表达式标志",
+        "textPlaceholder": "文本",
+        "useTextContent": "使用",
+        "flags": {
+          "g": "全局匹配",
+          "i": "忽略大小写",
+          "m": "多行匹配"
         }
       },
       "export-data": {
@@ -548,7 +738,9 @@
             "google-sheets": "Google sheets",
             "variable": "变量"
           }
-        }
+        },
+        "plainText": "纯文本",
+        "delimiter": "分隔符"
       },
       "element-scroll": {
         "name": "滚动元素",
@@ -565,7 +757,17 @@
         "description": "在标签页之间切换",
         "matchPattern": "匹配模式",
         "url": "新建标签页的 URL",
-        "createIfNoMatch": "如果没有匹配则创建"
+        "createIfNoMatch": "如果没有匹配则创建",
+        "findTabBy": "查找标签页方式",
+        "types": {
+          "match-patterns": "匹配模式",
+          "tab-title": "标签页标题",
+          "next-tab": "下一个标签页",
+          "prev-tab": "上一个标签页",
+          "tab-index": "标签页索引"
+        },
+        "tabTitle": "标签页标题",
+        "index": "索引"
       },
       "new-tab": {
         "name": "新建标签页",
@@ -628,7 +830,16 @@
         },
         "checkbox": {
           "name": "复选框"
-        }
+        },
+        "selectOptionBy": "选项选择方式",
+        "selectBy": {
+          "value": "按值",
+          "position": "按位置",
+          "firstOption": "第一个选项",
+          "lastOption": "最后一个选项",
+          "custom": "自定义"
+        },
+        "optionPosition": "选项位置"
       },
       "repeat-task": {
         "name": "重复任务",
@@ -658,12 +869,41 @@
         "timeout": {
           "placeholder": "超时（毫秒）",
           "title": "Javascript 代码执行超时"
-        }
+        },
+        "runBeforeLoad": "在页面加载完成前运行",
+        "wrapLine": "自动换行"
       },
       "trigger-event": {
         "name": "触发器事件",
         "description": "",
-        "selectEvent": "选择事件"
+        "selectEvent": "选择事件",
+        "inputData": "数据",
+        "inputType": "输入类型",
+        "bubbles": "冒泡",
+        "cancelable": "可取消",
+        "events": {
+          "click": "单击",
+          "dblclick": "双击",
+          "mouseup": "鼠标松开",
+          "mousedown": "鼠标按下",
+          "mouseenter": "鼠标进入",
+          "mouseleave": "鼠标离开",
+          "mouseover": "鼠标悬停",
+          "mouseout": "鼠标移出",
+          "mousemove": "鼠标移动",
+          "focus": "聚焦",
+          "blur": "失焦",
+          "input": "输入",
+          "change": "值改变",
+          "touchstart": "触摸开始",
+          "touchend": "触摸结束",
+          "touchmove": "触摸移动",
+          "touchcancel": "触摸取消",
+          "keydown": "按下按键",
+          "keyup": "松开按键",
+          "submit": "提交",
+          "wheel": "滚轮"
+        }
       },
       "conditions": {
         "name": "条件",
@@ -678,7 +918,8 @@
         "lt": "小于",
         "lte": "小于或等于",
         "ne": "不等于",
-        "contains": "包含"
+        "contains": "包含",
+        "path": "路径 {num}"
       },
       "element-exists": {
         "name": "元素存在",
@@ -713,7 +954,17 @@
           "headers": "Headers",
           "body": "Body",
           "response": "响应"
-        }
+        },
+        "headerPlaceholder": "请求头 {index}",
+        "valuePlaceholder": "值",
+        "responseType": "响应类型",
+        "responseTypes": {
+          "json": "JSON",
+          "text": "文本",
+          "base64": "Base64"
+        },
+        "dataPath": "数据路径",
+        "assignColumns": "[指定列]"
       },
       "while-loop": {
         "name": "While 循环",
@@ -733,7 +984,10 @@
           "scroll": "向下滚动",
           "click-link": "点击一个链接",
           "scroll-up": "向上滚动"
-        }
+        },
+        "selectorHint": "CSS 选择器或 XPath",
+        "maxWaitElements": "等待更多元素的最长秒数",
+        "maxWaitPage": "等待页面加载完成的最长秒数"
       },
       "loop-data": {
         "name": "循环数据",
@@ -748,7 +1002,8 @@
           "maxFile": "最大文件尺寸为 1MB",
           "options": {
             "firstRow": "使用第一行作为主键"
-          }
+          },
+          "title": "数据"
         },
         "buttons": {
           "clear": "清除数据",
@@ -772,7 +1027,8 @@
             "google-sheets": "Google sheets",
             "elements": "元素"
           }
-        }
+        },
+        "selectorHint": "CSS 选择器或 XPath"
       },
       "loop-breakpoint": {
         "name": "循环断点",
@@ -790,7 +1046,8 @@
           "page": "页面",
           "fullpage": "完整页面",
           "element": "一个元素"
-        }
+        },
+        "typePlaceholder": "类型"
       },
       "switch-to": {
         "name": "切换框架",
@@ -804,6 +1061,70 @@
       "debugMode": {
         "title": "调试模式",
         "description": "使用 Chrome DevTools 协议执行当前模块"
+      },
+      "ai-workflow": {
+        "name": "AI 工作流",
+        "description": "由 AI Power 创建的工作流",
+        "configureToken": "配置 AI Power 令牌",
+        "selectWorkflows": "选择工作流",
+        "selectWorkflowPlaceholder": "选择一个工作流",
+        "searchWorkflows": "搜索工作流...",
+        "newWorkflow": "新建 AI 工作流",
+        "inputs": "工作流输入",
+        "noInputs": "无输入",
+        "outputs": "工作流输出（仅查看）",
+        "noOutputs": "无输出",
+        "poweredBy": "由 Automa 提供支持",
+        "modal": {
+          "description": "输入您的 AI Power 令牌以启用 AI 工作流功能",
+          "howToGet": "如何获取您的 AI Power 令牌",
+          "step1": "前往 AI Power 控制面板中的“设置 → 授权”",
+          "step2": "找到“AI Power 授权”部分",
+          "step3": "点击“生成新令牌”以创建新令牌",
+          "step4": "复制生成的令牌并粘贴到下方",
+          "openSettings": "打开 AI Power 设置",
+          "tokenLabel": "AI Power 令牌",
+          "tokenPlaceholder": "输入您的 AI Power 令牌..."
+        },
+        "errors": {
+          "uploadFailed": "文件上传失败",
+          "fetchWorkflows": "获取 AI Power 工作流失败：{msg}",
+          "fetchWorkflowDetail": "获取 AI Power 工作流详情失败：{msg}"
+        }
+      },
+      "workflow-parameters": {
+        "mask": {
+          "useInputMasking": "使用输入掩码",
+          "returnUnmaskValue": "返回未掩码值",
+          "masks": "掩码",
+          "isRegex": "是正则表达式",
+          "customTokens": "自定义令牌",
+          "symbolPlaceholder": "符号",
+          "regexPlaceholder": "正则表达式",
+          "addToken": "添加令牌",
+          "maskInfo": {
+            "addMask": "为输入字段添加掩码",
+            "supportedPatterns": "支持的模式",
+            "anyDigit": "任意数字",
+            "anyLetter": "任意字母",
+            "anyChar": "任意字符",
+            "optionalInput": "使输入可选",
+            "fixedPart": "在未掩码值中包含固定部分",
+            "preventShift": "防止符号回移",
+            "escapeChar": "转义字符"
+          }
+        },
+        "noParameters": "暂无参数",
+        "headers": {
+          "name": "名称",
+          "type": "类型",
+          "placeholder": "占位符",
+          "defaultValue": "默认值"
+        },
+        "namePlaceholder": "参数名称",
+        "paramPlaceholder": "参数占位符",
+        "defaultValuePlaceholder": "空",
+        "required": "参数必填"
       }
     }
   }

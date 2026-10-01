@@ -4,9 +4,8 @@
       {{ t('welcome.title') }}
     </h1>
     <p>
-      Get started by reading the documentation or browsing workflows in the
-      Automa Marketplace. <br />
-      To learn how to use Automa, watch the tutorials on our YouTube Channel.
+      {{ t('welcome.text') }} <br />
+      {{ t('welcome.tutorials') }}
     </p>
     <div class="mt-8 flex items-center space-x-2">
       <a

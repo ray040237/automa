@@ -43,7 +43,9 @@
           <option value="[all]">
             {{ t('workflow.blocks.delete-data.allColumns') }}
           </option>
-          <option value="column">Column</option>
+          <option value="column">
+            {{ t('workflow.blocks.delete-data.column') }}
+          </option>
           <option
             v-for="column in workflow.columns.value"
             :key="column.id"

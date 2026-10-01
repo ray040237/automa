@@ -13,7 +13,8 @@
       "tabs": {
         "new": "新建模块",
         "existing": "已存在工作流"
-      }
+      },
+      "startHint": "打开仪表板即可开始录制。点击可了解更多"
     },
     "elementSelector": {
       "name": "元素选择器",
@@ -26,7 +27,20 @@
       "type": {
         "host": "主机",
         "local": "本地"
-      }
-    }
+      },
+      "pin": "固定工作流",
+      "unpin": "取消固定工作流",
+      "imageError": "无法显示"
+    },
+    "teams": "团队",
+    "pinnedWorkflows": "已固定的工作流",
+    "folderAll": "文件夹（全部）",
+    "sort": "排序",
+    "sortOrder": "排序顺序",
+    "sortAsc": "升序",
+    "sortDesc": "降序",
+    "backgroundHint": "如果工作流的运行时间少于 5 分钟，请在",
+    "workflowSettings": "工作流设置",
+    "backgroundHintSuffix": "中将其设置为在后台运行。"
   }
 }

@@ -74,14 +74,18 @@
           <ui-input
             v-model="items.name"
             :title="items.name"
-            :placeholder="`Header ${index + 1}`"
+            :placeholder="
+              t('workflow.blocks.webhook.headerPlaceholder', {
+                index: index + 1,
+              })
+            "
             type="text"
             class="col-span-3"
           />
           <ui-input
             v-model="items.value"
             :title="items.value"
-            placeholder="Value"
+            :placeholder="t('workflow.blocks.webhook.valuePlaceholder')"
             type="text"
             class="col-span-3"
           />
@@ -104,25 +108,36 @@
       <ui-tab-panel value="response" class="mt-2">
         <ui-select
           :model-value="data.responseType"
-          label="Response type"
+          :label="t('workflow.blocks.webhook.responseType')"
           class="w-full"
           @change="updateData({ responseType: $event })"
         >
-          <option value="json">JSON</option>
-          <option value="text">Text</option>
-          <option value="base64">Base64</option>
+          <option value="json">
+            {{ t('workflow.blocks.webhook.responseTypes.json') }}
+          </option>
+          <option value="text">
+            {{ t('workflow.blocks.webhook.responseTypes.text') }}
+          </option>
+          <option value="base64">
+            {{ t('workflow.blocks.webhook.responseTypes.base64') }}
+          </option>
         </ui-select>
         <ui-input
           v-if="data.responseType === 'json'"
           :model-value="data.dataPath"
           placeholder="path.to.data"
-          label="Data path"
+          :label="t('workflow.blocks.webhook.dataPath')"
           class="mt-2 w-full"
           @change="updateData({ dataPath: $event })"
         />
         <insert-workflow-data
           :data="data"
-          :columns="[{ name: '[Assign columns]', id: '$assignColumns' }]"
+          :columns="[
+            {
+              name: t('workflow.blocks.webhook.assignColumns'),
+              id: '$assignColumns',
+            },
+          ]"
           variables
           @update="updateData"
         />

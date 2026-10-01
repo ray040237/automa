@@ -26,7 +26,9 @@
         <ui-button class="mr-2" @click="$emit('close')">
           {{ t('common.cancel') }}
         </ui-button>
-        <ui-button class="mr-2" @click="saveDraft"> Save draft </ui-button>
+        <ui-button class="mr-2" @click="saveDraft">
+          {{ t('workflow.share.saveDraft') }}
+        </ui-button>
         <ui-button
           :loading="state.isPublishing"
           variant="accent"
@@ -45,7 +47,9 @@
           class="mr-4 block w-full flex-1 bg-transparent text-2xl font-semibold leading-none focus:ring-0"
         />
         <ui-select v-model="state.workflow.category">
-          <option value="">{{ t('common.category') }} (none)</option>
+          <option value="">
+            {{ t('workflow.share.categoryNone') }}
+          </option>
           <option
             v-for="(category, id) in workflowCategories"
             :key="id"
@@ -59,7 +63,7 @@
         <ui-textarea
           v-model="state.workflow.description"
           :max="300"
-          placeholder="Short description"
+          :placeholder="t('workflow.share.description')"
           class="scroll h-32 w-full resize-none"
         />
         <p

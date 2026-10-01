@@ -22,8 +22,14 @@
           </span>
         </div>
       </div>
-      <p v-if="workflow.isDisabled" class="text-sm text-gray-600">Disabled</p>
-      <button v-else title="Execute" @click="executeWorkflow(workflow)">
+      <p v-if="workflow.isDisabled" class="text-sm text-gray-600">
+        {{ t('common.disabled') }}
+      </p>
+      <button
+        v-else
+        :title="t('common.execute')"
+        @click="executeWorkflow(workflow)"
+      >
         <v-remixicon name="riPlayLine" />
       </button>
     </ui-card>
@@ -31,11 +37,14 @@
 </template>
 <script setup>
 import { computed, onMounted, shallowRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useUserStore } from '@/stores/user';
 import { sendMessage } from '@/utils/message';
 import { useTeamWorkflowStore } from '@/stores/teamWorkflow';
 import { tagColors } from '@/utils/shared';
 import dayjs from '@/lib/dayjs';
+
+const { t } = useI18n();
 
 const props = defineProps({
   search: {

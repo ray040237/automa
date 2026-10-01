@@ -66,7 +66,7 @@
             <template #header>
               <v-remixicon name="riTeamLine" />
               <span class="ml-4 flex-1 text-left capitalize">
-                Team Workflows
+                {{ t('workflows.teamWorkflows') }}
               </span>
             </template>
             <ui-list class="space-y-1">
@@ -288,38 +288,35 @@
             class="absolute top-4 right-4 cursor-pointer"
             @click="workflowStore.isFirstTime = false"
           />
-          <p>Create your first workflow by recording your actions:</p>
+          <p>{{ t('workflows.firstCard.title') }}</p>
           <ol class="list-inside list-decimal">
-            <li>Open your browser and go to your destination URL</li>
+            <li>{{ t('workflows.firstCard.step1') }}</li>
+            <li>{{ t('workflows.firstCard.step2') }}</li>
             <li>
-              Click the "Record workflow" button, and do your simple repetitive
-              task
-            </li>
-            <li>
-              Need more help? Join
+              {{ t('workflows.firstCard.help') }}
               <a
                 href="https://discord.gg/C6khwwTE84"
                 target="_blank"
                 rel="noreferer"
-                >the community</a
-              >, or email us at
+                >{{ t('workflows.firstCard.community') }}</a
+              >{{ t('workflows.firstCard.helpAfter') }}
               <a href="mailto:support@automa.site" target="_blank"
                 >support@automa.site</a
               >
             </li>
           </ol>
           <p class="mt-4">
-            Learn more about recording in
+            {{ t('workflows.firstCard.recording') }}
             <a
               href="https://docs.extension.automa.site/guide/quick-start.html#recording-actions"
               target="_blank"
-              >the documentation</a
+              >{{ t('workflows.firstCard.docs') }}</a
             >
           </p>
         </ui-card>
       </div>
     </div>
-    <ui-modal v-model="addWorkflowModal.show" title="Workflow">
+    <ui-modal v-model="addWorkflowModal.show" :title="t('common.workflow')">
       <ui-input
         v-model="addWorkflowModal.name"
         :placeholder="t('common.name')"
@@ -630,7 +627,7 @@ onMounted(() => {
       teams.push({ name: userTeam.name, id: userTeam.id });
     } else if (!unknownInputted && teamWorkflowStore.getByTeam(id).length > 0) {
       unknownInputted = true;
-      teams.unshift({ name: '(unknown)', id: '(unknown)' });
+      teams.unshift({ name: t('workflows.unknownTeam'), id: '(unknown)' });
     }
   });
 

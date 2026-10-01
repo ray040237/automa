@@ -34,7 +34,8 @@
             "animated": "Animated",
             "select": "Select line",
             "to": "Line to {name} block",
-            "lineColor": "Color"
+            "lineColor": "Color",
+            "labelPlaceholder": "A label"
           }
         },
         "toggle": {
@@ -63,7 +64,11 @@
             "restart": "Restart flow"
           },
           "insertData": {
-            "name": "Insert data"
+            "name": "Insert data",
+            "addItem": "Add item",
+            "type": "Type",
+            "value": "Value",
+            "selectColumn": "Select column"
           }
         },
         "table": {
@@ -104,7 +109,33 @@
       },
       "ai-workflow": {
         "name": "AI Workflow",
-        "description": "A workflow that is created by AI-Power"
+        "description": "A workflow that is created by AI-Power",
+        "configureToken": "Configure AI Power Token",
+        "selectWorkflows": "Select Workflows",
+        "selectWorkflowPlaceholder": "Select a workflow",
+        "searchWorkflows": "Search workflows...",
+        "newWorkflow": "New AI Workflow",
+        "inputs": "Workflow Inputs",
+        "noInputs": "No inputs",
+        "outputs": "Workflow Outputs(view only)",
+        "noOutputs": "No outputs",
+        "poweredBy": "Powered by Automa",
+        "modal": {
+          "description": "Enter your AI Power token to enable AI Workflow features",
+          "howToGet": "How to get your AI Power Token",
+          "step1": "Go to Settings → Authorizations in your AI Power dashboard",
+          "step2": "Navigate to \"AI Power Authorization\" section",
+          "step3": "Click \"Generate New Token\" to create a new token",
+          "step4": "Copy the generated token and paste it below",
+          "openSettings": "Open AI Power Settings",
+          "tokenLabel": "AI Power Token",
+          "tokenPlaceholder": "Enter your AI Power Token..."
+        },
+        "errors": {
+          "uploadFailed": "File upload failed",
+          "fetchWorkflows": "Failed to fetch AI Power workflows: {msg}",
+          "fetchWorkflowDetail": "Failed to fetch AI Power workflow detail: {msg}"
+        }
       },
       "wait-connections": {
         "name": "Wait connections",
@@ -121,7 +152,19 @@
           "remove": "Remove cookies",
           "getAll": "Get all cookies"
         },
-        "useJson": "Use JSON format"
+        "useJson": "Use JSON format",
+        "seeProperties": "See all available properties",
+        "permissionRequired": "This block requires \"Cookies\" permission to work properly",
+        "forms": {
+          "url": "URL",
+          "name": "Name",
+          "nameOptional": "Name (optional)",
+          "value": "Value (optional)",
+          "path": "Path (optional)",
+          "domain": "Domain (optional)",
+          "sameSite": "sameSite (optional)",
+          "expirationDate": "expirationDate (seconds) (optional)"
+        }
       },
       "note": {
         "name": "Note"
@@ -136,16 +179,39 @@
         "name": "Workflow state",
         "description": "Manage workflows states",
         "actions": {
-          "stop": "Stop workflows"
+          "stop": "Stop workflows",
+          "items": {
+            "stop-all": "Stop all workflows",
+            "stop-current": "Stop current workflow",
+            "stop-specific": "Stop specific workflows"
+          }
         },
         "error": {
           "throwError": "Throw error",
           "message": "Error message"
-        }
+        },
+        "exceptCurrent": "Except for the current workflow",
+        "selectWorkflow": "Select a workflow"
       },
       "regex-variable": {
         "name": "RegEx variable",
-        "description": "Matching a variable value against a regular expression"
+        "description": "Matching a variable value against a regular expression",
+        "method": "Method",
+        "methods": {
+          "match": "Match value",
+          "replace": "Replace value"
+        },
+        "replaceWith": "Replace with",
+        "replacePlaceholder": "(empty)",
+        "regex": "RegEx",
+        "expressionPlaceholder": "Expression",
+        "flagsTitle": "Flags",
+        "flags": {
+          "global": "global",
+          "ignoreCase": "ignore case",
+          "multiline": "multiline"
+        },
+        "flagsEmpty": "flags"
       },
       "data-mapping": {
         "source": "Source",
@@ -155,13 +221,18 @@
         "dataSource": "Data source",
         "description": "Map data of a variable or table",
         "addSource": "Add source",
-        "addDestination": "Add destination"
+        "addDestination": "Add destination",
+        "sourceProperty": "Source property",
+        "destinationProperty": "Destination property"
       },
       "sort-data": {
         "name": "Sort data",
         "description": "Sort the items of data",
         "property": "Sort by the item's property",
-        "addProperty": "Add property"
+        "addProperty": "Add property",
+        "propertyPlaceholder": "Property {index}",
+        "ascending": "Ascending",
+        "descending": "Descending"
       },
       "increase-variable": {
         "name": "Increase variable",
@@ -174,13 +245,16 @@
         "title": "Title",
         "message": "Message",
         "imageUrl": "Image URL (optional)",
-        "iconUrl": "Icon URL (optional)"
+        "iconUrl": "Icon URL (optional)",
+        "titlePlaceholder": "Hello world!",
+        "messagePlaceholder": "Notification message"
       },
       "delete-data": {
         "name": "Delete data",
         "description": "Delete table or variable data",
         "from": "Data from",
-        "allColumns": "[All columns]"
+        "allColumns": "[All columns]",
+        "column": "Column"
       },
       "log-data": {
         "name": "Get log data",
@@ -215,7 +289,8 @@
           "press-key": "Press a key",
           "multiple-keys": "Press multiple keys"
         },
-        "press-time": "Press time (milliseconds)"
+        "press-time": "Press time (milliseconds)",
+        "keysPlaceholder": "keys"
       },
       "save-assets": {
         "name": "Save assets",
@@ -226,7 +301,8 @@
           "title": "Type",
           "element": "Media element (image, audio, or video)",
           "url": "URL"
-        }
+        },
+        "url": "URL"
       },
       "handle-dialog": {
         "name": "Handle dialog",
@@ -234,7 +310,8 @@
         "accept": "Accept dialog",
         "promptText": {
           "label": "Prompt text (optional)",
-          "description": "The text to enter into the prompt dialog before accepting"
+          "description": "The text to enter into the prompt dialog before accepting",
+          "placeholder": "Text"
         }
       },
       "handle-download": {
@@ -249,7 +326,26 @@
       },
       "insert-data": {
         "name": "Insert data",
-        "description": "Insert data into table or variable"
+        "description": "Insert data into table or variable",
+        "insertCount": "Insert data ({count})",
+        "fileUrl": "File URL",
+        "filePath": "File absolute path/File URL",
+        "sheetOptional": "Sheet (optional)",
+        "rangeOptional": "Range (optional)",
+        "tooltip": {
+          "importFile": "Import file",
+          "noAccess": "Don't have access, click to learn more"
+        },
+        "previewData": "Preview data",
+        "clearPreview": "Clear preview",
+        "fileAction": {
+          "placeholder": "File Action",
+          "default": "Default",
+          "base64": "Read as base64",
+          "csvExcel": "CSV/Excel File",
+          "json": "Read as JSON",
+          "jsonHeader": "Read as JSON with headers"
+        }
       },
       "clipboard": {
         "name": "Clipboard",
@@ -261,7 +357,8 @@
         "types": {
           "get": "Get clipboard data",
           "insert": "Insert text to clipboard"
-        }
+        },
+        "textPlaceholder": "Text"
       },
       "hover-element": {
         "name": "Hover element",
@@ -281,6 +378,13 @@
             "prev-sibling": "As previous sibling",
             "replace": "Replace target element"
           }
+        },
+        "runBeforeLoad": "Run before page loaded",
+        "preloadScript": {
+          "type": "Type",
+          "style": "Style",
+          "script": "Script",
+          "add": "Add script"
         }
       },
       "upload-file": {
@@ -290,7 +394,8 @@
         "addFile": "Add file",
         "onlyURL": "Only uploading files from a URL is supported in the Firefox browser",
         "requirement": "Read the requirements before using this block",
-        "noFileAccess": "Automa doesn't have access to files"
+        "noFileAccess": "Automa doesn't have access to files",
+        "pathPlaceholder": "URL/File path/base64"
       },
       "browser-event": {
         "name": "Browser event",
@@ -298,7 +403,22 @@
         "events": "Events",
         "timeout": "Timeout (milliseconds)",
         "activeTabLoaded": "Active tab",
-        "setAsActiveTab": "Set as active tab"
+        "setAsActiveTab": "Set as active tab",
+        "matchPattern": "Match pattern",
+        "matchPatternExamples": "Examples",
+        "filter": "Filter",
+        "filterPlaceholder": "URL or Regex",
+        "groups": {
+          "tab": "Tab",
+          "window": "Window"
+        },
+        "eventNames": {
+          "tabClosed": "Tab closed",
+          "tabLoaded": "Tab loaded",
+          "tabCreated": "Tab created",
+          "windowCreated": "Window created",
+          "windowClosed": "Window closed"
+        }
       },
       "blocks-group-2": {
         "name": "@:workflow.blocks.blocks-group.name 2",
@@ -322,7 +442,17 @@
           "noPermission": "This trigger requires \"contextMenus\" permission to be working",
           "grantPermission": "Grant permission",
           "appearIn": "Will appear in",
-          "contextName": "Workflow name in the context menu"
+          "contextName": "Workflow name in the context menu",
+          "types": {
+            "audio": "Audio",
+            "editable": "Editable",
+            "image": "Image",
+            "link": "Link",
+            "page": "Page",
+            "password": "Password",
+            "selection": "Selection",
+            "video": "Video"
+          }
         },
         "days": [
           "Sunday",
@@ -392,7 +522,28 @@
           "visit-web": "When visiting a website",
           "on-startup": "On browser startup",
           "keyboard-shortcut": "Keyboard shortcut"
-        }
+        },
+        "keyboard": {
+          "repeat": "Repeat",
+          "modifier": {
+            "altKey": "Alt key",
+            "ctrlKey": "Ctrl key",
+            "metaKey": "Meta key",
+            "shiftKey": "Shift key"
+          }
+        },
+        "mouse": {
+          "buttons": {
+            "0": "Left click",
+            "1": "Middle click",
+            "2": "Right click"
+          },
+          "button": "Button"
+        },
+        "editTriggers": "Edit Triggers",
+        "parameters": "Parameters",
+        "workflowTriggers": "Workflow Triggers",
+        "supportSPA": "Support SPA website"
       },
       "execute-workflow": {
         "name": "Execute workflow",
@@ -403,21 +554,46 @@
         "insertAllVars": "Use all current workflow variables",
         "insertVars": "Insert current workflow variables",
         "useCommas": "Use commas to separate the variable name",
-        "insertAllGlobalData": "Use all current workflow globalData"
+        "insertAllGlobalData": "Use all current workflow globalData",
+        "groups": {
+          "local": "Local",
+          "team": "Team"
+        }
       },
       "google-sheets-drive": {
         "name": "@:workflow.blocks.google-sheets.name (GDrive)",
         "description": "@:workflow.blocks.google-sheets.description",
         "connected": "Connected sheets",
         "select": "Select sheet",
-        "connect": "Connect sheet"
+        "connect": "Connect sheet",
+        "notConnectedPrefix": "You haven't",
+        "notConnectedLink": "connected Automa to Google Drive",
+        "notConnectedSuffix": ".",
+        "tabs": {
+          "connected": "Connected",
+          "manually": "Manually"
+        },
+        "sheetName": "Sheet name",
+        "sheetNamePlaceholder": "A Spreadsheet",
+        "errors": {
+          "noGoogleAuth": "Failed to get Google authorization",
+          "notSpreadsheet": "File is not a google spreadsheet",
+          "selectFailed": "No file selected or authorization failed"
+        }
       },
       "google-drive": {
         "name": "Google Drive",
         "description": "Upload files to Google Drive",
         "actions": {
           "upload": "Upload files"
-        }
+        },
+        "notConnectedPrefix": "You haven't",
+        "notConnectedLink": "connected Automa to Google Drive",
+        "notConnectedSuffix": ".",
+        "fileLocation": "File location",
+        "localComputer": "Local computer",
+        "downloadId": "Download id",
+        "addFile": "Add file"
       },
       "google-sheets": {
         "name": "Google Sheets",
@@ -458,6 +634,16 @@
           "clear": "Clear spreadsheet cell values",
           "create": "Create a spreadsheet",
           "add-sheet": "Add sheet"
+        },
+        "noAccess": "Automa doesn't have access to the spreadsheet.",
+        "readMore": "Click here to read more.",
+        "customData": "Custom data",
+        "messages": {
+          "spreadsheetIdEmpty": "Spreadsheet id is empty",
+          "spreadsheetIdInvalid": "Spreadsheet id is invalid",
+          "noSpreadsheetSelected": "No spreadsheet is selected",
+          "spreadsheetIdInvalidCheck": "Spreadsheet Id is invalid, please check it",
+          "rangeEmpty": "Spreadsheet range is empty"
         }
       },
       "active-tab": {
@@ -471,7 +657,10 @@
         "bypass": {
           "label": "Bypass list",
           "note": "Use commas (,) to separate URL"
-        }
+        },
+        "host": "Host",
+        "protocolsTitle": "Supported protocols: http, https, socks4, and socks5",
+        "port": "Port"
       },
       "new-window": {
         "name": "New window",
@@ -495,6 +684,13 @@
         "incognito": {
           "text": "Set as an incognito window",
           "note": "You must enable 'Allow in incognito' for this extension first"
+        },
+        "type": "Type",
+        "urlOptional": "URL (optional)",
+        "windowType": {
+          "normal": "Normal window",
+          "popup": "Popup window",
+          "panel": "Panel"
         }
       },
       "go-back": {
@@ -510,7 +706,12 @@
         "description": "",
         "url": "Match Patterns",
         "activeTab": "Close active tab",
-        "allWindows": "Close all windows"
+        "allWindows": "Close all windows",
+        "placeholder": "Close",
+        "types": {
+          "tab": "Tab",
+          "window": "Window"
+        }
       },
       "event-click": {
         "name": "Click element",
@@ -522,10 +723,14 @@
         "input": {
           "title": "Delay in milliseconds",
           "placeholder": "(milliseconds)"
-        }
+        },
+        "label": "Delay time (millisecond)"
       },
       "parameter-prompt": {
-        "name": "Parameter Prompt"
+        "name": "Parameter Prompt",
+        "timeoutLabel": "Timeout (millisecond) (0 to disable)",
+        "insertParameters": "Insert Parameters",
+        "parameters": "Parameters"
       },
       "get-text": {
         "name": "Get text",
@@ -539,6 +744,15 @@
         "suffixText": {
           "placeholder": "Text suffix",
           "title": "Add suffix to the text"
+        },
+        "regexPlaceholder": "Regex",
+        "expressionFlags": "Expression flags",
+        "textPlaceholder": "Text",
+        "useTextContent": "Use",
+        "flags": {
+          "g": "global",
+          "i": "ignore case",
+          "m": "multiline"
         }
       },
       "export-data": {
@@ -554,7 +768,9 @@
             "google-sheets": "Google Sheets",
             "variable": "Variable"
           }
-        }
+        },
+        "plainText": "Plain text",
+        "delimiter": "Delimiter"
       },
       "element-scroll": {
         "name": "Scroll element",
@@ -571,7 +787,17 @@
         "description": "Switch between tab",
         "matchPattern": "Match Patterns",
         "url": "New tab URL",
-        "createIfNoMatch": "Create if there's no match"
+        "createIfNoMatch": "Create if there's no match",
+        "findTabBy": "Find tab by",
+        "types": {
+          "match-patterns": "Match patterns",
+          "tab-title": "Tab title",
+          "next-tab": "Next tab",
+          "prev-tab": "Previous tab",
+          "tab-index": "Tab index"
+        },
+        "tabTitle": "Tab title",
+        "index": "Index"
       },
       "new-tab": {
         "name": "New tab",
@@ -634,7 +860,16 @@
         },
         "checkbox": {
           "name": "Checkbox"
-        }
+        },
+        "selectOptionBy": "Select an option by",
+        "selectBy": {
+          "value": "The value",
+          "position": "The position",
+          "firstOption": "First option",
+          "lastOption": "Last option",
+          "custom": "Custom"
+        },
+        "optionPosition": "Option position"
       },
       "repeat-task": {
         "name": "Repeat task",
@@ -664,12 +899,41 @@
         "timeout": {
           "placeholder": "Timeout (milliseconds)",
           "title": "JavaScript code execution timeout"
-        }
+        },
+        "runBeforeLoad": "Run before page loaded",
+        "wrapLine": "wrap line"
       },
       "trigger-event": {
         "name": "Trigger event",
         "description": "",
-        "selectEvent": "Select event"
+        "selectEvent": "Select event",
+        "inputData": "Data",
+        "inputType": "Input type",
+        "bubbles": "Bubbles",
+        "cancelable": "Cancelable",
+        "events": {
+          "click": "Click",
+          "dblclick": "Double Click",
+          "mouseup": "Mouseup",
+          "mousedown": "Mousedown",
+          "mouseenter": "Mouseenter",
+          "mouseleave": "Mouseleave",
+          "mouseover": "Mouseover",
+          "mouseout": "Mouseout",
+          "mousemove": "Mousemove",
+          "focus": "Focus",
+          "blur": "Blur",
+          "input": "Input",
+          "change": "Change",
+          "touchstart": "Touch start",
+          "touchend": "Touch end",
+          "touchmove": "Touch move",
+          "touchcancel": "Touch cancel",
+          "keydown": "Keydown",
+          "keyup": "Keyup",
+          "submit": "Submit",
+          "wheel": "Wheel"
+        }
       },
       "conditions": {
         "name": "Conditions",
@@ -684,7 +948,8 @@
         "lt": "Less than",
         "lte": "Less than or equal",
         "ne": "Not equals",
-        "contains": "Contains"
+        "contains": "Contains",
+        "path": "Path {num}"
       },
       "element-exists": {
         "name": "Element exists",
@@ -719,7 +984,17 @@
           "headers": "Headers",
           "body": "Body",
           "response": "Response"
-        }
+        },
+        "headerPlaceholder": "Header {index}",
+        "valuePlaceholder": "Value",
+        "responseType": "Response type",
+        "responseTypes": {
+          "json": "JSON",
+          "text": "Text",
+          "base64": "Base64"
+        },
+        "dataPath": "Data path",
+        "assignColumns": "[Assign columns]"
       },
       "while-loop": {
         "name": "While loop",
@@ -739,7 +1014,10 @@
           "scroll": "Scroll down",
           "click-link": "Click a link",
           "scroll-up": "Scroll up"
-        }
+        },
+        "selectorHint": "CSS Selector or XPath",
+        "maxWaitElements": "Max seconds wait for more elements",
+        "maxWaitPage": "Max seconds wait for the page to load"
       },
       "loop-data": {
         "name": "Loop data",
@@ -754,7 +1032,8 @@
           "maxFile": "Max file size is 1MB",
           "options": {
             "firstRow": "Use the first row as keys"
-          }
+          },
+          "title": "Data"
         },
         "buttons": {
           "clear": "Clear data",
@@ -778,7 +1057,8 @@
             "google-sheets": "Google Sheets",
             "elements": "Elements"
           }
-        }
+        },
+        "selectorHint": "CSS Selector or XPath"
       },
       "loop-breakpoint": {
         "name": "Loop breakpoint",
@@ -796,7 +1076,8 @@
           "page": "A page",
           "fullpage": "A full page",
           "element": "An element"
-        }
+        },
+        "typePlaceholder": "Type"
       },
       "switch-to": {
         "name": "Switch frame",
@@ -810,6 +1091,40 @@
       "debugMode": {
         "title": "Debug mode",
         "description": "Execute block using the Chrome DevTools Protocol"
+      },
+      "workflow-parameters": {
+        "mask": {
+          "useInputMasking": "Use input masking",
+          "returnUnmaskValue": "Return unmask value",
+          "masks": "Masks",
+          "isRegex": "Is RegEx",
+          "customTokens": "Custom tokens",
+          "symbolPlaceholder": "Symbol",
+          "regexPlaceholder": "RegEx",
+          "addToken": "Add token",
+          "maskInfo": {
+            "addMask": "Add mask to the input field",
+            "supportedPatterns": "Supported patterns",
+            "anyDigit": "Any digit",
+            "anyLetter": "Any letter",
+            "anyChar": "Any char",
+            "optionalInput": "Make input optional",
+            "fixedPart": "Include fixed part in unmasked value",
+            "preventShift": "Prevent symbols shift back",
+            "escapeChar": "Escape char"
+          }
+        },
+        "noParameters": "No parameters",
+        "headers": {
+          "name": "Name",
+          "type": "Type",
+          "placeholder": "Placeholder",
+          "defaultValue": "Default Value"
+        },
+        "namePlaceholder": "Parameter name",
+        "paramPlaceholder": "A parameter",
+        "defaultValuePlaceholder": "NULL",
+        "required": "Parameter required"
       }
     }
   }

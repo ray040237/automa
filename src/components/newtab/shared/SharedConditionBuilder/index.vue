@@ -106,7 +106,6 @@ import { useI18n } from 'vue-i18n';
 import { nanoid } from 'nanoid';
 import Draggable from 'vuedraggable';
 import cloneDeep from 'lodash.clonedeep';
-import { conditionBuilder } from '@/utils/shared';
 import ConditionBuilderInputs from './ConditionBuilderInputs.vue';
 
 const props = defineProps({
@@ -148,23 +147,25 @@ function getDefaultValues(items = ['value', 'compare', 'value']) {
 }
 function getConditionText({ category, type, data }) {
   if (category === 'compare') {
-    return conditionBuilder.compareTypes.find(({ id }) => id === type).name;
+    return t(`workflow.conditionBuilder.compareTypes.${type}`);
   }
 
   let text = '';
 
   if (type === 'value') {
-    text = data.value || 'Empty';
+    text = data.value || t('components.conditionBuilder.empty');
   } else if (type.startsWith('code')) {
-    text = 'JS Code';
+    text = t('components.conditionBuilder.jsCode');
   } else if (type.startsWith('element')) {
-    text = type;
+    text = t(`workflow.conditionBuilder.valueTypes.${type}`);
 
     const textDetail = data.attrName || data.selector;
 
     if (textDetail) text += `(${textDetail})`;
   } else if (type.startsWith('data')) {
-    text = `Data exists (${data.dataPath})`;
+    text = t('components.conditionBuilder.dataExists', {
+      path: data.dataPath,
+    });
   }
 
   return text;

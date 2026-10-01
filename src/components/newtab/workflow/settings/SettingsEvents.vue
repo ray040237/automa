@@ -13,7 +13,9 @@
         class="gap-2 group"
       >
         <div class="flex-1 overflow-hidden">
-          <p class="text-overflow">{{ action.name || 'Untitled action' }}</p>
+          <p class="text-overflow">
+            {{ action.name || t('components.blockSettings.events.untitled') }}
+          </p>
           <div
             v-for="event in action.events"
             :key="event"
@@ -58,7 +60,7 @@
       <ui-input
         v-model="actionModal.data.name"
         :label="t('common.name')"
-        placeholder="Untitled"
+        :placeholder="t('components.blockSettings.events.untitledPlaceholder')"
         autofocus
         class="w-full"
       />
@@ -223,7 +225,8 @@ function upsertAction() {
     copyEvents.push({
       id: nanoid(),
       ...actionModal.data,
-      name: actionModal.data.name || 'Untitled action',
+      name:
+        actionModal.data.name || t('components.blockSettings.events.untitled'),
     });
   } else {
     copyEvents = copyEvents.map((event) => {

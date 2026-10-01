@@ -8,12 +8,12 @@
     />
     <ui-select
       :model-value="data.findTabBy"
-      label="Find tab by"
+      :label="t('workflow.blocks.switch-tab.findTabBy')"
       class="mb-2 mt-3 w-full"
       @change="updateData({ findTabBy: $event })"
     >
-      <option v-for="type in types" :key="type.id" :value="type.id">
-        {{ type.name }}
+      <option v-for="type in types" :key="type" :value="type">
+        {{ t(`workflow.blocks.switch-tab.types.${type}`) }}
       </option>
     </ui-select>
     <template v-if="['match-patterns', 'tab-title'].includes(data.findTabBy)">
@@ -45,7 +45,7 @@
       <edit-autocomplete v-else-if="data.findTabBy === 'tab-title'">
         <ui-input
           :model-value="data.tabTitle"
-          label="Tab title"
+          :label="t('workflow.blocks.switch-tab.tabTitle')"
           class="w-full"
           @change="updateData({ tabTitle: $event })"
         />
@@ -70,7 +70,7 @@
     <ui-input
       v-else-if="data.findTabBy === 'tab-index'"
       :model-value="data.tabIndex"
-      label="Index"
+      :label="t('workflow.blocks.switch-tab.index')"
       type="number"
       class="w-full"
       min="0"
@@ -99,11 +99,11 @@ const emit = defineEmits(['update:data']);
 
 const { t } = useI18n();
 const types = [
-  { id: 'match-patterns', name: 'Match patterns' },
-  { id: 'tab-title', name: 'Tab title' },
-  { id: 'next-tab', name: 'Next tab' },
-  { id: 'prev-tab', name: 'Previous tab' },
-  { id: 'tab-index', name: 'Tab index' },
+  'match-patterns',
+  'tab-title',
+  'next-tab',
+  'prev-tab',
+  'tab-index',
 ];
 
 function updateData(value) {

@@ -23,7 +23,7 @@
           v-if="workflow.icon?.startsWith('http')"
           :src="workflow.icon"
           style="height: 24px; width: 24px"
-          alt="Can not display"
+          :alt="t('settings.backupWorkflows.cloud.cannotDisplay')"
         />
         <v-remixicon v-else :name="workflow.icon" />
         <div class="ml-2 flex-1 overflow-hidden">

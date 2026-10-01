@@ -6,7 +6,8 @@
   "welcome": {
     "title": "欢迎使用 Automa! 🎉",
     "text": "从阅读文档或浏览 Automa 市场中的工作流开始.",
-    "marketplace": "市场"
+    "marketplace": "市场",
+    "tutorials": "想了解如何使用 Automa，请观看我们 YouTube 频道上的教程。"
   },
   "packages": {
     "name": "包 | 包",
@@ -17,11 +18,48 @@
     "import": "导入包",
     "set": "设置为包",
     "settings": {
-      "asBlock": "把包设为模块"
+      "asBlock": "把包设为模块",
+      "blockInputs": "块输入",
+      "blockOutputs": "块输出",
+      "inputName": "输入名称",
+      "outputName": "输出名称",
+      "block": "块",
+      "inputPlaceholder": "输入 {index}",
+      "outputPlaceholder": "输出 {index}",
+      "goToBlock": "转到块",
+      "blockNotFound": "未找到块",
+      "notFound": "未找到",
+      "handleName": "{type} {index}",
+      "input": "输入",
+      "output": "输出"
     },
     "categories": {
       "my": "我的包",
       "installed": "已安装的包"
+    },
+    "imageError": "无法显示",
+    "openPage": "打开包页面",
+    "byAuthor": "作者：{author}",
+    "copySuffix": "- 副本",
+    "delete": "删除包",
+    "deleteConfirm": "确定要删除 \"{name}\" 包吗？",
+    "unnamed": "未命名",
+    "alreadyAdded": "您已将其添加为{type}",
+    "input": "输入",
+    "output": "输出",
+    "package": "包",
+    "details": {
+      "name": "包名称",
+      "namePlaceholder": "我的包",
+      "shortDescription": "简短描述"
+    },
+    "ioSelect": {
+      "selectBlock": "选择块 {id}",
+      "goBack": "返回",
+      "selectType": "选择{type}",
+      "inputs": "输入",
+      "outputs": "输出",
+      "typeIndex": "{type} {index}"
     }
   },
   "scheduledWorkflow": {
@@ -36,7 +74,14 @@
         "general": "每 {time}",
         "interval": "每 {time} 分"
       }
-    }
+    },
+    "new": "安排工作流",
+    "triggers": "工作流触发器",
+    "searchWorkflow": "搜索工作流",
+    "location": "位置",
+    "hosted": "托管",
+    "unknown": "（未知）",
+    "team": "团队：{name}"
   },
   "storage": {
     "title": "存储",
@@ -46,7 +91,28 @@
       "createdAt": "创建于",
       "modifiedAt": "修改于",
       "rowsCount": "行数",
-      "delete": "删除表格"
+      "delete": "删除表格",
+      "name": "表格名称",
+      "namePlaceholder": "我的表格",
+      "columns": "列",
+      "dataTypes": {
+        "any": "任意",
+        "string": "文本",
+        "integer": "数字",
+        "boolean": "布尔值",
+        "array": "数组"
+      }
+    },
+    "clearData": "清除数据",
+    "clearDataBody": "您确定要清除该表格的数据吗？",
+    "deleteRow": "删除行",
+    "tables": "存储表格",
+    "variables": "存储变量",
+    "variable": {
+      "add": "添加变量",
+      "edit": "编辑变量",
+      "value": "值",
+      "duplicateName": "变量“{name}”已存在"
     }
   },
   "credential": {
@@ -55,7 +121,10 @@
     "use": {
       "title": "已用凭据",
       "description": "此工作流使用了这些凭据"
-    }
+    },
+    "value": "值",
+    "createdDate": "创建日期",
+    "duplicateName": "凭据“{name}”已存在"
   },
   "workflowPermissions": {
     "title": "工作流权限",
@@ -63,10 +132,6 @@
     "contextMenus": {
       "title": "上下文菜单",
       "description": "通过上下文菜单执行工作流"
-    },
-    "clipboard": {
-      "title": "剪贴板",
-      "description": "用于访问剪贴板数据"
     },
     "notifications": {
       "title": "通知",
@@ -79,6 +144,10 @@
     "cookies": {
       "title": "Cookies",
       "description": "读取,设置,或移除 cookies"
+    },
+    "clipboardRead": {
+      "title": "剪贴板",
+      "description": "用于访问剪贴板数据"
     }
   },
   "updateMessage": {
@@ -91,6 +160,30 @@
       "name": "文件夹名",
       "delete": "删除文件夹",
       "rename": "重命名文件夹"
+    },
+    "closeTab": "关闭标签页",
+    "teamWorkflows": "团队工作流",
+    "unknownTeam": "（未知）",
+    "copyWorkflowId": "复制工作流 ID",
+    "copySuffix": "- 副本",
+    "deleteFromTeam": "从团队中删除",
+    "deleteFromTeamTitle": "从团队中删除工作流",
+    "deleteFromTeamConfirm": "确定要从此团队中删除工作流 \"{name}\" 吗？",
+    "loginRequired": "您需要",
+    "login": "登录",
+    "loginRequiredSuffix": "才能使用这些工作流",
+    "emptyTitle": "这里什么都没有",
+    "emptyDescription": "浏览您的团队共享的工作流",
+    "selectedCount": "{count} 个工作流",
+    "firstCard": {
+      "title": "通过录制您的操作，创建第一个工作流：",
+      "step1": "打开浏览器并前往目标网址",
+      "step2": "点击\"录制工作流\"按钮，然后完成您的简单重复任务",
+      "help": "需要更多帮助？加入",
+      "community": "我们的社区",
+      "helpAfter": "，或发邮件至",
+      "recording": "想了解更多关于录制的知识，请阅读",
+      "docs": "官方文档"
     }
   },
   "auth": {
@@ -107,7 +200,9 @@
   "settings": {
     "theme": "主题",
     "shortcuts": {
-      "duplicate": "快捷方式已被 \"{name}\" 占用"
+      "duplicate": "快捷方式已被 \"{name}\" 占用",
+      "shortcut": "快捷键",
+      "remove": "移除快捷键"
     },
     "editor": {
       "title": "标题",
@@ -128,7 +223,12 @@
       "saveWhenExecute": {
         "title": "执行工作流程时自动保存",
         "description": "执行工作流程时将自动保存更改的工作流程"
-      }
+      },
+      "zoom": "缩放",
+      "minZoom": "最小缩放",
+      "maxZoom": "最大缩放",
+      "xAxis": "X 轴",
+      "yAxis": "Y 轴"
     },
     "deleteLog": {
       "title": "自动删除工作流日志",
@@ -136,7 +236,9 @@
       "deleteAfter": {
         "never": "从不",
         "days": "{day} 天"
-      }
+      },
+      "workflowLogs": "工作流日志",
+      "logsLimit": "日志数量限制"
     },
     "language": {
       "label": "语言",
@@ -148,7 +250,8 @@
       "editor": "编辑器",
       "general": "常规",
       "shortcuts": "快捷键",
-      "about": "关于"
+      "about": "关于",
+      "profile": "个人资料"
     },
     "backupWorkflows": {
       "title": "本地备份",
@@ -160,7 +263,15 @@
         "button": "备份",
         "settings": "备份设置",
         "encrypt": "用密码加密",
-        "schedule": "本地备份计划"
+        "schedule": "本地备份计划",
+        "alsoBackup": "同时备份",
+        "permissionRequired": "计划备份需要 Automa 拥有“下载”权限才能正常工作",
+        "allowPermission": "允许“下载”权限",
+        "everyDay": "每天",
+        "everyWeek": "每周",
+        "custom": "自定义",
+        "cronExpression": "Cron 表达式",
+        "folderName": "文件夹名称"
       },
       "restore": {
         "title": "恢复工作流",
@@ -184,8 +295,52 @@
         "selectText": "选择要备份的工作流",
         "selectAll": "选择全部",
         "deselectAll": "取消全选",
-        "needSelectWorkflow": "您需要选择要备份的工作流"
+        "needSelectWorkflow": "您需要选择要备份的工作流",
+        "cannotDisplay": "无法显示图片",
+        "lastUpdated": "上次更新：{time}",
+        "syncToLocal": "将云端备份同步到本地",
+        "addToLocal": "添加到本地",
+        "syncToCloud": "将本地工作流同步到云端备份",
+        "backupWorkflow": "备份工作流"
       }
+    },
+    "about": {
+      "version": "版本：{version}",
+      "offlineBuild": "离线版本",
+      "description": "Automa 是一款用于浏览器自动化的 Chrome 扩展。从自动填写表单、执行重复任务、截取屏幕截图，到抓取网站数据，这个扩展能用来做什么由您决定。",
+      "contributors": "贡献者",
+      "contributorsDescription": "感谢所有提交 issue、提出建议并帮助本项目变得更好的每一个人。",
+      "contributorAvatar": "{name} 的头像",
+      "links": {
+        "github": "GitHub",
+        "twitter": "Twitter",
+        "discord": "Discord",
+        "youtube": "YouTube",
+        "website": "官网",
+        "documentation": "文档",
+        "blog": "博客"
+      }
+    },
+    "profile": {
+      "avatarAlt": "{name} 的头像",
+      "defaultName": "用户",
+      "title": "个人资料",
+      "loading": "正在加载个人资料…",
+      "signedInAs": "当前登录账号",
+      "signIn": "登录",
+      "signInDesc": "登录以备份您的工作流并使用云功能",
+      "signOut": "退出登录",
+      "signingOut": "正在退出登录…",
+      "signedOut": "您已退出登录",
+      "signOutConfirmTitle": "确定要退出吗？",
+      "signOutConfirmMessage": "退出登录将移除此设备上的所有身份验证数据和本地会话，您的工作流仍会保留在设备中。",
+      "warningMessage": "此操作只会将您从当前设备上的账号退出。",
+      "signOutNote": "您可以随时重新登录以恢复云功能的使用权限。",
+      "notSignedIn": "您尚未登录",
+      "teamsCount": "{count} 个团队",
+      "avatar": "头像",
+      "username": "用户名",
+      "email": "邮箱"
     }
   },
   "workflow": {
@@ -214,7 +369,7 @@
         }
       }
     },
-      "previewMode": {
+    "previewMode": {
       "title": "预览模式",
       "description": "正处于预览模式，你所做的修改不会被保存下来"
     },
@@ -263,7 +418,59 @@
       "add": "附加条件",
       "and": "AND",
       "or": "OR",
-      "topAwait": "支持 top-level await 和\"automaRefData\"函数"
+      "topAwait": "支持 top-level await 和\"automaRefData\"函数",
+      "categories": {
+        "value": "值",
+        "element": "元素",
+        "basic": "基础",
+        "number": "数字",
+        "text": "文本",
+        "boolean": "布尔"
+      },
+      "valueTypes": {
+        "value": "值",
+        "code": "代码",
+        "data#exists": "数据存在",
+        "element#text": "元素文本",
+        "element#exists": "元素存在",
+        "element#notExists": "元素不存在",
+        "element#visible": "元素可见",
+        "element#visibleScreen": "元素在屏幕内可见",
+        "element#invisible": "元素在屏幕内隐藏",
+        "element#attribute": "元素属性值"
+      },
+      "compareTypes": {
+        "eq": "等于",
+        "eqi": "等于（不区分大小写）",
+        "nq": "不等于",
+        "gt": "大于",
+        "gte": "大于或等于",
+        "lt": "小于",
+        "lte": "小于或等于",
+        "cnt": "包含",
+        "cni": "包含（不区分大小写）",
+        "nct": "不包含",
+        "nci": "不包含（不区分大小写）",
+        "stw": "以指定文本开始",
+        "enw": "以指定文本结束",
+        "rgx": "匹配正则表达式",
+        "itr": "为真",
+        "ifl": "为假"
+      },
+      "inputTypes": {
+        "selector": {
+          "label": "CSS 选择器或 XPath"
+        },
+        "value": {
+          "label": "值"
+        },
+        "attrName": {
+          "label": "属性名"
+        },
+        "dataPath": {
+          "label": "variables{'@'}variableName"
+        }
+      }
     },
     "host": {
       "title": "主机工作流程",
@@ -300,7 +507,10 @@
       "fetchLocal": "获取本地工作流",
       "update": "更新",
       "unpublish": "取消发布",
-      "linkCopied": "链接已复制到剪贴板"
+      "linkCopied": "链接已复制到剪贴板",
+      "saveDraft": "保存草稿",
+      "categoryNone": "分类（无）",
+      "description": "简短描述"
     },
     "variables": {
       "title": "变量 | 变量",
@@ -410,6 +620,32 @@
         "title": "标签页载入超时",
         "description": "加载标签的最大时间，以毫秒为单位，通过0来禁用超时。"
       }
+    },
+    "url": "工作流 URL",
+    "clipboardPermission": "Automa 需要剪贴板权限才能粘贴块",
+    "dataTable": {
+      "connectTable": "连接到存储表",
+      "selectTable": "选择表",
+      "connectedTo": "此工作流已连接到",
+      "table": "表",
+      "disconnectTable": "断开表连接"
+    },
+    "detailsCard": {
+      "iconUrl": "图标 URL",
+      "pinnedBlocks": "已固定的块"
+    },
+    "shareTeam": {
+      "title": "与团队共享工作流",
+      "description": "此工作流将与您的团队共享",
+      "updateWorkflow": "更新工作流",
+      "selectTeam": "选择团队",
+      "descriptionPlaceholder": "在此处输入...",
+      "saveAsDraft": "保存为草稿",
+      "none": "（无）",
+      "environment": "环境",
+      "stage": "测试",
+      "production": "生产",
+      "shareSuccess": "已成功与您的团队共享工作流。"
     }
   },
   "collection": {
@@ -507,6 +743,33 @@
           "last30Days": "最近30天"
         }
       }
+    },
+    "hello": "您好 :)",
+    "aboutError": "关于此错误",
+    "jumpToItem": "跳转到该项",
+    "onBlock": "位于 {name} 块",
+    "logs": "日志",
+    "emptyHistory": "工作流日志未保存",
+    "openLogDetail": "打开日志详情",
+    "goToBlock": "转到块",
+    "status": "状态",
+    "timestampDuration": "时间戳/耗时",
+    "message": "消息",
+    "logData": "日志数据",
+    "value": "值",
+    "empty": "空",
+    "dataTabs": {
+      "all": "全部",
+      "replacedValue": "替换值",
+      "referenceData": {
+        "loopData": "循环数据",
+        "variables": "变量",
+        "prevBlockData": "上一个块的数据"
+      }
+    },
+    "dataView": {
+      "gui": "图形界面",
+      "raw": "原始数据"
     }
   },
   "components": {
@@ -517,6 +780,177 @@
       "currentPage": "当前页",
       "prevPage": "上一页",
       "of": "共 {page} 页"
+    },
+    "appSurvey": {
+      "testimonial": {
+        "title": "您好 👋",
+        "body": "感谢您使用 Automa，如果您有良好的使用体验，愿意给我们写一段推荐语吗？",
+        "button": "写推荐语"
+      },
+      "survey": {
+        "title": "您觉得我们做得怎么样？",
+        "body": "为了把 Automa 做到最好，我们需要您花几分钟时间提供反馈。",
+        "button": "参与调查"
+      }
+    },
+    "appSidebar": {
+      "userAvatar": "用户头像"
+    },
+    "appLogsItems": {
+      "clear": "清除",
+      "allWorkflows": "全部工作流"
+    },
+    "wysiwyg": {
+      "heading1": "标题 1",
+      "heading2": "标题 2",
+      "bold": "加粗",
+      "italic": "斜体",
+      "strikethrough": "删除线",
+      "blockquote": "引用",
+      "insertImage": "插入图片",
+      "link": "链接",
+      "removeLink": "移除链接",
+      "url": "URL"
+    },
+    "logsTable": {
+      "stopSelected": "停止所选",
+      "executingBlock": "正在执行的块"
+    },
+    "workflowState": {
+      "startedAt": "开始于：{time}",
+      "openTab": "打开标签页"
+    },
+    "card": {
+      "canNotDisplay": "无法显示"
+    },
+    "elSelectorActions": {
+      "elementNotFound": "未找到元素"
+    },
+    "workflowTriggers": {
+      "addTrigger": "添加触发器"
+    },
+    "conditionBuilder": {
+      "empty": "空",
+      "jsCode": "JS 代码",
+      "dataExists": "数据存在 ({path})"
+    },
+    "blockBase": {
+      "blockId": "块 ID（点击复制）",
+      "copied": "✅ 已复制",
+      "deleteBlock": "删除块",
+      "enableDisableBlock": "启用/停用块",
+      "runWorkflowFromHere": "从此处运行工作流",
+      "editBlock": "编辑块",
+      "setAsBreakpoint": "设为断点"
+    },
+    "blockConditions": {
+      "fallback": "回退"
+    },
+    "blockLoopBreakpoint": {
+      "loopId": "循环 ID",
+      "stopLoop": "停止循环"
+    },
+    "blockNote": {
+      "title": "注释",
+      "colors": "颜色",
+      "fontSize": "字体大小",
+      "notePlaceholder": "在此处写注释...",
+      "fontSizes": {
+        "regular": "常规",
+        "medium": "中等",
+        "large": "大",
+        "extra-large": "特大"
+      }
+    },
+    "blockPackage": {
+      "unnamedPackage": "未命名包",
+      "updatePackage": "更新包",
+      "installPackage": "安装包",
+      "by": "作者：{name}",
+      "openPage": "打开包页面"
+    },
+    "editor": {
+      "addPackage": {
+        "iconUrl": "图标 URL",
+        "descriptionPlaceholder": "描述..."
+      },
+      "debugging": {
+        "goToBlock": "转到块",
+        "data": "数据",
+        "logs": "日志"
+      },
+      "localActions": {
+        "shareWorkflow": "分享工作流",
+        "withTeam": "与您的团队",
+        "withCommunity": "与社区",
+        "copyWorkflowId": "复制工作流 ID",
+        "deleteFromTeam": "从团队中删除",
+        "deleteWorkflowFromTeam": "从团队删除工作流",
+        "deleteFromTeamBody": "确定要从该团队中删除“{name}”工作流吗？",
+        "syncWorkflow": "同步工作流",
+        "sync": "同步",
+        "syncBody": "此操作将使用云端保存的工作流覆盖当前工作流",
+        "syncing": "正在同步工作流...",
+        "saveWorkflowShortcut": "保存工作流（{shortcut}）",
+        "publishWorkflowUpdate": "发布工作流更新",
+        "editDetail": "编辑详情"
+      },
+      "localSavedBlocks": {
+        "updatePackages": "更新包",
+        "updatePackagesHint": "更新工作流中当前使用的包。",
+        "deletePackage": "删除包",
+        "deletePackageBody": "确定要删除“{name}”包吗？"
+      },
+      "pkgActions": {
+        "sharePackage": "分享包",
+        "unpublishPackage": "取消发布包",
+        "url": "URL",
+        "deletePackageBody": "确定要删除“{name}”包吗？"
+      },
+      "searchBlocks": {
+        "blockId": "块 ID"
+      },
+      "usedCredentials": {
+        "jumpToBlock": "跳转到块",
+        "credentialName": "凭据名称：{name}"
+      }
+    },
+    "blockSettings": {
+      "events": {
+        "untitled": "未命名操作",
+        "untitledPlaceholder": "未命名"
+      },
+      "general": {
+        "execution": "工作流执行",
+        "executionDescription": "工作流执行环境（若工作流运行超过 5 分钟，请使用“弹窗”）",
+        "popup": "弹窗",
+        "background": "后台"
+      },
+      "eventCodeHTTP": {
+        "url": "URL",
+        "header": "请求头 {index}",
+        "value": "值"
+      }
+    },
+    "ui": {
+      "fileInput": {
+        "chooseFile": "选择文件",
+        "maxSizeTooltip": "大小上限：{size}MB<br>允许的类型：{types}",
+        "uploading": "上传中...",
+        "uploadFailed": "上传失败，请重试。",
+        "noFileSelected": "未选择文件。",
+        "invalidFileType": "文件类型无效。",
+        "maxSizeExceeded": "文件大小不能超过 {size}MB",
+        "onUploadNotProvided": "未提供 onUpload 函数",
+        "uploadError": "文件上传时发生错误。"
+      },
+      "paginatedSelect": {
+        "selectAnOption": "请选择一个选项",
+        "searchPlaceholder": "搜索...",
+        "loading": "加载中...",
+        "noMoreResults": "没有更多结果",
+        "noResults": "未找到结果"
+      }
     }
   }
 }

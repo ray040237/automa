@@ -16,10 +16,10 @@
         <optgroup
           v-for="(types, label) in filterValueTypes(index)"
           :key="label"
-          :label="label"
+          :label="t(`workflow.conditionBuilder.categories.${label}`)"
         >
           <option v-for="type in types" :key="type.id" :value="type.id">
-            {{ type.name }}
+            {{ t(`workflow.conditionBuilder.valueTypes.${type.id}`) }}
           </option>
         </optgroup>
       </ui-select>
@@ -69,8 +69,10 @@
           <ui-input
             v-else
             v-model="inputsData[index].data[name]"
-            :title="conditionBuilder.inputTypes[name].label"
-            :placeholder="conditionBuilder.inputTypes[name].label"
+            :title="t(`workflow.conditionBuilder.inputTypes.${name}.label`)"
+            :placeholder="
+              t(`workflow.conditionBuilder.inputTypes.${name}.label`)
+            "
             autocomplete="off"
             class="w-full"
           />
@@ -89,10 +91,10 @@
       <optgroup
         v-for="(types, category) in conditionOperators"
         :key="category"
-        :label="category"
+        :label="t(`workflow.conditionBuilder.categories.${category}`)"
       >
         <option v-for="type in types" :key="type.id" :value="type.id">
-          {{ type.name }}
+          {{ t(`workflow.conditionBuilder.compareTypes.${type.id}`) }}
         </option>
       </optgroup>
     </ui-select>

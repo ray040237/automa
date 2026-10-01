@@ -2,13 +2,13 @@
   <div>
     <div v-if="!store.integrations.googleDrive">
       <p>
-        You haven't
+        {{ t('workflow.blocks.google-drive.notConnectedPrefix') }}
         <a
           href="https://docs.extension.automa.site/integrations/google-drive.html"
           target="_blank"
           class="underline"
-          >connected Automa to Google Drive</a
-        >.
+          >{{ t('workflow.blocks.google-drive.notConnectedLink') }}</a
+        >{{ t('workflow.blocks.google-drive.notConnectedSuffix') }}
       </p>
     </div>
     <template v-else>
@@ -38,17 +38,17 @@
               <ui-select
                 v-model="item.type"
                 class="grow mr-2"
-                placeholder="File location"
+                :placeholder="t('workflow.blocks.google-drive.fileLocation')"
               >
                 <option value="url">URL</option>
                 <option value="local" :disabled="!hasFileAccess">
-                  Local computer
+                  {{ t('workflow.blocks.google-drive.localComputer') }}
                 </option>
                 <option
                   value="downloadId"
                   :disabled="!permissions.has.downloads"
                 >
-                  Download id
+                  {{ t('workflow.blocks.google-drive.downloadId') }}
                 </option>
               </ui-select>
               <ui-button icon @click="filePaths.splice(index, 1)">
@@ -58,7 +58,9 @@
             <edit-autocomplete>
               <ui-input
                 v-model="item.name"
-                placeholder="Filename (optional)"
+                :placeholder="`${t('common.fileName')} (${t(
+                  'common.optional'
+                )})`"
                 class="w-full mt-2"
               />
             </edit-autocomplete>
@@ -66,14 +68,14 @@
               <ui-input
                 v-model="item.path"
                 :placeholder="placeholders[item.type]"
-                title="File location"
+                :title="t('workflow.blocks.google-drive.fileLocation')"
                 class="w-full mt-2"
               />
             </edit-autocomplete>
           </li>
         </ul>
         <ui-button class="mt-4" variant="accent" @click="addFile">
-          Add file
+          {{ t('workflow.blocks.google-drive.addFile') }}
         </ui-button>
       </div>
     </template>

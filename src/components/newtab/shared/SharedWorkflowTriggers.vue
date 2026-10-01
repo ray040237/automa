@@ -30,7 +30,7 @@
     <ui-popover class="mt-4">
       <template #trigger>
         <ui-button>
-          Add trigger
+          {{ t('components.workflowTriggers.addTrigger') }}
           <hr class="h-4 border-r" />
           <v-remixicon
             name="riArrowLeftSLine"

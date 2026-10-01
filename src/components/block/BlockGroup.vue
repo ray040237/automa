@@ -81,7 +81,7 @@
               :class="{
                 'text-red-500 dark:text-red-400': element.data.$breakpoint,
               }"
-              title="Set as breakpoint"
+              :title="t('components.blockBase.setAsBreakpoint')"
               name="riRecordCircleLine"
               size="18"
               class="mr-2 inline-block cursor-pointer"

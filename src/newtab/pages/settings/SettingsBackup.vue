@@ -95,7 +95,7 @@
               <p class="mb-2 font-semibold">
                 {{ t('settings.backupWorkflows.backup.settings') }}
               </p>
-              <p>Also backup</p>
+              <p>{{ t('settings.backupWorkflows.backup.alsoBackup') }}</p>
               <div class="flex mt-1 flex-col gap-2">
                 <ui-checkbox
                   v-for="item in BACKUP_ITEMS_INCLUDES"
@@ -112,7 +112,7 @@
                         )
                   "
                 >
-                  {{ item.name }}
+                  {{ t(item.name) }}
                 </ui-checkbox>
               </div>
               <p class="mt-4">
@@ -120,14 +120,13 @@
               </p>
               <template v-if="!downloadPermission.has.downloads">
                 <p class="text-gray-600 dark:text-gray-300 mt-1">
-                  Automa requires the "Downloads" permission for the schedule
-                  backup to work
+                  {{ t('settings.backupWorkflows.backup.permissionRequired') }}
                 </p>
                 <ui-button
                   class="mt-2 w-full"
                   @click="downloadPermission.request()"
                 >
-                  Allow "Downloads" permission
+                  {{ t('settings.backupWorkflows.backup.allowPermission') }}
                 </ui-button>
               </template>
               <template v-else>
@@ -135,20 +134,24 @@
                   v-model="localBackupSchedule.schedule"
                   class="w-full mt-2"
                 >
-                  <option value="">Never</option>
+                  <option value="">
+                    {{ t('settings.deleteLog.deleteAfter.never') }}
+                  </option>
                   <option
                     v-for="(value, key) in BACKUP_SCHEDULES"
                     :key="key"
                     :value="key"
                   >
-                    {{ value }}
+                    {{ t(value) }}
                   </option>
-                  <option value="custom">Custom</option>
+                  <option value="custom">
+                    {{ t('settings.backupWorkflows.backup.custom') }}
+                  </option>
                 </ui-select>
                 <template v-if="localBackupSchedule.schedule === 'custom'">
                   <ui-input
                     v-model="localBackupSchedule.customSchedule"
-                    label="Cron Expression"
+                    :label="t('settings.backupWorkflows.backup.cronExpression')"
                     class="w-full mt-2"
                     placeholder="0 8 * * *"
                   />
@@ -159,7 +162,7 @@
                 <ui-input
                   v-if="localBackupSchedule.schedule !== ''"
                   v-model="localBackupSchedule.folderName"
-                  label="Folder name"
+                  :label="t('settings.backupWorkflows.backup.folderName')"
                   class="w-full mt-2"
                   placeholder="backup-folder"
                 />
@@ -167,7 +170,7 @@
                   v-if="localBackupSchedule.lastBackup"
                   class="text-gray-600 dark:text-gray-300 text-sm mt-4"
                 >
-                  Last backup:
+                  {{ t('settings.backupWorkflows.cloud.lastBackup') }}:
                   {{ dayjs(localBackupSchedule.lastBackup).fromNow() }}
                 </p>
               </template>
@@ -225,12 +228,12 @@ import { useToast } from 'vue-toastification';
 import browser from 'webextension-polyfill';
 
 const BACKUP_SCHEDULES = {
-  '0 8 * * *': 'Every day',
-  '0 8 * * 0': 'Every week',
+  '0 8 * * *': 'settings.backupWorkflows.backup.everyDay',
+  '0 8 * * 0': 'settings.backupWorkflows.backup.everyWeek',
 };
 const BACKUP_ITEMS_INCLUDES = [
-  { id: 'storage:table', name: 'Storage tables' },
-  { id: 'storage:variables', name: 'Storage variables' },
+  { id: 'storage:table', name: 'storage.tables' },
+  { id: 'storage:variables', name: 'storage.variables' },
 ];
 
 const { t } = useI18n();

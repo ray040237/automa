@@ -2,14 +2,14 @@
   <ui-popover>
     <template #trigger>
       <ui-button class="w-full">
-        Select block {{ props.data.blockId }}
+        {{ t('packages.ioSelect.selectBlock', { id: props.data.blockId }) }}
       </ui-button>
     </template>
     <div class="w-64">
       <ui-input
         v-if="state.selectType === 'nodes'"
         v-model="state.query"
-        placeholder="Search..."
+        :placeholder="t('common.search')"
         class="mb-4 w-full"
       />
       <template v-else>
@@ -19,14 +19,20 @@
         >
           <v-remixicon
             name="riArrowLeftSLine"
-            title="Go back"
+            :title="t('packages.ioSelect.goBack')"
             class="mr-1 -ml-1"
           />
           <span class="text-overflow flex-1">
             {{ getBlockName(selectedNode) }}
           </span>
         </div>
-        <p class="mt-2 mb-4">Select {{ type }}</p>
+        <p class="mt-2 mb-4">
+          {{
+            t('packages.ioSelect.selectType', {
+              type: t(`packages.ioSelect.${type}`),
+            })
+          }}
+        </p>
       </template>
       <ui-list class="space-y-1">
         <ui-list-item
@@ -40,7 +46,10 @@
             {{
               state.selectType === 'nodes'
                 ? getBlockName(item, state.selectType)
-                : `${type} ${index + 1}`
+                : t('packages.ioSelect.typeIndex', {
+                    type: t(`packages.ioSelect.${type}`),
+                    index: index + 1,
+                  })
             }}
           </p>
         </ui-list-item>
@@ -52,6 +61,7 @@
 <script setup>
 /* eslint-disable */
 import { reactive, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { getBlocks } from '@/utils/getSharedData';
 
 const props = defineProps({
@@ -70,6 +80,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['update']);
 
+const { t } = useI18n();
 const blocks = getBlocks();
 const handleType = props.type === 'inputs' ? 'target' : 'source';
 

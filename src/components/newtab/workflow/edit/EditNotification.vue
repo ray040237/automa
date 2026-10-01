@@ -11,7 +11,7 @@
         <ui-input
           :model-value="data.title"
           :label="t('workflow.blocks.notification.title')"
-          placeholder="Hello world!"
+          :placeholder="t('workflow.blocks.notification.titlePlaceholder')"
           class="w-full"
           @change="updateData({ title: $event })"
         />
@@ -23,7 +23,7 @@
         <ui-textarea
           id="notification-message"
           :model-value="data.message"
-          placeholder="Notification message"
+          :placeholder="t('workflow.blocks.notification.messagePlaceholder')"
           class="w-full"
           @change="updateData({ message: $event })"
         />

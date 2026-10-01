@@ -39,12 +39,12 @@
         @change="updateData({ tabLoadedUrl: $event })"
       >
         <template #label>
-          <span>Match pattern</span>
+          <span>{{ t('workflow.blocks.browser-event.matchPattern') }}</span>
           <a
             href="https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Match_patterns#examples"
             target="_blank"
             rel="noopener"
-            title="Examples"
+            :title="t('workflow.blocks.browser-event.matchPatternExamples')"
           >
             <v-remixicon
               class="ml-1 inline-block"
@@ -66,9 +66,9 @@
       <ui-input
         :model-value="data.tabUrl"
         type="url"
-        label="Filter"
+        :label="t('workflow.blocks.browser-event.filter')"
         class="mt-1 w-full"
-        placeholder="URL or Regex"
+        :placeholder="t('workflow.blocks.browser-event.filterPlaceholder')"
         @change="updateData({ tabUrl: $event })"
       />
       <ui-checkbox
@@ -82,6 +82,7 @@
   </div>
 </template>
 <script setup>
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const props = defineProps({
@@ -94,17 +95,32 @@ const emit = defineEmits(['update:data']);
 
 const { t } = useI18n();
 
-const browserEvents = {
-  Tab: [
-    { id: 'tab:close', name: 'Tab closed' },
-    { id: 'tab:loaded', name: 'Tab loaded' },
-    { id: 'tab:create', name: 'Tab created' },
+const browserEvents = computed(() => ({
+  [t('workflow.blocks.browser-event.groups.tab')]: [
+    {
+      id: 'tab:close',
+      name: t('workflow.blocks.browser-event.eventNames.tabClosed'),
+    },
+    {
+      id: 'tab:loaded',
+      name: t('workflow.blocks.browser-event.eventNames.tabLoaded'),
+    },
+    {
+      id: 'tab:create',
+      name: t('workflow.blocks.browser-event.eventNames.tabCreated'),
+    },
   ],
-  Window: [
-    { id: 'window:create', name: 'Window created' },
-    { id: 'window:close', name: 'Window closed' },
+  [t('workflow.blocks.browser-event.groups.window')]: [
+    {
+      id: 'window:create',
+      name: t('workflow.blocks.browser-event.eventNames.windowCreated'),
+    },
+    {
+      id: 'window:close',
+      name: t('workflow.blocks.browser-event.eventNames.windowClosed'),
+    },
   ],
-};
+}));
 
 function updateData(value) {
   emit('update:data', { ...props.data, ...value });

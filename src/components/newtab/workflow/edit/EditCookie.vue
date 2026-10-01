@@ -48,7 +48,7 @@
           class="mt-2 inline-block underline"
           target="_blank"
         >
-          See all available properties
+          {{ t('workflow.blocks.cookie.seeProperties') }}
         </a>
       </template>
       <template v-else>
@@ -56,15 +56,17 @@
           :model-value="data.url"
           class="mt-2 w-full"
           type="url"
-          label="URL"
+          :label="t('workflow.blocks.cookie.forms.url')"
           placeholder="https://example.com/"
           @change="updateData({ url: $event })"
         />
         <ui-input
           :model-value="data.name"
-          :label="`Name ${
-            data.type === 'get' && !data.getAll ? '' : '(optional)'
-          }`"
+          :label="
+            data.type === 'get' && !data.getAll
+              ? t('workflow.blocks.cookie.forms.name')
+              : t('workflow.blocks.cookie.forms.nameOptional')
+          "
           class="mt-2 w-full"
           placeholder="site-cookie"
           @change="updateData({ name: $event })"
@@ -72,7 +74,7 @@
         <ui-input
           v-if="data.type === 'set'"
           :model-value="data.value"
-          label="Value (optional)"
+          :label="t('workflow.blocks.cookie.forms.value')"
           class="mt-2 w-full"
           placeholder="value"
           @change="updateData({ value: $event })"
@@ -80,7 +82,7 @@
         <ui-input
           :model-value="data.path"
           class="mt-2 w-full"
-          label="Path (optional)"
+          :label="t('workflow.blocks.cookie.forms.path')"
           placeholder="/"
           @change="updateData({ path: $event })"
         />
@@ -88,7 +90,7 @@
           v-if="isGetOrSet"
           :model-value="data.domain"
           class="mt-2 w-full"
-          label="Domain (optional)"
+          :label="t('workflow.blocks.cookie.forms.domain')"
           placeholder=".example.com"
           @change="updateData({ domain: $event })"
         />
@@ -96,7 +98,7 @@
           v-if="data.type === 'set'"
           :model-value="data.sameSite"
           class="mt-2 w-full"
-          label="sameSite (optional)"
+          :label="t('workflow.blocks.cookie.forms.sameSite')"
           placeholder="lax"
           @change="updateData({ sameSite: $event })"
         />
@@ -104,7 +106,7 @@
           v-if="data.type === 'set'"
           :model-value="data.expirationDate"
           class="mt-2 w-full"
-          label="expirationDate (seconds) (optional)"
+          :label="t('workflow.blocks.cookie.forms.expirationDate')"
           placeholder="3600"
           @change="updateData({ expirationDate: $event })"
         />
@@ -134,7 +136,7 @@
     </template>
     <template v-else>
       <p class="mt-4">
-        This block requires "Cookies" permission to work properly
+        {{ t('workflow.blocks.cookie.permissionRequired') }}
       </p>
       <ui-button variant="accent" class="mt-2" @click="permission.request">
         {{ t('workflow.blocks.clipboard.grantPermission') }}

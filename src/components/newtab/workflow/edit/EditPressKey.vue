@@ -11,7 +11,7 @@
         :model-value="data.selector"
         class="mr-2 flex-1"
         autocomplete="off"
-        label="Target element (Optional)"
+        :label="t('workflow.blocks.press-key.target')"
         placeholder="CSS Selector or XPath"
         @change="updateData({ selector: $event })"
       />
@@ -72,7 +72,7 @@
       v-else
       :model-value="data.keysToPress"
       class="mt-2 w-full"
-      placeholder="keys"
+      :placeholder="t('workflow.blocks.press-key.keysPlaceholder')"
       @change="updateData({ keysToPress: $event })"
     />
     <ui-input

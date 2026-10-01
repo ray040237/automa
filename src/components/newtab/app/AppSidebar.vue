@@ -68,7 +68,7 @@
         height="32"
         width="32"
         class="rounded-full"
-        alt="User avatar"
+        :alt="t('components.appSidebar.userAvatar')"
       />
     </router-link>
     <ui-popover trigger="mouseenter" placement="right" class="my-4">

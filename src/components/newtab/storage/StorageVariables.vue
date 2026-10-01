@@ -12,7 +12,7 @@
       class="ml-4"
       @click="editState.show = true"
     >
-      Add variable
+      {{ t('storage.variable.add') }}
     </ui-button>
   </div>
   <ui-table
@@ -37,12 +37,20 @@
   </ui-table>
   <ui-modal
     v-model="editState.show"
-    :title="`${editState.type === 'edit' ? 'Edit' : 'Add'} variable`"
+    :title="
+      editState.type === 'edit'
+        ? t('storage.variable.edit')
+        : t('storage.variable.add')
+    "
   >
-    <ui-input v-model="editState.name" placeholder="Name" class="w-full" />
+    <ui-input
+      v-model="editState.name"
+      :placeholder="t('common.name')"
+      class="w-full"
+    />
     <ui-textarea
       v-model="editState.value"
-      placeholder="value"
+      :placeholder="t('storage.variable.value')"
       class="mt-4 w-full"
     />
     <div class="mt-8 text-right">
@@ -83,7 +91,7 @@ const tableHeaders = [
   {
     value: 'value',
     filterable: false,
-    text: 'Value',
+    text: t('storage.variable.value'),
     attrs: {
       class: 'flex-1 line-clamp',
     },
@@ -130,7 +138,7 @@ function saveVariable() {
   );
 
   if (duplicateName) {
-    toast.error(`You alread add "${trimmedName}" variable`);
+    toast.error(t('storage.variable.duplicateName', { name: trimmedName }));
     return;
   }
 

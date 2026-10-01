@@ -67,14 +67,14 @@
             class="flex items-center space-x-3 px-4 pb-4 text-gray-600 dark:text-gray-200"
           >
             <span v-if="item.author" class="text-overflow">
-              By {{ item.author }}
+              {{ t('components.blockPackage.by', { name: item.author }) }}
             </span>
             <div class="grow" />
             <a
               v-if="item.isExternal"
               :href="`https://extension.automa.site/packages/${item.id}`"
               target="_blank"
-              title="Open package page"
+              :title="t('components.blockPackage.openPage')"
             >
               <v-remixicon name="riExternalLinkLine" size="18" />
             </a>
@@ -92,10 +92,10 @@
                   class="cursor-pointer"
                   @click="updatePackages(item)"
                 >
-                  Update packages
+                  {{ t('components.editor.localSavedBlocks.updatePackages') }}
                   <v-remixicon
                     v-tooltip="
-                      'Update the current package inside the workflow.'
+                      t('components.editor.localSavedBlocks.updatePackagesHint')
                     "
                     class="ml-2 -mr-1"
                     name="riInformationLine"
@@ -148,9 +148,9 @@ const items = computed(() => {
 
 function deleteItem({ id, name }) {
   dialog.confirm({
-    title: 'Delete package',
-    body: `Are you sure want to delete "${name}" package?`,
-    okText: 'Delete',
+    title: t('components.editor.localSavedBlocks.deletePackage'),
+    body: t('components.editor.localSavedBlocks.deletePackageBody', { name }),
+    okText: t('common.delete'),
     okVariant: 'danger',
     onConfirm: () => {
       packageStore.delete(id);

@@ -25,7 +25,7 @@
           <img
             v-if="userAvatar"
             :src="userAvatar"
-            :alt="`${displayName}'s avatar`"
+            :alt="t('settings.profile.avatarAlt', { name: displayName })"
             @error="avatarError = true"
           />
           <div v-else class="default-avatar">
@@ -102,7 +102,7 @@ const state = reactive({
 });
 
 const displayName = computed(() => {
-  return userStore.user?.username || 'User';
+  return userStore.user?.username || t('settings.profile.defaultName');
 });
 
 const userEmail = computed(() => {
@@ -118,7 +118,8 @@ const userAvatar = computed(() => {
 const userInitials = computed(() => {
   if (!userStore.user) return 'U';
 
-  const username = userStore.user?.username || 'User';
+  const username =
+    userStore.user?.username || t('settings.profile.defaultName');
   return username.charAt(0).toUpperCase();
 });
 

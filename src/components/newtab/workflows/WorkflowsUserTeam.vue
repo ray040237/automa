@@ -2,14 +2,14 @@
   <p v-if="!userStore.user" class="my-4 text-center">
     <ui-spinner v-if="!userStore.retrieved" color="text-accent" />
     <template v-else>
-      You must
+      {{ t('workflows.loginRequired') }}
       <a
         href="https://extension.automa.site/auth"
         class="underline"
         target="_blank"
-        >login</a
+        >{{ t('workflows.login') }}</a
       >
-      to use these workflows
+      {{ t('workflows.loginRequiredSuffix') }}
     </template>
   </p>
   <div
@@ -17,9 +17,9 @@
     class="text-center"
   >
     <img src="@/assets/svg/files-and-folder.svg" class="mx-auto w-96" />
-    <p class="text-lg font-semibold">Nothing to see here</p>
+    <p class="text-lg font-semibold">{{ t('workflows.emptyTitle') }}</p>
     <p class="text-gray-600 dark:text-gray-200">
-      Browse workflows that been shared by your team
+      {{ t('workflows.emptyDescription') }}
     </p>
     <ui-button
       :href="`http://extension.automa.site/workflows?teamId=${teamId}&workflowsBy=team`"
@@ -28,7 +28,7 @@
       variant="accent"
       class="mt-8 inline-block"
     >
-      Browse workflows
+      {{ t('workflow.browse') }}
     </ui-button>
   </div>
   <div v-else class="workflows-container">
@@ -86,10 +86,12 @@ const props = defineProps({
   },
 });
 
+const { t } = useI18n();
+
 const menu = [
   {
     id: 'delete',
-    name: 'Delete',
+    name: t('common.delete'),
     hasAccess: true,
     icon: 'riDeleteBin7Line',
     attrs: {
@@ -98,7 +100,7 @@ const menu = [
   },
   {
     id: 'delete-team',
-    name: 'Delete from team',
+    name: t('workflows.deleteFromTeam'),
     icon: 'riDeleteBin7Line',
     permissions: ['owner', 'create'],
     attrs: {
@@ -107,7 +109,6 @@ const menu = [
   },
 ];
 
-const { t } = useI18n();
 const toast = useToast();
 const dialog = useDialog();
 const router = useRouter();
@@ -165,9 +166,9 @@ function onMenuSelected({ id, data }) {
   } else if (id === 'delete-team') {
     dialog.confirm({
       async: true,
-      title: 'Delete workflow from team',
+      title: t('workflows.deleteFromTeamTitle'),
       okVariant: 'danger',
-      body: `Are you sure want to delete the "${data.name}" workflow from this team?`,
+      body: t('workflows.deleteFromTeamConfirm', { name: data.name }),
       onConfirm: async () => {
         try {
           const response = await fetchApi(
@@ -183,7 +184,7 @@ function onMenuSelected({ id, data }) {
 
           return true;
         } catch (error) {
-          toast.error('Something went wrong');
+          toast.error(t('message.somethingWrong'));
           console.error(error);
           return false;
         }

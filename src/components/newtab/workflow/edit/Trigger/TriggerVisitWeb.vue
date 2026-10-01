@@ -18,7 +18,7 @@
       class="ml-6"
       @change="$emit('update', { supportSPA: $event })"
     >
-      Support SPA website
+      {{ t('workflow.blocks.trigger.supportSPA') }}
     </ui-checkbox>
   </div>
 </template>

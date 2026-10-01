@@ -1,13 +1,13 @@
 <template>
   <div v-if="!store.integrations.googleDrive">
     <p>
-      You haven't
+      {{ t('workflow.blocks.google-sheets-drive.notConnectedPrefix') }}
       <a
         href="https://docs.automa.site/integrations/google-drive.html"
         target="_blank"
         class="underline"
-        >connected Automa to Google Drive</a
-      >.
+        >{{ t('workflow.blocks.google-sheets-drive.notConnectedLink') }}</a
+      >{{ t('workflow.blocks.google-sheets-drive.notConnectedSuffix') }}
     </p>
   </div>
   <edit-google-sheets
@@ -26,8 +26,12 @@
       type="fill"
       @change="updateData({ inputSpreadsheetId: $event })"
     >
-      <ui-tab value="connected"> Connected </ui-tab>
-      <ui-tab value="manually"> Manually </ui-tab>
+      <ui-tab value="connected">
+        {{ t('workflow.blocks.google-sheets-drive.tabs.connected') }}
+      </ui-tab>
+      <ui-tab value="manually">
+        {{ t('workflow.blocks.google-sheets-drive.tabs.manually') }}
+      </ui-tab>
     </ui-tabs>
     <div
       v-if="data.type !== 'create' && data.inputSpreadsheetId === 'connected'"
@@ -60,8 +64,10 @@
     <ui-input
       v-if="['create', 'add-sheet'].includes(data.type)"
       :model-value="data.sheetName"
-      label="Sheet name"
-      placeholder="A Spreadsheet"
+      :label="t('workflow.blocks.google-sheets-drive.sheetName')"
+      :placeholder="
+        t('workflow.blocks.google-sheets-drive.sheetNamePlaceholder')
+      "
       class="w-full"
       @change="updateData({ sheetName: $event })"
     />
@@ -96,7 +102,7 @@ async function connectSheet() {
   // 1. 获取当前 access_token
   const { sessionToken } = await browser.storage.local.get('sessionToken');
   if (!sessionToken?.access) {
-    toast.error('未获取到 Google 授权');
+    toast.error(t('workflow.blocks.google-sheets-drive.errors.noGoogleAuth'));
     return;
   }
   try {
@@ -104,7 +110,9 @@ async function connectSheet() {
     const file = await openGDrivePickerPopup(sessionToken.access);
     if (!file) return;
     if (file.mimeType !== 'application/vnd.google-apps.spreadsheet') {
-      toast.error('File is not a google spreadsheet');
+      toast.error(
+        t('workflow.blocks.google-sheets-drive.errors.notSpreadsheet')
+      );
       return;
     }
     const sheetExists = store.connectedSheets.some(
@@ -114,7 +122,7 @@ async function connectSheet() {
     // 3. 加入已连接列表
     store.connectedSheets.push({ name: file.name, id: file.id });
   } catch (e) {
-    toast.error('未选择文件或授权失败');
+    toast.error(t('workflow.blocks.google-sheets-drive.errors.selectFailed'));
   }
 }
 

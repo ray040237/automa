@@ -8,17 +8,12 @@
     />
     <ui-select
       :model-value="data.closeType"
-      :placeholder="Close"
+      :placeholder="t('workflow.blocks.close-tab.placeholder')"
       class="mt-2 w-full"
       @change="updateData({ closeType: $event })"
     >
-      <option
-        v-for="type in types"
-        :key="type"
-        :value="type"
-        class="capitalize"
-      >
-        {{ type }}
+      <option v-for="type in types" :key="type" :value="type">
+        {{ t(`workflow.blocks.close-tab.types.${type}`) }}
       </option>
     </ui-select>
     <template v-if="data.closeType === 'tab'">

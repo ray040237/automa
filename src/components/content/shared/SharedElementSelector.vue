@@ -287,12 +287,23 @@ function onKeydown(event) {
     'selected'
   );
 }
+function swallowOverlayEvent(event) {
+  if (event.target.id !== 'automa-selector-overlay') return;
+
+  event.preventDefault();
+  // stopImmediatePropagation so the page's own document/window-level
+  // listeners (e.g. "click outside to close" dropdown handlers) don't fire
+  event.stopImmediatePropagation();
+}
 function onMousedown(event) {
-  if (event.target.id === 'automa-selector-overlay') {
-    event.preventDefault();
-    event.stopPropagation();
-  }
+  swallowOverlayEvent(event);
   retrieveElementsRect(event, 'selected');
+}
+function onPointerdown(event) {
+  swallowOverlayEvent(event);
+}
+function onClick(event) {
+  swallowOverlayEvent(event);
 }
 function onMessage({ data }) {
   if (data.type !== 'automa:iframe-element-rect') return;
@@ -314,16 +325,22 @@ function onMessage({ data }) {
 function attachListeners() {
   window.addEventListener('scroll', onScroll);
   window.addEventListener('message', onMessage);
-  document.addEventListener('keydown', onKeydown);
+  // capture phase so the events are intercepted before any page handler
+  // (dropdown menus stop keydown/mousedown propagation below document)
+  window.addEventListener('keydown', onKeydown, true);
   window.addEventListener('mousemove', onMousemove);
-  document.addEventListener('mousedown', onMousedown);
+  window.addEventListener('mousedown', onMousedown, true);
+  window.addEventListener('pointerdown', onPointerdown, true);
+  window.addEventListener('click', onClick, true);
 }
 function detachListeners() {
   window.removeEventListener('scroll', onScroll);
   window.removeEventListener('message', onMessage);
-  document.removeEventListener('keydown', onKeydown);
+  window.removeEventListener('keydown', onKeydown, true);
   window.removeEventListener('mousemove', onMousemove);
-  document.removeEventListener('mousedown', onMousedown);
+  window.removeEventListener('mousedown', onMousedown, true);
+  window.removeEventListener('pointerdown', onPointerdown, true);
+  window.removeEventListener('click', onClick, true);
 }
 
 watch(

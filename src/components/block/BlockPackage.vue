@@ -27,19 +27,21 @@
           size="20"
           class="mr-1 inline-block"
         />
-        <span class="text-overflow">{{ data.name || 'Unnamed package' }}</span>
+        <span class="text-overflow">{{
+          data.name || t('components.blockPackage.unnamedPackage')
+        }}</span>
       </div>
       <div class="grow" />
       <v-remixicon
         v-if="state.isInstalled"
-        title="Update package"
+        :title="t('components.blockPackage.updatePackage')"
         name="riRefreshLine"
         class="cursor-pointer"
         @click="updatePackage"
       />
       <v-remixicon
         v-else
-        title="Install package"
+        :title="t('components.blockPackage.installPackage')"
         name="riDownloadLine"
         class="cursor-pointer"
         @click="installPackage"
@@ -81,11 +83,11 @@
       v-if="data.author"
       class="mt-1 flex items-center text-sm text-gray-600 dark:text-gray-200"
     >
-      <p>By {{ data.author }}</p>
+      <p>{{ t('components.blockPackage.by', { name: data.author }) }}</p>
       <a
         :href="`https://extension.automa.site/packages/${data.id}`"
         target="_blank"
-        title="Open package page"
+        :title="t('components.blockPackage.openPage')"
         class="ml-2"
       >
         <v-remixicon size="18" name="riExternalLinkLine" />
@@ -94,6 +96,7 @@
   </block-base>
 </template>
 <script setup>
+import { useI18n } from 'vue-i18n';
 import { useComponentId } from '@/composable/componentId';
 import { useEditorBlock } from '@/composable/editorBlock';
 import { usePackageStore } from '@/stores/package';
@@ -122,6 +125,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['update', 'delete', 'settings']);
 
+const { t } = useI18n();
 const packageStore = usePackageStore();
 const block = useEditorBlock(props.label);
 const componentId = useComponentId('block-package');

@@ -12,11 +12,11 @@
         <ui-input
           v-model="state.name"
           class="-mt-1 w-full"
-          label="Table name"
-          placeholder="My table"
+          :label="t('storage.table.name')"
+          :placeholder="t('storage.table.namePlaceholder')"
         />
         <div class="mt-4 flex items-center">
-          <p class="flex-1">Columns</p>
+          <p class="flex-1">{{ t('storage.table.columns') }}</p>
           <ui-button icon :title="t('common.add')" @click="addColumn">
             <v-remixicon name="riAddLine" />
           </ui-button>
@@ -55,7 +55,7 @@
                   :key="type.id"
                   :value="type.id"
                 >
-                  {{ type.name }}
+                  {{ t(`storage.table.dataTypes.${type.id}`) }}
                 </option>
               </ui-select>
               <button @click="deleteColumn(index)">

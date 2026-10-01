@@ -7,7 +7,7 @@
       @change="handleSelectChange"
     >
       <option v-for="event in eventList" :key="event.id" :value="event.id">
-        {{ event.name }}
+        {{ t(`workflow.blocks.trigger-event.events.${event.id}`) }}
       </option>
     </ui-select>
     <button
@@ -37,13 +37,13 @@
             :model-value="params.bubbles"
             @change="updateParams({ ...params, bubbles: $event })"
           >
-            Bubbles
+            {{ t('workflow.blocks.trigger-event.bubbles') }}
           </ui-checkbox>
           <ui-checkbox
             :model-value="params.cancelable"
             @change="updateParams({ ...params, cancelable: $event })"
           >
-            Cancelable
+            {{ t('workflow.blocks.trigger-event.cancelable') }}
           </ui-checkbox>
         </div>
         <component

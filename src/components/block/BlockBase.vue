@@ -10,18 +10,18 @@
     >
       <div class="pointer-events-none">
         <p
-          title="Block id (click to copy)"
+          :title="t('components.blockBase.blockId')"
           class="block-menu pointer-events-auto text-overflow inline-block px-1 dark:text-gray-300"
           style="max-width: 96px; margin-bottom: 0"
           @click="insertToClipboard"
         >
-          {{ isCopied ? '✅ Copied' : blockId }}
+          {{ isCopied ? t('components.blockBase.copied') : blockId }}
         </p>
       </div>
       <div class="block-menu inline-flex items-center dark:text-gray-300">
         <button
           v-if="!blockData.details?.disableDelete"
-          title="Delete block"
+          :title="t('components.blockBase.deleteBlock')"
           @click.stop="$emit('delete')"
         >
           <v-remixicon size="20" name="riDeleteBin7Line" />
@@ -46,7 +46,7 @@
         </button>
         <button
           v-if="blockData.details?.id !== 'trigger'"
-          title="Enable/Disable block"
+          :title="t('components.blockBase.enableDisableBlock')"
           @click.stop="$emit('update', { disableBlock: !data.disableBlock })"
         >
           <v-remixicon
@@ -54,12 +54,15 @@
             :name="data.disableBlock ? 'riToggleLine' : 'riToggleFill'"
           />
         </button>
-        <button title="Run workflow from here" @click.stop="runWorkflow">
+        <button
+          :title="t('components.blockBase.runWorkflowFromHere')"
+          @click.stop="runWorkflow"
+        >
           <v-remixicon size="20" name="riPlayLine" />
         </button>
         <button
           v-if="!blockData.details?.disableEdit"
-          title="Edit block"
+          :title="t('components.blockBase.editBlock')"
           @click="$emit('edit')"
         >
           <v-remixicon size="20" name="riPencilLine" />
@@ -74,7 +77,7 @@
         :class="{ 'text-red-500 dark:text-red-400': data.$breakpoint }"
         class="absolute left-0 top-0"
         name="riRecordCircleFill"
-        title="Set as breakpoint"
+        :title="t('components.blockBase.setAsBreakpoint')"
         size="20"
         @click="$emit('update', { $breakpoint: !data.$breakpoint })"
       />
@@ -86,6 +89,7 @@
 <script setup>
 import { excludeGroupBlocks } from '@/utils/shared';
 import { inject, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 const props = defineProps({
   contentClass: {
@@ -107,6 +111,7 @@ const props = defineProps({
 });
 defineEmits(['delete', 'edit', 'update', 'settings']);
 
+const { t } = useI18n();
 const isCopied = ref(false);
 const workflow = inject('workflow', null);
 const workflowUtils = inject('workflow-utils', null);

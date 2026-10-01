@@ -5,16 +5,16 @@
       :key="item"
       v-model="defaultParams[item]"
     >
-      {{ item }}
+      {{ t(`workflow.blocks.trigger.keyboard.modifier.${item}`) }}
     </ui-checkbox>
   </div>
   <ui-select
     v-model.number="defaultParams.button"
     class="mt-2 w-full"
-    label="Button"
+    :label="t('workflow.blocks.trigger.mouse.button')"
   >
     <option v-for="button in buttons" :key="button.id" :value="button.id">
-      {{ button.name }}
+      {{ t(`workflow.blocks.trigger.mouse.buttons.${button.id}`) }}
     </option>
   </ui-select>
   <div
@@ -46,6 +46,7 @@
 </template>
 <script setup>
 import { shallowReactive, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { objectHasKey } from '@/utils/helper';
 
 const props = defineProps({
@@ -55,6 +56,8 @@ const props = defineProps({
   },
 });
 const emit = defineEmits(['update']);
+
+const { t } = useI18n();
 
 const buttons = [
   { id: 0, name: 'Left click' },

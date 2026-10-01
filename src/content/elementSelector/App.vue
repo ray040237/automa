@@ -2,7 +2,7 @@
   <div
     :class="{
       'select-none': state.isDragging,
-      'bg-black bg-opacity-30': !state.hide,
+      'bg-black bg-opacity-30': !suspended,
     }"
     class="root pointer-events-none fixed top-0 left-0 h-full w-full text-black"
     style="z-index: 99999999"
@@ -25,6 +25,15 @@
       <div class="flex items-center px-4 pt-4">
         <p class="text-lg font-semibold">Automa</p>
         <div class="grow"></div>
+        <button
+          class="hoverable mr-2 rounded-md p-1 transition"
+          :class="{ 'bg-box-transparent': state.interact }"
+          title="Interact with page"
+          @mousedown.stop.prevent
+          @click.stop.prevent="state.interact = !state.interact"
+        >
+          <v-remixicon name="riCursorLine" />
+        </button>
         <button
           class="hoverable mr-2 rounded-md p-1 transition"
           @mousedown.stop.prevent
@@ -137,8 +146,8 @@
     </div>
   </div>
   <shared-element-selector
-    :hide="state.hide"
-    :disabled="state.hide"
+    :hide="suspended"
+    :disabled="suspended"
     :list="state.selectList"
     :selector-type="state.selectorType"
     :selected-els="state.selectedElements"
@@ -155,6 +164,7 @@ import findSelector from '@/lib/findSelector';
 import FindElement from '@/utils/FindElement';
 import { debounce } from '@/utils/helper';
 import {
+  computed,
   inject,
   onBeforeUnmount,
   onMounted,
@@ -191,7 +201,10 @@ const state = reactive({
   selectedElements: [],
   activeTab: 'attributes',
   isSelectBlockElement: false,
+  interact: false,
 });
+// true while picking is suspended (card hidden or interacting with the page)
+const suspended = computed(() => state.hide || state.interact);
 const cardRect = reactive({
   x: 0,
   y: 0,
@@ -332,6 +345,7 @@ function destroy() {
     elSelector: '',
     isDragging: false,
     isExecuting: false,
+    interact: false,
     hoveredElements: [],
     selectedElements: [],
   });
@@ -405,6 +419,7 @@ browser.runtime.onConnect.addListener((port) => {
   state.hide = false;
   state.showSettings = false;
   state.elSelector = '';
+  state.interact = false;
   state.selectedElements = [];
 
   port.onDisconnect.addListener(clearConnectedPort);
@@ -451,6 +466,6 @@ onBeforeUnmount(() => {
   padding: 0 !important;
 }
 .main-tab .ui-tab.is-active.fill {
- @apply text-white !important;
+  @apply text-white !important;
 }
 </style>

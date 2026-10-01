@@ -13,7 +13,8 @@
       "tabs": {
         "new": "New workflow",
         "existing": "Existing workflow"
-      }
+      },
+      "startHint": "Start recording by opening the dashboard. Click to learn more"
     },
     "elementSelector": {
       "name": "Element selector",
@@ -26,7 +27,20 @@
       "type": {
         "host": "Host",
         "local": "Local"
-      }
-    }
+      },
+      "pin": "Pin workflow",
+      "unpin": "Unpin workflow",
+      "imageError": "Can not display"
+    },
+    "teams": "Teams",
+    "pinnedWorkflows": "Pinned workflows",
+    "folderAll": "Folder (all)",
+    "sort": "Sort",
+    "sortOrder": "Sort order",
+    "sortAsc": "Ascending",
+    "sortDesc": "Descending",
+    "backgroundHint": "If the workflow runs for less than 5 minutes, set it to run in the background in the",
+    "workflowSettings": "workflow settings",
+    "backgroundHintSuffix": "."
   }
 }

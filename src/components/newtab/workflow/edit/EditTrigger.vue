@@ -12,15 +12,15 @@
       class="mt-4 w-full"
       @click="state.showTriggersModal = true"
     >
-      Edit Triggers
+      {{ t('workflow.blocks.trigger.editTriggers') }}
     </ui-button>
     <ui-button class="mt-4" @click="state.showParamModal = true">
       <v-remixicon name="riCommandLine" class="mr-2 -ml-1" />
-      <span>Parameters</span>
+      <span>{{ t('workflow.blocks.trigger.parameters') }}</span>
     </ui-button>
     <ui-modal
       v-model="state.showParamModal"
-      title="Parameters"
+      :title="t('workflow.blocks.trigger.parameters')"
       content-class="max-w-4xl"
     >
       <edit-workflow-parameters
@@ -32,7 +32,7 @@
     </ui-modal>
     <ui-modal
       v-model="state.showTriggersModal"
-      title="Workflow Triggers"
+      :title="t('workflow.blocks.trigger.workflowTriggers')"
       content-class="max-w-2xl"
     >
       <shared-workflow-triggers

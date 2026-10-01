@@ -19,7 +19,7 @@
                 v-if="errorBlock.messageId"
                 :href="`https://docs.extension.automa.site/reference/workflow-common-errors.html#${errorBlock.messageId}`"
                 target="_blank"
-                title="About the error"
+                :title="t('log.aboutError')"
                 @click.stop
               >
                 <v-remixicon
@@ -30,8 +30,12 @@
                 />
               </a>
             </p>
-            <p class="cursor-pointer" title="Jump to item" @click="jumpToError">
-              On the {{ errorBlock.name }} block
+            <p
+              class="cursor-pointer"
+              :title="t('log.jumpToItem')"
+              @click="jumpToError"
+            >
+              {{ t('log.onBlock', { name: errorBlock.name }) }}
               <v-remixicon
                 name="riArrowLeftLine"
                 class="-ml-1 inline-block"
@@ -46,7 +50,10 @@
             <template #trigger>
               <ui-button>
                 <span>
-                  Export <span class="hidden lg:inline-block">logs</span>
+                  {{ t('common.export') }}
+                  <span class="hidden lg:inline-block">
+                    {{ t('log.logs') }}
+                  </span>
                 </span>
                 <v-remixicon name="riArrowDropDownLine" class="ml-2 -mr-1" />
               </ui-button>
@@ -80,7 +87,7 @@
             v-if="currentLog.history.length === 0"
             class="text-center text-gray-300"
           >
-            The workflow log is not saved
+            {{ t('log.emptyHistory') }}
           </p>
           <div class="w-full space-y-1 overflow-auto font-mono text-sm">
             <div
@@ -136,7 +143,7 @@
                   v-if="item.messageId"
                   :href="`https://docs.extension.automa.site/reference/workflow-common-errors.html#${item.messageId}`"
                   target="_blank"
-                  title="About the error"
+                  :title="t('log.aboutError')"
                   @click.stop
                 >
                   <v-remixicon
@@ -154,7 +161,7 @@
                 custom
               >
                 <v-remixicon
-                  title="Open log detail"
+                  :title="t('log.openLogDetail')"
                   class="ml-2 cursor-pointer text-gray-300"
                   size="20"
                   name="riFileTextLine"
@@ -169,7 +176,7 @@
                 <v-remixicon
                   name="riExternalLinkLine"
                   size="20"
-                  title="Go to block"
+                  :title="t('log.goToBlock')"
                   class="invisible ml-2 cursor-pointer text-gray-300 group-hover:visible"
                 />
               </router-link>
@@ -225,11 +232,11 @@
           </thead>
           <tbody>
             <tr>
-              <td class="text-gray-300">Name</td>
+              <td class="text-gray-300">{{ t('common.name') }}</td>
               <td>{{ activeLog.name }}</td>
             </tr>
             <tr>
-              <td class="text-gray-300">Description</td>
+              <td class="text-gray-300">{{ t('common.description') }}</td>
               <td>
                 <p class="line-clamp leading-tight">
                   {{ activeLog.description }}
@@ -237,11 +244,11 @@
               </td>
             </tr>
             <tr>
-              <td class="text-gray-300">Status</td>
+              <td class="text-gray-300">{{ t('log.status') }}</td>
               <td class="capitalize">{{ activeLog.type }}</td>
             </tr>
             <tr>
-              <td class="text-gray-300">Timestamp/Duration</td>
+              <td class="text-gray-300">{{ t('log.timestampDuration') }}</td>
               <td>
                 <span v-if="activeLog.timestamp">
                   {{ dayjs(activeLog.timestamp).format('DD MMM, HH:mm:ss') }}
@@ -251,7 +258,7 @@
               </td>
             </tr>
             <tr v-if="activeLog.message">
-              <td class="text-gray-300">Message</td>
+              <td class="text-gray-300">{{ t('log.message') }}</td>
               <td>
                 <p class="line-clamp leading-tight">
                   {{ activeLog.message }}
@@ -262,11 +269,11 @@
         </table>
       </div>
       <div class="flex items-center px-4 pb-4">
-        <p>Log data</p>
+        <p>{{ t('log.logData') }}</p>
         <div class="grow" />
         <ui-select v-model="state.activeTab">
           <option v-for="option in tabs" :key="option.id" :value="option.id">
-            {{ option.name }}
+            {{ t(`log.dataTabs.${option.id}`) }}
           </option>
         </ui-select>
       </div>
@@ -357,11 +364,11 @@ const logsType = {
   },
 };
 const tabs = [
-  { id: 'all', name: 'All' },
-  { id: 'referenceData.loopData', name: 'Loop data' },
-  { id: 'referenceData.variables', name: 'Variables' },
-  { id: 'referenceData.prevBlockData', name: 'Previous block data' },
-  { id: 'replacedValue', name: 'Replaced value' },
+  { id: 'all' },
+  { id: 'referenceData.loopData' },
+  { id: 'referenceData.variables' },
+  { id: 'referenceData.prevBlockData' },
+  { id: 'replacedValue' },
 ];
 
 const { t, te } = useI18n();

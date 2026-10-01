@@ -28,7 +28,13 @@
           </span>
           <ui-button class="w-full">
             <p class="text-overflow mr-2 flex-1 text-left">
-              {{ data.contextTypes.join(', ') || 'All' }}
+              {{
+                data.contextTypes
+                  .map((item) =>
+                    t(`workflow.blocks.trigger.contextMenus.types.${item}`)
+                  )
+                  .join(', ') || t('common.all')
+              }}
             </p>
             <v-remixicon
               size="28"
@@ -44,7 +50,9 @@
             :model-value="data.contextTypes?.includes(type)"
             @change="onSelectContextType($event, type)"
           >
-            <span class="capitalize">{{ type }}</span>
+            <span>
+              {{ t(`workflow.blocks.trigger.contextMenus.types.${type}`) }}
+            </span>
           </ui-checkbox>
         </div>
       </ui-popover>

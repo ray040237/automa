@@ -61,7 +61,7 @@
       />
       <ui-select
         :model-value="data.extraRowDataColumn"
-        placeholder="Select column"
+        :placeholder="t('workflow.blocks.base.table.select')"
         class="mt-1 w-full"
         @change="updateData({ extraRowDataColumn: $event })"
       >

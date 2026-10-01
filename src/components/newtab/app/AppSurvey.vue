@@ -32,19 +32,22 @@
 <script setup>
 import dayjs from '@/lib/dayjs';
 import { computed, onMounted, shallowReactive } from 'vue';
+import { useI18n } from 'vue-i18n';
 import browser from 'webextension-polyfill';
+
+const { t } = useI18n();
 
 const modalTypes = {
   testimonial: {
-    title: 'Hi There 👋',
-    body: 'Thank you for using Automa, and if you have a great experience. Would you like to give us a testimonial?',
-    button: 'Give Testimonial',
+    title: t('components.appSurvey.testimonial.title'),
+    body: t('components.appSurvey.testimonial.body'),
+    button: t('components.appSurvey.testimonial.button'),
     url: 'https://testimonial.to/automa',
   },
   survey: {
-    title: "How do you think we're doing?",
-    body: 'To help us make Automa as best it can be, we need a few minutes of your time to get your feedback.',
-    button: 'Take Survey',
+    title: t('components.appSurvey.survey.title'),
+    body: t('components.appSurvey.survey.body'),
+    button: t('components.appSurvey.survey.button'),
     url: 'https://extension.automa.site/survey',
   },
 };

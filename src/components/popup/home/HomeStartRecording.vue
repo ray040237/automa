@@ -54,7 +54,7 @@
               :src="workflow.icon"
               class="overflow-hidden rounded-lg"
               style="height: 32px; width: 32px"
-              alt="Can not display"
+              :alt="t('home.workflow.imageError')"
             />
             <span v-else class="bg-box-transparent rounded-lg p-2">
               <v-remixicon :name="workflow.icon" size="20" />

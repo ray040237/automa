@@ -7,14 +7,18 @@
   </label>
   <div v-if="packageState.settings.asBlock" class="mt-6 flex space-x-6 pb-8">
     <div class="flex-1">
-      <p class="font-semibold">Block inputs</p>
+      <p class="font-semibold">{{ $t('packages.settings.blockInputs') }}</p>
       <div class="mt-4">
         <div
           v-if="packageState.inputs.length > 0"
           class="grid grid-cols-12 gap-x-4"
         >
-          <div class="col-span-5 pl-1 text-sm">Input name</div>
-          <div class="col-span-6 pl-1 text-sm">Block</div>
+          <div class="col-span-5 pl-1 text-sm">
+            {{ $t('packages.settings.inputName') }}
+          </div>
+          <div class="col-span-6 pl-1 text-sm">
+            {{ $t('packages.settings.block') }}
+          </div>
         </div>
         <draggable
           v-model="packageState.inputs"
@@ -34,11 +38,15 @@
               <ui-input
                 v-model="element.name"
                 class="col-span-5"
-                :placeholder="`Input ${index + 1}`"
+                :placeholder="
+                  $t('packages.settings.inputPlaceholder', {
+                    index: index + 1,
+                  })
+                "
               />
               <div class="col-span-6 flex items-center">
                 <ui-button
-                  v-tooltip="'Go to block'"
+                  v-tooltip="$t('packages.settings.goToBlock')"
                   class="mr-2"
                   icon
                   @click="$emit('goBlock', element.blockId)"
@@ -66,14 +74,18 @@
     </div>
     <hr class="border-r" />
     <div class="flex-1">
-      <p class="font-semibold">Block outputs</p>
+      <p class="font-semibold">{{ $t('packages.settings.blockOutputs') }}</p>
       <div class="mt-4">
         <div
           v-if="packageState.outputs.length > 0"
           class="grid grid-cols-12 gap-x-4"
         >
-          <div class="col-span-5 pl-1 text-sm">Output name</div>
-          <div class="col-span-6 pl-1 text-sm">Block</div>
+          <div class="col-span-5 pl-1 text-sm">
+            {{ $t('packages.settings.outputName') }}
+          </div>
+          <div class="col-span-6 pl-1 text-sm">
+            {{ $t('packages.settings.block') }}
+          </div>
         </div>
         <draggable
           v-model="packageState.outputs"
@@ -93,11 +105,15 @@
               <ui-input
                 v-model="element.name"
                 class="col-span-5"
-                :placeholder="`Output ${index + 1}`"
+                :placeholder="
+                  $t('packages.settings.outputPlaceholder', {
+                    index: index + 1,
+                  })
+                "
               />
               <div class="col-span-6 flex items-center">
                 <ui-button
-                  v-tooltip="'Go to block'"
+                  v-tooltip="$t('packages.settings.goToBlock')"
                   class="mr-2"
                   icon
                   @click="$emit('goBlock', element.blockId)"
@@ -127,6 +143,7 @@
 </template>
 <script setup>
 import { reactive, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import cloneDeep from 'lodash.clonedeep';
 import Draggable from 'vuedraggable';
 import { getBlocks } from '@/utils/getSharedData';
@@ -144,6 +161,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['update', 'goBlock']);
 
+const { t } = useI18n();
 const blocks = getBlocks();
 
 const state = reactive({
@@ -179,15 +197,25 @@ function getBlockIOName(type, data) {
 
   const node = props.editor.getNode.value(data.blockId);
   if (!node) {
-    name = 'Block not found';
+    name = t('packages.settings.blockNotFound');
   } else {
     const nodeName = getNodeName(node);
     const handleType = type === 'outputs' ? 'source' : 'target';
     const index = node.handleBounds[handleType].findIndex(
       (item) => item.id === data.handleId
     );
+    const typeName = t(
+      type === 'outputs'
+        ? 'packages.settings.output'
+        : 'packages.settings.input'
+    );
     const handleName =
-      index === -1 ? 'Not found' : `${type.slice(0, -1)} ${index + 1}`;
+      index === -1
+        ? t('packages.settings.notFound')
+        : t('packages.settings.handleName', {
+            type: typeName,
+            index: index + 1,
+          });
 
     name = `${nodeName} > ${handleName}`;
   }

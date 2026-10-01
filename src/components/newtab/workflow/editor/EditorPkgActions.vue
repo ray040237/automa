@@ -16,7 +16,9 @@
       </template>
       <div class="w-64">
         <div class="flex items-center">
-          <p class="flex-1">Share package</p>
+          <p class="flex-1">
+            {{ t('components.editor.pkgActions.sharePackage') }}
+          </p>
           <ui-spinner
             v-if="state.isSharing || state.isLoadData"
             color="text-accent"
@@ -24,7 +26,9 @@
           <ui-switch
             v-else
             v-tooltip:bottom="
-              isPkgShared ? 'Unpublish package' : 'Share package'
+              isPkgShared
+                ? t('components.editor.pkgActions.unpublishPackage')
+                : t('components.editor.pkgActions.sharePackage')
             "
             :model-value="isPkgShared"
             @change="toggleSharePackage"
@@ -35,7 +39,7 @@
             v-if="isPkgShared"
             :model-value="`https://extension.automa.site/packages/${data.id}`"
             readonly
-            title="URL"
+            :title="t('components.editor.pkgActions.url')"
             type="url"
             class="mt-2 w-full"
             @click="$event.target.select()"
@@ -145,9 +149,11 @@ const isPkgShared = computed(() => packageStore.isShared(props.data.id));
 function deletePackage() {
   dialog.confirm({
     okVariant: 'danger',
-    okText: 'Delete',
-    title: 'Delete package',
-    body: `Are you sure want to delete the "${props.data.name}" package?`,
+    okText: t('common.delete'),
+    title: t('components.editor.localSavedBlocks.deletePackage'),
+    body: t('components.editor.pkgActions.deletePackageBody', {
+      name: props.data.name,
+    }),
     onConfirm: () => {
       packageStore.delete(props.data.id);
       router.replace('/packages');
@@ -224,7 +230,7 @@ async function toggleSharePackage() {
     }
   } catch (error) {
     console.error(error);
-    toast.error('Something went wrong');
+    toast.error(t('message.somethingWrong'));
   } finally {
     state.isSharing = false;
   }
@@ -259,7 +265,7 @@ async function updateSharedPackage() {
     if (!response.ok) throw new Error(result.message);
   } catch (error) {
     console.error(error);
-    toast.error('Something went wrong!');
+    toast.error(t('message.somethingWrong'));
   } finally {
     state.isUpdating = false;
   }

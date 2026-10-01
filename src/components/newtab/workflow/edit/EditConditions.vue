@@ -174,7 +174,9 @@ function addCondition() {
 
   conditions.value.push({
     id: nanoid(),
-    name: `Path ${conditions.value.length + 1}`,
+    name: t('workflow.blocks.conditions.path', {
+      num: conditions.value.length + 1,
+    }),
     conditions: [],
   });
 }
@@ -235,7 +237,7 @@ onMounted(() => {
 
     return {
       id: nanoid(),
-      name: `Path ${index + 1}`,
+      name: t('workflow.blocks.conditions.path', { num: index + 1 }),
       conditions: [
         {
           id: nanoid(),

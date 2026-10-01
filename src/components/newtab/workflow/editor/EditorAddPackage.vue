@@ -34,7 +34,7 @@
           :model-value="state.icon.startsWith('http') ? state.icon : ''"
           type="url"
           placeholder="http://example.com/img.png"
-          label="Icon URL"
+          :label="t('components.editor.addPackage.iconUrl')"
           class="mt-2 w-full"
           @change="updatePackageIcon"
         />
@@ -51,7 +51,7 @@
   <ui-textarea
     v-model="state.description"
     :label="t('common.description')"
-    placeholder="Description..."
+    :placeholder="t('components.editor.addPackage.descriptionPlaceholder')"
     class="mt-4 w-full"
   />
   <div class="mt-6 flex items-center justify-end space-x-4">

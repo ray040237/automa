@@ -65,8 +65,8 @@
         v-if="data.conditions && data.conditions.length !== 0"
         class="text-right text-gray-600 dark:text-gray-200"
       >
-        <span title="Fallback"> &#9432; </span>
-        Fallback
+        <span :title="t('components.blockConditions.fallback')"> &#9432; </span>
+        {{ t('components.blockConditions.fallback') }}
       </p>
     </ul>
     <Handle

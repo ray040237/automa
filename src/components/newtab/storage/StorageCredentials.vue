@@ -35,10 +35,14 @@
     </template>
   </ui-table>
   <ui-modal v-model="addState.show" :title="t('credential.add')">
-    <ui-input v-model="addState.name" placeholder="Name" class="w-full" />
+    <ui-input
+      v-model="addState.name"
+      :placeholder="t('common.name')"
+      class="w-full"
+    />
     <ui-textarea
       v-model="addState.value"
-      placeholder="value"
+      :placeholder="t('credential.value')"
       class="mt-4 w-full"
     />
     <div class="mt-8 text-right">
@@ -81,12 +85,12 @@ const tableHeaders = [
     value: 'value',
     sortable: false,
     filterable: false,
-    text: 'Value',
+    text: t('credential.value'),
   },
   {
     value: 'createdAt',
     filterable: false,
-    text: 'Created date',
+    text: t('credential.createdDate'),
   },
   {
     value: 'actions',
@@ -122,7 +126,7 @@ function saveCredential() {
   );
 
   if (duplicateName) {
-    toast.error(`You alread add "${trimmedName}" credential`);
+    toast.error(t('credential.duplicateName', { name: trimmedName }));
     return;
   }
 
