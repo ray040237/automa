@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Automa 使用说明文档 · v1.30.00</title>
+<style>
+:root{
+  --bg:#f6f7fb; --panel:#ffffff; --panel-2:#f1f3f9; --border:#e3e6ef;
+  --text:#1b2233; --muted:#5b6478; --faint:#8b93a7;
+  --accent:#4f46e5; --accent-soft:#eef0ff;
+  --c-general:#d9a406; --c-general-bg:#fdf6dd;
+  --c-browser:#ea8c2b; --c-browser-bg:#fdf0e2;
+  --c-interaction:#16a34a; --c-interaction-bg:#e7f8ec;
+  --c-online:#dc2626; --c-online-bg:#fdeaea;
+  --c-data:#65a30d; --c-data-bg:#f0f9e2;
+  --c-conditions:#2563eb; --c-conditions-bg:#e8f0fe;
+  --c-package:#0891b2; --c-package-bg:#e2f5fa;
+  --code-bg:#0f172a; --code-text:#e2e8f0;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 8px 24px rgba(16,24,40,.06);
+  --radius:12px;
+}
+[data-theme="dark"]{
+  --bg:#0c1020; --panel:#141a2e; --panel-2:#1b2340; --border:#263052;
+  --text:#e6ebf5; --muted:#9aa5bd; --faint:#7b87a3;
+  --accent:#8b8cf8; --accent-soft:#232a4d;
+  --c-general:#e3bf4a; --c-general-bg:#332c12;
+  --c-browser:#f0a75a; --c-browser-bg:#38270f;
+  --c-interaction:#4ade80; --c-interaction-bg:#13351f;
+  --c-online:#f87171; --c-online-bg:#3a1717;
+  --c-data:#a3d158; --c-data-bg:#26330f;
+  --c-conditions:#7ea6f8; --c-conditions-bg:#16264d;
+  --c-package:#38bdd8; --c-package-bg:#0d2e3a;
+  --code-bg:#070b18;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:86px}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB","Helvetica Neue",Arial,system-ui,sans-serif;
+  font-size:15px; line-height:1.75; -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd{font-family:"JetBrains Mono",Consolas,"Courier New",monospace}
+
+/* ---------- header ---------- */
+header{
+  position:sticky; top:0; z-index:50;
+  background:color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter:saturate(180%) blur(12px);
+  border-bottom:1px solid var(--border);
+}
+.hdr{max-width:1440px; margin:0 auto; padding:12px 24px; display:flex; align-items:center; gap:16px}
+.logo{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;
+  background:linear-gradient(135deg,#6366f1,#8b5cf6 55%,#ec4899);color:#fff;font-weight:800;font-size:18px;
+  box-shadow:0 4px 14px rgba(99,102,241,.4); flex:none}
+.hdr h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.2px}
+.hdr .sub{font-size:12.5px;color:var(--muted);font-weight:500}
+.pill{font-size:11.5px;padding:2px 9px;border-radius:999px;background:var(--accent-soft);
+  color:var(--accent);font-weight:700;letter-spacing:.3px}
+.spacer{flex:1}
+.icon-btn{background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+  width:36px;height:36px;border-radius:9px;cursor:pointer;font-size:16px;display:grid;place-items:center}
+.icon-btn:hover{background:var(--accent-soft);color:var(--accent)}
+
+/* ---------- layout ---------- */
+.layout{max-width:1440px;margin:0 auto;display:grid;grid-template-columns:262px minmax(0,1fr);gap:34px;padding:26px 24px 80px}
+nav.toc{position:sticky;top:86px;align-self:start;max-height:calc(100vh - 110px);overflow:auto;
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 10px;box-shadow:var(--shadow)}
+nav.toc .tt{font-size:11px;text-transform:uppercase;letter-spacing:1.1px;color:var(--faint);
+  font-weight:700;padding:6px 10px 8px}
+nav.toc a{display:block;padding:6px 10px;border-radius:8px;font-size:13.5px;color:var(--muted);
+  border-left:2px solid transparent}
+nav.toc a:hover{background:var(--panel-2);color:var(--text);text-decoration:none}
+nav.toc a.active{background:var(--accent-soft);color:var(--accent);font-weight:600;border-left-color:var(--accent)}
+
+main{min-width:0}
+section{scroll-margin-top:86px;margin-bottom:46px}
+section>h2{font-size:24px;margin:0 0 6px;padding-top:14px;font-weight:800;letter-spacing:-.2px;
+  display:flex;align-items:center;gap:11px}
+section>h2 .num{display:grid;place-items:center;width:31px;height:31px;border-radius:9px;
+  background:var(--accent);color:#fff;font-size:14px;font-weight:800;flex:none}
+h3{font-size:18px;margin:28px 0 10px;font-weight:700}
+h4{font-size:15.5px;margin:20px 0 8px;font-weight:700;color:var(--text)}
+p{margin:10px 0}
+.lead{color:var(--muted);font-size:15.5px;margin-top:0}
+ul,ol{margin:10px 0;padding-left:22px}
+li{margin:5px 0}
+hr{border:0;border-top:1px solid var(--border);margin:30px 0}
+
+/* ---------- blocks ---------- */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px 20px;box-shadow:var(--shadow);margin:16px 0}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(258px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
+.tile{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:15px 17px}
+.tile .t{font-weight:700;font-size:14.5px;margin-bottom:5px;display:flex;align-items:center;gap:7px}
+.tile .d{font-size:13.2px;color:var(--muted);line-height:1.65}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+
+.note{border-left:3px solid var(--accent);background:var(--accent-soft);
+  padding:12px 16px;border-radius:0 9px 9px 0;margin:15px 0;font-size:14px}
+.note.warn{border-color:#f59e0b;background:color-mix(in srgb,#f59e0b 12%, transparent)}
+.note.tip{border-color:#10b981;background:color-mix(in srgb,#10b981 12%, transparent)}
+.note b{font-weight:700}
+
+pre{background:var(--code-bg);color:var(--code-text);padding:14px 16px;border-radius:10px;
+  overflow-x:auto;font-size:13px;line-height:1.65;margin:12px 0;border:1px solid var(--border)}
+pre .cm{color:#64748b}
+code.inl{background:var(--panel-2);border:1px solid var(--border);padding:1.5px 6px;
+  border-radius:5px;font-size:12.6px;color:var(--accent);white-space:nowrap}
+kbd{background:var(--panel-2);border:1px solid var(--border);border-bottom-width:2px;
+  border-radius:5px;padding:1px 6px;font-size:12px;font-weight:600}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--panel);margin:14px 0;box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:13.6px}
+th{background:var(--panel-2);text-align:left;padding:10px 14px;font-weight:700;
+  font-size:12.4px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+  border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0}
+td{padding:9px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--panel-2)}
+td code{font-size:12.3px;color:var(--accent)}
+.mono{font-family:"JetBrains Mono",Consolas,monospace;font-size:12.3px;color:var(--muted)}
+.nw{white-space:nowrap}
+
+.badge{display:inline-block;font-size:11.4px;font-weight:700;padding:1.5px 8px;border-radius:999px;white-space:nowrap}
+.b-general{background:var(--c-general-bg);color:var(--c-general)}
+.b-browser{background:var(--c-browser-bg);color:var(--c-browser)}
+.b-interaction{background:var(--c-interaction-bg);color:var(--c-interaction)}
+.b-onlineServices{background:var(--c-online-bg);color:var(--c-online)}
+.b-data{background:var(--c-data-bg);color:var(--c-data)}
+.b-conditions{background:var(--c-conditions-bg);color:var(--c-conditions)}
+.b-package{background:var(--c-package-bg);color:var(--c-package)}
+
+/* ---------- filters ---------- */
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 6px;align-items:center}
+.fbtn{border:1px solid var(--border);background:var(--panel);color:var(--muted);
+  padding:5px 13px;border-radius:999px;font-size:13px;cursor:pointer;font-weight:600;
+  font-family:inherit;transition:.15s}
+.fbtn:hover{border-color:var(--accent);color:var(--accent)}
+.fbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.fsearch{flex:1;min-width:190px;background:var(--panel);border:1px solid var(--border);
+  color:var(--text);padding:7px 14px;border-radius:999px;font-size:13.5px;font-family:inherit}
+.fsearch:focus{outline:none;border-color:var(--accent)}
+.empty{text-align:center;color:var(--faint);padding:20px;font-size:14px}
+
+.flow{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:14px 0;padding:14px;
+  background:var(--panel);border:1px dashed var(--border);border-radius:var(--radius)}
+.fb{background:var(--panel-2);border:1px solid var(--border);border-radius:9px;padding:7px 12px;
+  font-size:12.8px;font-weight:600;white-space:nowrap}
+.fb .i{font-size:10.5px;opacity:.65;display:block;font-weight:500}
+.arr{color:var(--faint);font-weight:700}
+
+footer{border-top:1px solid var(--border);padding:24px;text-align:center;
+  color:var(--faint);font-size:13px}
+footer a{margin:0 7px}
+
+@media (max-width:1000px){
+  .layout{grid-template-columns:1fr;padding:18px 16px 60px}
+  nav.toc{position:static;max-height:none;display:flex;flex-wrap:wrap;gap:4px}
+  nav.toc .tt{width:100%}
+  nav.toc a{border-left:0;border-bottom:2px solid transparent}
+  nav.toc a.active{border-left:0;border-bottom-color:var(--accent)}
+  section>h2{font-size:20px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr">
+    <div class="logo">A</div>
+    <div>
+      <h1>Automa 使用说明文档 <span class="pill">v1.30.00</span></h1>
+      <div class="sub">An extension for automating your browser by connecting blocks</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="themeBtn" title="切换深浅色">&#9680;</button>
+  </div>
+</header>
+
+<div class="layout">
+
+<nav class="toc" id="toc">
+  <div class="tt">目录</div>
+  <a href="#intro">1. 认识 Automa</a>
+  <a href="#install">2. 安装与启动</a>
+  <a href="#ui">3. 界面导览</a>
+  <a href="#concept">4. 核心概念</a>
+  <a href="#data">5. 数据与表达式</a>
+  <a href="#trigger">6. 触发器</a>
+  <a href="#blocks">7. 模块速查表（61 个）</a>
+  <a href="#flow">8. 条件与控制流</a>
+  <a href="#error">9. 错误处理</a>
+  <a href="#js">10. JavaScript 代码块</a>
+  <a href="#examples">11. 实战示例（45 个）</a>
+  <a href="#settings">12. 工作流设置</a>
+  <a href="#share">13. 导入导出与协作</a>
+  <a href="#perm">14. 权限说明</a>
+  <a href="#faq">15. 常见问题</a>
+  <a href="#dev">16. 二次开发</a>
+</nav>
+
+<main>
+
+<!-- ============ 1 ============ -->
+<section id="intro">
+  <h2><span class="num">1</span>认识 Automa</h2>
+  <p class="lead">Automa 是一款浏览器扩展，通过把一个个「块（Block）」用连线串起来，实现自动填表、重复操作、网页数据抓取、截图、定时任务等自动化工作流。</p>
+
+  <div class="grid g2">
+    <div class="tile"><div class="t"><span class="dot" style="background:var(--c-interaction)"></span>可视化编排</div>
+      <div class="d">61 个内置模块覆盖网页交互、浏览器控制、数据处理、条件循环与在线服务，无需写代码即可完成大部分自动化。</div></div>
+    <div class="tile"><div class="t"><span class="dot" style="background:var(--c-conditions)"></span>定时与事件驱动</div>
+      <div class="d">支持间隔、Cron、指定日期/星期、访问特定网址、浏览器启动、右键菜单、键盘快捷键、元素更改时等 10 种触发方式。</div></div>
+    <div class="tile"><div class="t"><span class="dot" style="background:var(--c-data)"></span>结构化数据</div>
+      <div class="d">内置「表格 + 变量 + 全局数据 + 凭据」数据体系，采集结果可直接导出 JSON / CSV / 纯文本，或写入 Google Sheets。</div></div>
+    <div class="tile"><div class="t"><span class="dot" style="background:var(--c-browser)"></span>双浏览器支持</div>
+      <div class="d">同一套代码构建 Chrome (Manifest V3) 与 Firefox 版本，仓库位于 <code class="inl">AutomaApp/automa</code>。</div></div>
+  </div>
+
+  <h3>技术栈速览</h3>
+  <div class="tw"><table>
+    <thead><tr><th>项目</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">版本</td><td><code>1.30.00</code>（取自 <code class="inl">package.json</code>）</td></tr>
+      <tr><td class="nw">框架</td><td>Vue 3.4 + Vue Router 4 + Pinia / Vuex-ORM + vue-i18n（10 种语言，含简体中文）</td></tr>
+      <tr><td class="nw">画布</td><td><code class="inl">@vue-flow/core</code> + dagre 自动布局</td></tr>
+      <tr><td class="nw">构建</td><td>Webpack 5 + Babel + Tailwind CSS + PostCSS</td></tr>
+      <tr><td class="nw">存储</td><td>Dexie (IndexedDB) + <code class="inl">browser.storage</code></td></tr>
+      <tr><td class="nw">依赖要求</td><td>Node ≥ 14.18.1（项目声明 volta: 20.11.1），包管理器 pnpm</td></tr>
+      <tr><td class="nw">许可证</td><td>AGPL / Automa Commercial License（见 <code class="inl">LICENSE.txt</code>）</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="install">
+  <h2><span class="num">2</span>安装与启动</h2>
+
+  <h3>2.1 官方渠道</h3>
+  <div class="tw"><table>
+    <thead><tr><th>渠道</th><th>地址</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">Chrome Web Store</td><td><a href="https://chrome.google.com/webstore/detail/automa/infppggnoaenmfagbfknfkancpbljcca" target="_blank" rel="noopener">chrome.google.com/webstore/detail/automa</a></td></tr>
+      <tr><td class="nw">Firefox Add-ons</td><td><a href="https://addons.mozilla.org/en-US/firefox/addon/automa/" target="_blank" rel="noopener">addons.mozilla.org/…/automa/</a></td></tr>
+      <tr><td class="nw">官方文档</td><td><a href="https://docs.extension.automa.site" target="_blank" rel="noopener">docs.extension.automa.site</a></td></tr>
+      <tr><td class="nw">模板市场</td><td><a href="https://extension.automa.site/marketplace" target="_blank" rel="noopener">extension.automa.site/marketplace</a></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>2.2 本地加载已构建的扩展</h3>
+  <div class="grid g2">
+    <div class="card">
+      <h4 style="margin-top:0">Chrome</h4>
+      <ol>
+        <li>打开 <code class="inl">chrome://extensions</code></li>
+        <li>右上角开启「开发者模式 / Developer mode」</li>
+        <li>点击「加载已解压的扩展程序」</li>
+        <li>选择仓库的 <code class="inl">build/</code> 目录</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4 style="margin-top:0">Firefox</h4>
+      <ol>
+        <li>打开 <code class="inl">about:debugging#/runtime/this-firefox</code></li>
+        <li>点击「临时载入附加组件」</li>
+        <li>选择 <code class="inl">build/manifest.json</code></li>
+      </ol>
+    </div>
+  </div>
+
+  <h3>2.3 从源码构建</h3>
+  <div class="note">构建前需要在 <code class="inl">src/utils/getPassKey.js</code> 中写入一个返回密钥的函数（该文件不在版本库中）：<br>
+  <code>export default function () { return 'anything-you-want'; }</code></div>
+<pre><span class="cm"># 安装依赖</span>
+pnpm install
+
+<span class="cm"># Chrome 开发模式（热更新）</span>
+pnpm dev
+
+<span class="cm"># Chrome 生产构建</span>
+pnpm build
+pnpm build:zip          <span class="cm"># 打包 zip</span>
+
+<span class="cm"># Firefox 开发 / 构建</span>
+pnpm dev:firefox
+pnpm build:firefox
+
+<span class="cm"># 同时构建 Chrome + Firefox 生产包</span>
+pnpm build:prod
+
+<span class="cm"># 代码检查</span>
+pnpm lint</pre>
+  <p>构建产物统一输出到 <code class="inl">build/</code>，三份 manifest 分别是
+  <code class="inl">src/manifest.chrome.json</code>（MV3）、<code class="inl">src/manifest.chrome.dev.json</code>、
+  <code class="inl">src/manifest.firefox.json</code>。</p>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="ui">
+  <h2><span class="num">3</span>界面导览</h2>
+  <p class="lead">Automa 的界面分为三层：<b>浏览器工具栏弹出面板</b>（快速运行）、<b>控制面板 Dashboard</b>（管理）、<b>工作流编辑器</b>（编排）。</p>
+
+  <h3>3.1 弹出面板（点击工具栏图标）</h3>
+  <ul>
+    <li>顶部三个按钮：<b>元素选择器</b>（在当前网页抓取元素）、<b>打开控制面板</b>、<b>开始录制</b>引导。</li>
+    <li>搜索框：按工作流名称即时过滤。</li>
+    <li>标签页切换：<code class="inl">本地</code> / <code class="inl">托管</code>（Host）/ <code class="inl">团队</code>，仅在有对应数据时出现。</li>
+    <li>置顶（Pinned）区 + 文件夹筛选 + 排序（按名称 / 创建时间 / 更新时间 / 使用次数，升序降序）。</li>
+    <li>每张卡片支持：运行、详情、重命名、删除、置顶。</li>
+  </ul>
+  <div class="note tip"><b>提示：</b>面板底部会提示「运行时间超过 5 分钟的工作流，请把执行环境设为 Popup」，见 <a href="#settings">第 12 节</a>。</div>
+
+  <h3>3.2 控制面板 Dashboard</h3>
+  <p>按 <kbd>Alt</kbd>+<kbd>A</kbd> 或点击面板中的首页图标打开。路由定义在 <code class="inl">src/newtab/router.js</code>：</p>
+  <div class="tw"><table>
+    <thead><tr><th>页面</th><th>路径</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td>工作流列表</td><td class="mono">/workflows</td><td>新建、导入导出、文件夹、排序、置顶</td></tr>
+      <tr><td>工作流详情 / 编辑器</td><td class="mono">/workflows/:id</td><td>块编排、表格、变量、日志、设置</td></tr>
+      <tr><td>计划任务</td><td class="mono">/schedule</td><td>查看所有定时类工作流的下次运行时间并启停</td></tr>
+      <tr><td>运行日志</td><td class="mono">/logs/:id?</td><td>按工作流/状态/时间筛选，导出或清理日志</td></tr>
+      <tr><td>存储</td><td class="mono">/storage</td><td>跨工作流共享的数据表（可被工作流连接）</td></tr>
+      <tr><td>块包</td><td class="mono">/packages</td><td>把一段工作流封装成可复用的「块包」</td></tr>
+      <tr><td>设置</td><td class="mono">/settings</td><td>通用 / 个人资料 / 备份 / 编辑器 / 快捷键 / 关于</td></tr>
+      <tr><td>欢迎页</td><td class="mono">/welcome</td><td>新用户引导</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>3.3 工作流编辑器</h3>
+  <p>编辑器由三部分组成：</p>
+  <div class="grid g3">
+    <div class="tile"><div class="t">左侧块面板</div><div class="d">按 7 个分类列出全部模块，拖到画布即可创建；支持搜索块（<kbd>Ctrl</kbd>+<kbd>B</kbd>）。</div></div>
+    <div class="tile"><div class="t">中间画布</div><div class="d">节点连线即执行顺序；从块的右侧圆点拖到下一个块的左侧圆点建立连接。可框选、复制、粘贴、分组、自动对齐。</div></div>
+    <div class="tile"><div class="t">右侧设置栏</div><div class="d">点击任意块打开其配置项；侧边栏可切换到表格 / 全局数据 / 设置 / 日志等面板。</div></div>
+  </div>
+
+  <h4>块的三种通用配置</h4>
+  <div class="tw"><table>
+    <thead><tr><th>配置</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">描述</td><td>给块写备注，便于团队协作时理解流程。</td></tr>
+      <tr><td class="nw">超时（ms）</td><td>单块最大执行时间，<code>0</code> 表示不限制。</td></tr>
+      <tr><td class="nw">出错时</td><td>重试 / 抛出错误 / 继续流程 / 执行「否」分支，可额外插入数据。详见 <a href="#error">第 9 节</a>。</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>编辑器常用快捷键</h4>
+  <div class="tw"><table>
+    <thead><tr><th>操作</th><th>Windows / Linux</th><th>macOS</th></tr></thead>
+    <tbody>
+      <tr><td>保存工作流</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td><kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td></tr>
+      <tr><td>运行工作流</td><td colspan="2"><kbd>Alt</kbd>+<kbd>Enter</kbd></td></tr>
+      <tr><td>复制块</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd></td><td><kbd>⌘</kbd>+<kbd>⌥</kbd>+<kbd>D</kbd></td></tr>
+      <tr><td>搜索块</td><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td><kbd>⌘</kbd>+<kbd>B</kbd></td></tr>
+      <tr><td>切换侧边栏</td><td><kbd>Ctrl</kbd>+<kbd>[</kbd></td><td><kbd>⌘</kbd>+<kbd>[</kbd></td></tr>
+      <tr><td>新建工作流</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>N</kbd></td><td><kbd>⌘</kbd>+<kbd>⌥</kbd>+<kbd>N</kbd></td></tr>
+      <tr><td>全局搜索</td><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td><kbd>⌘</kbd>+<kbd>F</kbd></td></tr>
+      <tr><td>面板快捷键</td><td colspan="2">Dashboard <kbd>Alt</kbd>+<kbd>1</kbd> / <kbd>W</kbd> / <kbd>T</kbd> / <kbd>L</kbd> / <kbd>A</kbd> / <kbd>S</kbd> 分别跳转到总览、工作流、计划、日志、存储、设置</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note">浏览器级命令：<kbd>Alt</kbd>+<kbd>A</kbd> 打开控制面板，<kbd>Alt</kbd>+<kbd>P</kbd> 打开元素选择器。全部快捷键可在「设置 → 快捷键」中自定义。</div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="concept">
+  <h2><span class="num">4</span>核心概念</h2>
+
+  <h3>4.1 一个工作流由什么组成</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger</span>触发器</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>新建标签页</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>点击元素</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>获取文本</span><span class="arr">→</span>
+    <span class="fb"><span class="i">export-data</span>导出数据</span>
+  </div>
+  <ul>
+    <li><b>必须有且仅有一个触发器块</b>，工作流从这里开始；一个块默认只允许 1 条输出连线（并行分支除外）。</li>
+    <li>连线方向 = 执行顺序。禁用（<code class="inl">disableBlock</code>）的块会被引擎直接跳过。</li>
+    <li>部分块有 <b>2 个输出端口</b>：第 1 个是「真 / 正常」分支，第 2 个是「假 / 异常 / 否」分支 —— 典型如「条件」「元素存在」「While 循环」「HTTP 请求」「重复任务」。</li>
+  </ul>
+
+  <h3>4.2 模块的 7 个分类</h3>
+  <div class="tw"><table>
+    <thead><tr><th>分类</th><th>内部标识</th><th>包含内容</th><th>数量</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge b-general">通用</span></td><td class="mono">general</td><td>触发器、延迟、HTTP 请求、剪贴板、通知、等待连接、执行工作流、模块组、注释等</td><td>13</td></tr>
+      <tr><td><span class="badge b-browser">浏览器</span></td><td class="mono">browser</td><td>标签页 / 窗口 / 截图 / 事件 / 下载 / 对话框 / Cookie / 代理 / 导航</td><td>15</td></tr>
+      <tr><td><span class="badge b-interaction">网页交互</span></td><td class="mono">interaction</td><td>点击、输入、取文本 / 属性、表单、上传、滚动、按键、JS 代码、创建元素</td><td>14</td></tr>
+      <tr><td><span class="badge b-conditions">条件与控制流</span></td><td class="mono">conditions</td><td>条件、元素存在、循环数据、循环元素、循环断点、重复任务、While 循环</td><td>7</td></tr>
+      <tr><td><span class="badge b-data">数据</span></td><td class="mono">data</td><td>插入 / 删除 / 排序 / 映射数据、切片与正则变量、读取日志数据</td><td>8</td></tr>
+      <tr><td><span class="badge b-onlineServices">在线服务</span></td><td class="mono">onlineServices</td><td>Google Sheets、Google Sheets (GDrive)、Google Drive</td><td>3</td></tr>
+      <tr><td><span class="badge b-package">块包</span></td><td class="mono">package</td><td>块包（把一段工作流封装为一个可复用块）</td><td>1</td></tr>
+      <tr style="background:var(--panel-2)"><td colspan="3"><b>合计</b></td><td><b>61</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>4.3 元素选择器</h3>
+  <p>几乎所有「网页交互」类块都用 <code class="inl">findBy</code> 指定查找方式，支持 <b>CSS 选择器</b> 与 <b>XPath</b> 两种，并共享一套公共选项：</p>
+  <div class="tw"><table>
+    <thead><tr><th>选项</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">等待选择器</td><td>执行前轮询等待目标元素出现，超时时间可配（默认 5000ms），是应对慢速页面的关键。</td></tr>
+      <tr><td class="nw">标记元素</td><td>运行时在网页上高亮当前操作的元素，方便调试。</td></tr>
+      <tr><td class="nw">多选</td><td>一次对匹配到的所有元素执行操作（循环遍历时常用）。</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note tip"><b>技巧：</b>用面板或编辑器的元素选择器（<kbd>Alt</kbd>+<kbd>P</kbd>）在真实页面上点选元素，Automa 会自动生成 CSS / XPath，省去手写。</div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="data">
+  <h2><span class="num">5</span>数据与表达式</h2>
+  <p class="lead">这是 Automa 最核心也最容易踩坑的部分。所有块配置项中，只要在源码里登记了 <code class="inl">refDataKeys</code>，就支持用 <code class="inl">{{ }}</code> 引用运行时数据。</p>
+
+  <h3>5.1 六类数据源</h3>
+  <div class="tw"><table>
+    <thead><tr><th>数据键</th><th>含义</th><th>生命周期</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">table</td><td>工作流的<b>数据表格</b>，由一组带类型的列组成，行由各块写入时自动追加</td><td>单次运行（可被「复用上次状态」持久化）</td></tr>
+      <tr><td class="mono">variables</td><td><b>变量</b>，键值对形式</td><td>单次运行</td></tr>
+      <tr><td class="mono">globalData</td><td><b>全局数据</b>，一段自由格式的 JSON 文本，在侧边栏编辑</td><td>工作流级，随工作流保存</td></tr>
+      <tr><td class="mono">secrets</td><td><b>凭据</b>，加密存储，引用时自动解密</td><td>全局，跨工作流</td></tr>
+      <tr><td class="mono">loopData</td><td><b>循环数据</b>，每个循环块在运行时生成一条</td><td>单次运行</td></tr>
+      <tr><td class="mono">googleSheets</td><td>Google Sheets 块读取到的数据，按参考键存放</td><td>单次运行</td></tr>
+      <tr><td class="mono">workflow</td><td>工作流自身信息（名称、ID 等）</td><td>单次运行</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>5.2 表格与列</h3>
+  <ul>
+    <li>表格在编辑器侧边栏「表格」面板中定义：<b>列名 + 数据类型</b>。</li>
+    <li>列的类型共 5 种：<b>Any</b>（不转换）、<b>Text</b>（转字符串）、<b>Number</b>（去非数字后转数字）、<b>Boolean</b>（转布尔）、<b>Array</b>（转数组）。</li>
+    <li>写入时，若某列还没有对应行，则<b>自动追加新行</b>；每列独立维护自己的行指针，因此多个块可以分列写入同一张表。</li>
+    <li>未指定列的块，在开启「插入到默认列」时会写入名为 <code class="inl">column</code> 的默认列。</li>
+  </ul>
+
+  <h4>表格路径的解析规则（重要）</h4>
+  <div class="tw"><table>
+    <thead><tr><th>写法</th><th>解析为</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">{{table.name}}</td><td class="mono">table[0].name</td><td><b>不写索引时默认取第 0 行</b>，容易误用</td></tr>
+      <tr><td class="mono">{{table.0.name}}</td><td class="mono">table[0].name</td><td>显式索引</td></tr>
+      <tr><td class="mono">{{table.2.name}}</td><td class="mono">table[2].name</td><td>任意行</td></tr>
+      <tr><td class="mono">{{table.$last.name}}</td><td class="mono">table[长度-1].name</td><td>最后一行</td></tr>
+      <tr><td class="mono">{{dataColumns.name}}</td><td class="mono">table[0].name</td><td>别名，等价于 <code>table</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="note warn"><b>注意：</b>若想引用「当前循环写入的那一行」，请在「循环数据」循环中改用 <code class="inl">{{loopData.&lt;loopId&gt;.data.字段}}</code>，而不是 <code class="inl">{{table.字段}}</code>。</div>
+
+  <h3>5.3 变量</h3>
+  <ul>
+    <li>在块的「赋值到变量」中填入变量名即可写入；带 <code class="inl">$push:</code> 前缀（如 <code class="inl">$push:list</code>）表示<b>追加</b>到数组。</li>
+    <li>变量名<b>以 <code class="inl">$$</code> 开头</b>时，会同时持久化到全局变量库（IndexedDB），跨工作流可用，引用写作 <code class="inl">{{variables.$$名字}}</code>。</li>
+    <li>不写前缀的变量仅在本次运行内存在，写作 <code class="inl">{{variables.名字}}</code>。</li>
+    <li>嵌套结构用点号访问：<code class="inl">{{variables.user.name}}</code>。</li>
+  </ul>
+
+  <h3>5.4 内置函数（16 个）</h3>
+  <p>函数以 <code class="inl">$</code> 开头，参数中的引用要用<b>双方括号</b> <code class="inl">[[ ]]</code> 包裹以便先求值：</p>
+  <div class="tw"><table>
+    <thead><tr><th>函数</th><th>用途</th><th>示例</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">$date(...)</td><td>格式化日期；特殊格式 <code>relative</code>（相对时间）、<code>timestamp</code>（毫秒时间戳）</td><td class="mono">$date('YYYY-MM-DD')</td></tr>
+      <tr><td class="mono">$randint(min,max)</td><td>区间随机整数</td><td class="mono">$randint(1,10)</td></tr>
+      <tr><td class="mono">$getLength(v)</td><td>取长度（字符串 / 数组 / 对象）</td><td class="mono">$getLength([[table.0.name]])</td></tr>
+      <tr><td class="mono">$slice(v,s,e)</td><td>截取子串 / 子数组</td><td class="mono">$slice([[table.0.url]],0,10)</td></tr>
+      <tr><td class="mono">$multiply / $divide / $subtract / $increment / $modulo</td><td>四则运算与取模（非数字自动原样返回）</td><td class="mono">$multiply([[table.0.qty]],2)</td></tr>
+      <tr><td class="mono">$randData(str)</td><td>按模板生成随机串：<code>?l</code> 小写 <code>?u</code> 大写 <code>?d</code> 数字 <code>?s</code> 符号 <code>?f</code> <code>?n</code> <code>?m</code> <code>?i</code> <code>?a</code></td><td class="mono">$randData('??-????')</td></tr>
+      <tr><td class="mono">$filter(data, jsonpath)</td><td>用 JSONPath 过滤数组 / 对象</td><td class="mono">$filter([[table]],'$.[*]')</td></tr>
+      <tr><td class="mono">$replace / $replaceAll</td><td>替换字符串</td><td class="mono">$replaceAll([[table.0.t]],'a','b')</td></tr>
+      <tr><td class="mono">$toLowerCase / $toUpperCase</td><td>大小写转换</td><td class="mono">$toUpperCase([[table.0.t]])</td></tr>
+      <tr><td class="mono">$stringify(v)</td><td>JSON 序列化</td><td class="mono">$stringify([[table.0.obj]])</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>5.5 引用书写速查</h3>
+<pre><span class="cm">// 变量</span>
+{{variables.userName}}
+{{variables.$$token}}        <span class="cm">// 全局持久变量</span>
+{{variables.user.profile.age}}
+
+<span class="cm">// 表格</span>
+{{table.title}}              <span class="cm">// 等价 table[0].title</span>
+{{table.3.title}}
+{{table.$last.title}}
+
+<span class="cm">// 循环数据（路径会自动插入 .data）</span>
+{{loopData.abc123.$index}}
+{{loopData.abc123.field}}
+
+<span class="cm">// 全局数据 / 凭据（自动解密）</span>
+{{globalData.apiKey}}
+{{secrets.cookieHeader}}
+
+<span class="cm">// 强制 JSON 序列化（加 ! 前缀）</span>
+{{!table.0.obj}}
+
+<span class="cm">// 函数 + 嵌套引用</span>
+$date('YYYY年MM月DD日')
+$randData('user_??_????')
+$replaceAll([[variables.name]],'a','@')
+{{$multiply(1,2)}}</pre>
+  <div class="note tip"><b>提示：</b>在块的输入框中键入 <code class="inl">{{</code> 或 <code class="inl">$</code>，编辑器会给出可用变量、列名、函数的自动补全（可在工作流设置里关闭）。</div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section id="trigger">
+  <h2><span class="num">6</span>触发器 Trigger</h2>
+  <p class="lead">触发器决定工作流「什么时候跑」。可以添加多个触发器，任一满足即启动；<b>浏览器启动</b>和<b>右键菜单</b>全局各只允许一个。</p>
+  <div class="tw"><table>
+    <thead><tr><th>类型</th><th>内部标识</th><th>配置项</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="nw"><b>手动</b></td><td class="mono">manual</td><td>—</td><td>默认类型，只能在面板或编辑器里点击运行</td></tr>
+      <tr><td class="nw"><b>间隔</b></td><td class="mono">interval</td><td>间隔（分钟）、延迟（分钟）、固定延迟</td><td>每 N 分钟触发一次；「固定延迟」表示以上次<b>结束</b>为基准</td></tr>
+      <tr><td class="nw"><b>Cron 任务</b></td><td class="mono">cron-job</td><td>Cron 表达式</td><td>如 <code class="inl">0 9 * * 1-5</code>（工作日每天 9:00）</td></tr>
+      <tr><td class="nw"><b>在指定日期</b></td><td class="mono">date</td><td>日期 + 时间</td><td>一次性定时</td></tr>
+      <tr><td class="nw"><b>在指定的星期</b></td><td class="mono">specific-day</td><td>星期几（可多选）+ 多个时间点</td><td>周期性定时</td></tr>
+      <tr><td class="nw"><b>访问网站时</b></td><td class="mono">visit-web</td><td>URL 或正则表达式、是否支持 SPA</td><td>打开匹配网址时触发</td></tr>
+      <tr><td class="nw"><b>浏览器启动时</b></td><td class="mono">on-startup</td><td>—</td><td>浏览器启动即触发（唯一）</td></tr>
+      <tr><td class="nw"><b>右键菜单</b></td><td class="mono">context-menu</td><td>菜单位置（页面 / 链接 / 图片 / 选中文本…）、菜单名</td><td>在页面右键菜单中运行（唯一，需授权）</td></tr>
+      <tr><td class="nw"><b>键盘快捷键</b></td><td class="mono">keyboard-shortcut</td><td>录制快捷键；可设置「在输入框中也要生效」</td><td>注意：仅在访问网页时生效</td></tr>
+      <tr><td class="nw"><b>元素更改时</b></td><td class="mono">element-change</td><td>目标元素所在网站的匹配模式、要监测的目标元素、突变选项（包含子树 / 子列表 / 属性 + 属性过滤 / 字符数据）、基础元素</td><td>页面元素发生指定变化（MutationObserver）时触发</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>6.1 工作流参数（Parameters）</h3>
+  <p>触发器块可定义一组「参数」，让同一份工作流在运行前接收外部输入：</p>
+  <ul>
+    <li>在触发块设置中点击 <b>Parameters</b> 添加参数（名称、类型、默认值等）。</li>
+    <li>运行工作流时若缺参数，Automa 会弹出输入面板（也可勾选「优先在标签页中输入」直接在网页上填）。</li>
+    <li>由 <b>参数提示（Parameter prompt）</b> 块在流程中间再次向用户索取输入，带超时（默认 60 秒）。</li>
+  </ul>
+
+  <h3>6.2 用 Public ID 从外部触发</h3>
+  <p>在「工作流设置 → Workflow public ID」填入一个 ID 后，任意网页可用自定义事件触发该工作流：</p>
+<pre>window.dispatchEvent(
+  new CustomEvent('<span class="cm">你的 Public ID</span>', { detail: { /* 可选参数 */ } })
+);</pre>
+  <div class="note">若工作流设置了 <code class="inl">type: manual</code> 之外的非定时触发器，导出时同样会保留触发配置。</div>
+</section>
+
+<!-- ============ 7 ============ -->
+<section id="blocks">
+  <h2><span class="num">7</span>模块速查表</h2>
+  <p class="lead">共 61 个内置模块。「内部标识」是导入导出 JSON、API 调用中使用的键名；带 ✎ 的块可双击编辑配置。</p>
+
+  <div class="filters">
+    <button class="fbtn on" data-cat="all">全部</button>
+    <button class="fbtn" data-cat="general">通用</button>
+    <button class="fbtn" data-cat="browser">浏览器</button>
+    <button class="fbtn" data-cat="interaction">网页交互</button>
+    <button class="fbtn" data-cat="conditions">条件与控制流</button>
+    <button class="fbtn" data-cat="data">数据</button>
+    <button class="fbtn" data-cat="onlineServices">在线服务</button>
+    <button class="fbtn" data-cat="package">块包</button>
+    <input class="fsearch" id="blockSearch" type="search" placeholder="搜索模块名称 / 标识 / 说明…" />
+  </div>
+
+  <h3><span class="badge b-general">通用</span> General</h3>
+  <div class="tw"><table class="block-table" data-cat="general">
+    <thead><tr><th>模块</th><th>内部标识</th><th>作用</th><th>关键选项</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">触发器</td><td class="mono">trigger</td><td>工作流的起点，定义运行时机</td><td>触发类型、参数、描述；只能有 1 个</td></tr>
+      <tr><td class="nw">AI 工作流</td><td class="mono">ai-workflow</td><td>运行由 AI-Power 生成的工作流</td><td>flowUuid、输入 / 输出、变量名</td></tr>
+      <tr><td class="nw">执行工作流</td><td class="mono">execute-workflow</td><td>调用另一个工作流（可带参数与全局数据）</td><td>目标工作流、执行 ID、插入当前变量 / 全部 GlobalData</td></tr>
+      <tr><td class="nw">延迟</td><td class="mono">delay</td><td>在下一块之前等待指定毫秒</td><td>时间（ms）</td></tr>
+      <tr><td class="nw">导出数据</td><td class="mono">export-data</td><td>把结果导出成文件</td><td>文件名、数据源（表格 / Google Sheets / 变量）、格式（JSON / CSV / 纯文本）、CSV 分隔符、UTF-8 BOM、冲突处理</td></tr>
+      <tr><td class="nw">HTTP 请求</td><td class="mono">webhook</td><td>发起 HTTP 请求（GET/POST/…）</td><td>URL、Method、Headers、Body、内容类型（text / json / form-data / form）、超时、响应类型（json / text / base64）、JSONPath 提取、失败走第 2 个出口</td></tr>
+      <tr><td class="nw">模块组</td><td class="mono">blocks-group</td><td>把一组块折叠为一个整体，便于管理</td><td>组名；不能包含触发器等控制块</td></tr>
+      <tr><td class="nw">剪贴板</td><td class="mono">clipboard</td><td>读取 / 写入剪贴板</td><td>获取或插入、可复制页面选中文本（需授权）</td></tr>
+      <tr><td class="nw">等待连接</td><td class="mono">wait-connections</td><td>等所有并发分支都执行完再继续</td><td>超时、是否只等待指定流程</td></tr>
+      <tr><td class="nw">通知</td><td class="mono">notification</td><td>弹出系统通知</td><td>标题、正文、图标 URL、图片 URL（需授权）</td></tr>
+      <tr><td class="nw">工作流状态</td><td class="mono">workflow-state</td><td>停止当前 / 其他工作流，或抛出错误</td><td>动作、排除当前、是否抛出错误与错误信息</td></tr>
+      <tr><td class="nw">参数提示</td><td class="mono">parameter-prompt</td><td>运行到此处时向用户索取输入</td><td>参数列表、超时（默认 60s）</td></tr>
+      <tr><td class="nw">注释</td><td class="mono">note</td><td>画布上的说明便签</td><td>内容、颜色、字号、尺寸，可切换为手绘</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3><span class="badge b-browser">浏览器</span> Browser</h3>
+  <div class="tw"><table class="block-table" data-cat="browser">
+    <thead><tr><th>模块</th><th>内部标识</th><th>作用</th><th>关键选项</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">活动标签页</td><td class="mono">active-tab</td><td>把当前所在标签页设为工作流的活动标签页</td><td>无</td></tr>
+      <tr><td class="nw">新建标签页</td><td class="mono">new-tab</td><td>打开新标签页</td><td>URL、自定义 User-Agent、缩放、是否设为活动页、等待加载完成、分组、更新原标签页</td></tr>
+      <tr><td class="nw">切换标签页</td><td class="mono">switch-tab</td><td>在已打开的标签页之间切换</td><td>按 URL / 匹配模式 / 标签标题查找；找不到时可自动创建</td></tr>
+      <tr><td class="nw">新建窗口</td><td class="mono">new-window</td><td>打开独立窗口</td><td>位置、宽高（0 表示禁用）、窗口状态（正常/最小化/最大化/全屏）、无痕窗口</td></tr>
+      <tr><td class="nw">代理</td><td class="mono">proxy</td><td>设置浏览器代理</td><td>协议、主机、端口、绕过列表（逗号分隔）、清除代理</td></tr>
+      <tr><td class="nw">返回</td><td class="mono">go-back</td><td>后退一页</td><td>无</td></tr>
+      <tr><td class="nw">前进</td><td class="mono">forward-page</td><td>前进一页</td><td>无</td></tr>
+      <tr><td class="nw">重载标签页</td><td class="mono">reload-tab</td><td>刷新当前活动页</td><td>无</td></tr>
+      <tr><td class="nw">关闭标签页 / 窗口</td><td class="mono">close-tab</td><td>关闭标签页或所有窗口</td><td>匹配模式、关闭活动页、关闭所有窗口</td></tr>
+      <tr><td class="nw">截屏</td><td class="mono">take-screenshot</td><td>截取当前页 / 整页 / 指定元素</td><td>格式 PNG/JPEG、质量、文件名、存入表格、保存到计算机、赋值到变量</td></tr>
+      <tr><td class="nw">浏览器事件</td><td class="mono">browser-event</td><td>等待指定浏览器事件发生</td><td>事件（标签页关闭/加载/创建、窗口创建/关闭）、超时、匹配模式、是否设为活动页</td></tr>
+      <tr><td class="nw">处理对话框</td><td class="mono">handle-dialog</td><td>自动接受 / 取消 alert、confirm、prompt</td><td>接受对话框、提示文本（需授权）</td></tr>
+      <tr><td class="nw">处理下载</td><td class="mono">handle-download</td><td>等待并重命名下载文件</td><td>文件名、超时、冲突处理、是否等待文件、下载 ID（需授权）</td></tr>
+      <tr><td class="nw">获取标签页 URL</td><td class="mono">tab-url</td><td>获取活动页或所有标签页的 URL</td><td>选择标签页、匹配模式、标签标题</td></tr>
+      <tr><td class="nw">Cookie</td><td class="mono">cookie</td><td>获取 / 设置 / 删除 Cookie</td><td>域名、路径、名称、值、过期时间、SameSite、HttpOnly、Secure、是否一次性；支持用 JSON 批量写入（需授权）</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3><span class="badge b-interaction">网页交互</span> Web interaction</h3>
+  <div class="tw"><table class="block-table" data-cat="interaction">
+    <thead><tr><th>模块</th><th>内部标识</th><th>作用</th><th>关键选项</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">点击元素</td><td class="mono">event-click</td><td>点击页面元素</td><td>选择器、等待选择器、多选、标记元素</td></tr>
+      <tr><td class="nw">获取文本</td><td class="mono">get-text</td><td>读取元素文本</td><td>正则提取、前缀 / 后缀、包含 HTML 标签、写入表格、额外行、赋值到变量、多元素时按行展开</td></tr>
+      <tr><td class="nw">属性值</td><td class="mono">attribute-value</td><td>读取或设置元素属性</td><td>属性名、动作（获取 / 设置）、写入表格、变量</td></tr>
+      <tr><td class="nw">表单</td><td class="mono">forms</td><td>操作 input / select / checkbox / radio</td><td>类型、值、是否清空、输入延迟（ms）、按值 / 首项 / 末项 / 自定义位置选择、获取表单值、触发的事件</td></tr>
+      <tr><td class="nw">链接</td><td class="mono">link</td><td>点击 &lt;a&gt; 链接元素</td><td>选择器、是否在新标签页打开</td></tr>
+      <tr><td class="nw">悬停元素</td><td class="mono">hover-element</td><td>鼠标悬停</td><td>选择器</td></tr>
+      <tr><td class="nw">滚动元素</td><td class="mono">element-scroll</td><td>页面或元素滚动</td><td>垂直 / 水平距离、递增滚动、平滑滚动、滚动到可视区域</td></tr>
+      <tr><td class="nw">按键</td><td class="mono">press-key</td><td>模拟按键 / 组合键</td><td>目标元素、按键序列（支持 U<code class="inl">SKeyboardLayout</code> 名称）、按下时长（ms）</td></tr>
+      <tr><td class="nw">上传文件</td><td class="mono">upload-file</td><td>给 <code class="inl">&lt;input type="file"&gt;</code> 赋值文件</td><td>选择器、文件 URL 或本地路径（Firefox 仅支持 URL）</td></tr>
+      <tr><td class="nw">触发器事件</td><td class="mono">trigger-event</td><td>在元素上主动派发 DOM 事件</td><td>21 种事件（click / dblclick / focus / input / change / touch* / keydown / keyup / submit / wheel…）、事件参数（bubbles、cancelable）、可传 clientX / clientY</td></tr>
+      <tr><td class="nw">JavaScript 代码</td><td class="mono">javascript-code</td><td>执行自定义 JS</td><td>上下文（当前标签页 / 背景页）、代码、预加载脚本、超时、每次新建标签页都执行、页面加载前执行</td></tr>
+      <tr><td class="nw">切换框架</td><td class="mono">switch-to</td><td>在主窗口与 iframe 之间切换操作目标</td><td>窗口类型、iframe 选择器</td></tr>
+      <tr><td class="nw">创建元素</td><td class="mono">create-element</td><td>生成 HTML / 样式 / 脚本并插入页面</td><td>HTML、CSS、JS、插入位置（最前子元素 / 最后子元素 / 前后兄弟 / 替换）、预加载脚本、页面加载前执行</td></tr>
+      <tr><td class="nw">保存资源</td><td class="mono">save-assets</td><td>下载图片 / 视频 / 音频 / 文件，或按 URL 保存</td><td>来源（媒体元素 / URL）、文件名、冲突处理、存入表格、变量、可选存到 Google Drive</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3><span class="badge b-conditions">条件与控制流</span> Control flow</h3>
+  <div class="tw"><table class="block-table" data-cat="conditions">
+    <thead><tr><th>模块</th><th>内部标识</th><th>作用</th><th>关键选项</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">条件</td><td class="mono">conditions</td><td>多条件 AND / OR 判断，成立走第 1 个出口，否则走第 2 个</td><td>条件列表、组合方式、不满足时是否重试（次数 + 间隔）、重试时刷新条件连线</td></tr>
+      <tr><td class="nw">元素存在</td><td class="mono">element-exists</td><td>判断元素是否存在，存在走第 1 个出口</td><td>选择器、尝试次数、每次超时（ms）、不存在时是否抛错</td></tr>
+      <tr><td class="nw">循环数据</td><td class="mono">loop-data</td><td>依次遍历一份数据，每轮从头执行下游连线</td><td>循环 ID、迭代来源、最大循环数、起始索引、反转、恢复上次进度；<b>必须</b>配合循环断点</td></tr>
+      <tr><td class="nw">循环元素</td><td class="mono">loop-elements</td><td>遍历页面上匹配的所有元素，支持「加载更多」</td><td>元素选择器、最大次数、每个元素操作等待时间、滚动到底部、加载更多动作（无 / 点击元素 / 向下滚动 / 点击链接 / 向上滚动）</td></tr>
+      <tr><td class="nw">循环断点</td><td class="mono">loop-breakpoint</td><td>标记循环的结束位置，把控制权交回循环块</td><td>循环 ID、是否清空循环数据</td></tr>
+      <tr><td class="nw">重复任务</td><td class="mono">repeat-task</td><td>把下游流程重复执行 N 次（<b>出口 2</b> 连循环体，循环体末尾连回本块；N 次后走<b>出口 1</b> 继续）</td><td>重复次数</td></tr>
+      <tr><td class="nw">While 循环</td><td class="mono">while-loop</td><td>条件为真时循环执行下游块</td><td>条件、满足时出口 1、不满足时出口 2</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3><span class="badge b-data">数据</span> Data</h3>
+  <div class="tw"><table class="block-table" data-cat="data">
+    <thead><tr><th>模块</th><th>内部标识</th><th>作用</th><th>关键选项</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">插入数据</td><td class="mono">insert-data</td><td>把数据写入表格或变量</td><td>目标（表格 / 变量）、值来源（文本 / JSON / URL / Base64 / CSV）、指定列</td></tr>
+      <tr><td class="nw">删除数据</td><td class="mono">delete-data</td><td>清空或删除指定数据</td><td>数据来源（全部 / 指定列）、行匹配</td></tr>
+      <tr><td class="nw">排序数据</td><td class="mono">sort-data</td><td>对表格或变量排序</td><td>排序属性（可多级）、升序 / 降序、结果写入变量或新列</td></tr>
+      <tr><td class="nw">数据映射</td><td class="mono">data-mapping</td><td>把数据源字段映射到目标字段</td><td>源（表格 / 变量）、目标列表、多个源与目的、结果存入表格或变量</td></tr>
+      <tr><td class="nw">切片变量</td><td class="mono">slice-variable</td><td>截取变量的一部分</td><td>变量名、起始 / 结束索引（可分别启用）</td></tr>
+      <tr><td class="nw">增加变量</td><td class="mono">increase-variable</td><td>给变量数值加上指定增量（常用于页码计数）</td><td>变量名、增量</td></tr>
+      <tr><td class="nw">RegEx 变量</td><td class="mono">regex-variable</td><td>对变量做正则匹配或替换</td><td>方法（匹配 / 替换）、表达式、标志（g / i / m…）、替换值</td></tr>
+      <tr><td class="nw">获取日志数据</td><td class="mono">log-data</td><td>读取工作流最近一次运行的日志数据</td><td>工作流 ID、写入表格 / 变量</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3><span class="badge b-onlineServices">在线服务</span> Online services</h3>
+  <div class="tw"><table class="block-table" data-cat="onlineServices">
+    <thead><tr><th>模块</th><th>内部标识</th><th>作用</th><th>关键选项</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">Google Sheets</td><td class="mono">google-sheets</td><td>读取 / 写入电子表格（需 OAuth 授权）</td><td>动作（获取单元格 / 获取范围 / 更新 / 追加 / 清除 / 创建表格 / 添加工作表）、表格 ID、范围、参考键、首行作主键、值输入选项（RAW / USER_ENTERED）</td></tr>
+      <tr><td class="nw">Google Sheets (GDrive)</td><td class="mono">google-sheets-drive</td><td>同上，文件存放在 Google Drive，可直接选工作簿</td><td>连接的工作表、表格 ID、范围、参考键</td></tr>
+      <tr><td class="nw">Google Drive</td><td class="mono">google-drive</td><td>把本地文件上传到 Google Drive</td><td>动作（上传）、文件路径或 URL</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3><span class="badge b-package">块包</span> Packages</h3>
+  <div class="tw"><table class="block-table" data-cat="package">
+    <thead><tr><th>模块</th><th>内部标识</th><th>作用</th><th>关键选项</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">块包</td><td class="mono">block-package</td><td>把一整段工作流封装成带输入 / 输出端口的单个块，可跨工作流复用</td><td>由「块包」页面创建，指定输入 / 输出端口与内部节点</td></tr>
+    </tbody>
+  </table></div>
+  <div class="empty" id="blockEmpty" style="display:none">没有匹配的模块</div>
+</section>
+
+<!-- ============ 8 ============ -->
+<section id="flow">
+  <h2><span class="num">8</span>条件与控制流</h2>
+
+  <h3>8.1 条件构建器</h3>
+  <p>「条件」块用可视化构建器组合判断，结构为：<b>取值 → 比较方式 → 期望值</b>，多个条件之间可选 AND / OR。</p>
+  <div class="grid g2">
+    <div class="card">
+      <h4 style="margin-top:0">可取值类型</h4>
+      <ul>
+        <li><b>值</b> — 手动输入，或用 <code class="inl">{{}}</code> 引用变量 / 表格</li>
+        <li><b>代码</b> — 写一段返回布尔值的 JS（默认上下文：背景页），支持顶层 await 与 <code class="inl">automaRefData</code></li>
+        <li><b>数据存在</b> — 判断 <code class="inl">{{路径}}</code> 是否有值</li>
+        <li><b>元素文本 / 存在 / 不存在 / 可见 / 屏幕内可见 / 屏幕内隐藏 / 属性值</b> — 在页面上直接判断元素</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4 style="margin-top:0">比较方式（16 种）</h4>
+      <ul>
+        <li>基础：等于、等于（忽略大小写）、不等于</li>
+        <li>数值：大于、大于等于、小于、小于等于</li>
+        <li>文本：包含、包含（忽略大小写）、不包含、不包含（忽略大小写）、开头为、结尾为、匹配正则</li>
+        <li>布尔：为真 / 为假</li>
+      </ul>
+    </div>
+  </div>
+  <div class="note tip"><b>重试机制：</b>条件块可开启「不满足则重试」，设置重试次数与间隔 —— 适合等待异步加载的页面，配合「刷新条件连线」可重新读取元素。</div>
+
+  <h3>8.2 循环的三种写法</h3>
+  <div class="tw"><table>
+    <thead><tr><th>方式</th><th>适用场景</th><th>关键配置</th></tr></thead>
+    <tbody>
+      <tr><td class="nw"><b>循环数据</b></td><td>遍历表格、变量、JSON、CSV 导入的数据、Google Sheets 数据、页面元素等</td><td>循环 ID（必须唯一）、迭代来源、最大循环数（0 = 不限）、起始索引、反转；循环体内用 <code class="inl">{{loopData.&lt;ID&gt;.data.字段}}</code> 和 <code class="inl">{{loopData.&lt;ID&gt;.$index}}</code> 取值</td></tr>
+      <tr><td class="nw"><b>循环元素</b></td><td>翻页 / 滚动加载更多，逐条处理列表项</td><td>元素选择器、每个元素操作等待时间、页面等待时间、滚动到底部、加载更多动作</td></tr>
+      <tr><td class="nw"><b>While 循环</b></td><td>条件成立就继续跑（配合「元素存在」做等待式轮询）</td><td>条件；成立走出口 1，不成立走出口 2</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note warn"><b>关键：</b>循环体末尾<b>必须</b>接一个「<b>循环断点</b>」块，且它的「循环 ID」要与循环数据块一致。没有断点会触发 <code class="inl">workflow-infinite-loop</code> 错误。</div>
+  <div class="flow">
+    <span class="fb"><span class="i">loop-data</span>循环数据 · id=abc123</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>取当前项标题</span><span class="arr">→</span>
+    <span class="fb"><span class="i">insert-data</span>写入表格</span><span class="arr">→</span>
+    <span class="fb" style="border-color:var(--c-conditions)"><span class="i">loop-breakpoint</span>循环断点 · id=abc123</span>
+    <span class="arr">↺</span><span class="fb">回到循环数据</span>
+  </div>
+
+  <h3>8.3 分支与并行</h3>
+  <ul>
+    <li>从块的同一个输出端口拖出多条连线 = <b>并行分支</b>，同时执行。</li>
+    <li>需要「等所有分支跑完再继续」时，在汇合处插入<b>等待连接</b>块。</li>
+    <li>模块组（<code class="inl">blocks-group</code>）可以把分支打成一个整体，但内部不能放触发器、循环、条件等控制块。</li>
+  </ul>
+</section>
+
+<!-- ============ 9 ============ -->
+<section id="error">
+  <h2><span class="num">9</span>错误处理</h2>
+
+  <h3>9.1 块级：出错时（On error）</h3>
+  <p>在任意块的设置中开启「出错时」后，可配置：</p>
+  <div class="tw"><table>
+    <thead><tr><th>选项</th><th>行为</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">重试操作</td><td>按设定的<b>次数</b>与<b>间隔（秒）</b>重新执行本块</td></tr>
+      <tr><td class="nw">抛出错误</td><td>直接以指定错误信息终止（可写入表格 / 变量）</td></tr>
+      <tr><td class="nw">继续流程</td><td>忽略错误，执行下一个块</td></tr>
+      <tr><td class="nw">执行「否」</td><td>转到该块的<b>第 2 个输出端口</b>（fallback 分支），用于优雅降级</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>9.2 工作流级</h3>
+  <p>「工作流设置 → 出错时」可选择：<b>继续运行</b> / <b>停止工作流</b> / <b>重启工作流（可设最大次数）</b>。</p>
+
+  <h3>9.3 常见错误与对策</h3>
+  <div class="tw"><table>
+    <thead><tr><th>错误</th><th>含义</th><th>解决思路</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">no-tab</td><td>没有可连接的活动标签页</td><td>先加「新建标签页」或「活动标签页」块</td></tr>
+      <tr><td class="mono">element-not-found</td><td>按选择器找不到元素</td><td>开启「等待选择器」并调大超时；用元素选择器重新抓选择器</td></tr>
+      <tr><td class="mono">no-match-tab</td><td>找不到匹配模式的标签页</td><td>检查匹配模式；或在「切换标签页」里勾选自动创建</td></tr>
+      <tr><td class="mono">workflow-infinite-loop</td><td>检测到死循环</td><td>循环体末尾缺少「循环断点」</td></tr>
+      <tr><td class="mono">invalid-loop-data</td><td>迭代数据不是数组</td><td>自定义数据必须是 JSON 数组</td></tr>
+      <tr><td class="mono">invalid-body</td><td>请求体不是合法 JSON</td><td>检查 HTTP 请求块的 Body</td></tr>
+      <tr><td class="mono">stop-timeout</td><td>超过工作流总超时被终止</td><td>在设置中调大「工作流超时」，或拆分为多个工作流</td></tr>
+      <tr><td class="mono">selector-empty</td><td>选择器为空</td><td>填写 CSS 或 XPath</td></tr>
+      <tr><td class="mono">no-permission</td><td>缺少可选权限</td><td>按界面提示授予（剪贴板 / 通知 / 下载 / Cookie / 右键菜单）</td></tr>
+      <tr><td class="mono">browser-not-supported</td><td>当前浏览器不支持</td><td>如 Firefox 不支持调试模式、部分上传能力</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note tip"><b>调试建议：</b>开启「<b>在网页上显示已执行的块</b>」与「<b>调试模式</b>」（Chrome + DevTools Protocol），配合运行日志（Dashboard → 日志，可按状态 / 时间筛选）逐步定位。</div>
+</section>
+
+<!-- ============ 10 ============ -->
+<section id="js">
+  <h2><span class="num">10</span>JavaScript 代码块</h2>
+  <p class="lead">当现有模块不够用时，用「JavaScript 代码」块直接写代码。它有两个执行上下文：<b>当前标签页</b>（注入到网页）与<b>背景页</b>（扩展 Service Worker 上下文，可访问扩展 API）。</p>
+
+  <h3>10.1 可用函数</h3>
+  <div class="tw"><table>
+    <thead><tr><th>函数</th><th>签名</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">automaNextBlock</td><td class="mono">(data?, insert?)</td><td>结束本块并继续下一个块。<code>data</code> 写表格，<code>insert</code> 写变量；<code>$error:true</code> 表示抛错</td></tr>
+      <tr><td class="mono">automaSetVariable</td><td class="mono">(name, value)</td><td>设置变量；<code>name</code> 以 <code class="inl">$push:</code> 开头则追加</td></tr>
+      <tr><td class="mono">automaRefData</td><td class="mono">(keyword, path?)</td><td>读取运行时数据，如 <code class="inl">automaRefData('variables','userName')</code></td></tr>
+      <tr><td class="mono">automaFetch</td><td class="mono">(type, resource)</td><td>以网页身份发起请求，<code>type</code> 为 <code>text</code> / <code>json</code> / <code>base64</code>，绕过跨域限制</td></tr>
+      <tr><td class="mono">automaExecWorkflow</td><td class="mono">({ id })</td><td>从代码中启动另一个工作流</td></tr>
+      <tr><td class="mono">automaResetTimeout</td><td class="mono">()</td><td>重置本块的执行超时计时（异步任务用）</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>10.2 代码示例</h3>
+  <pre><span class="cm">// 1) 抓取并写入表格（不写 automaNextBlock 时会自动调用）</span>
+const titles = [...document.querySelectorAll('.item .title')].map(el =&gt; el.textContent.trim());
+automaNextBlock({ data: { title: titles.join(' | ') } });
+
+<span class="cm">// 2) 写入变量 + 读取变量</span>
+automaSetVariable('$push:titles', '标题一');
+const last = automaRefData('variables', 'titles');
+automaNextBlock({ insert: { last } });
+
+<span class="cm">// 3) 异步：等待条件成立再继续（需重置超时）</span>
+const wait = (ms) =&gt; new Promise(r =&gt; setTimeout(r, ms));
+let el = null;
+for (let i = 0; i &lt; 20 &amp;&amp; !el; i += 1) {
+  automaResetTimeout();
+  el = document.querySelector('.done');
+  if (!el) await wait(500);
+}
+automaNextBlock({ insert: { ready: !!el } });
+
+<span class="cm">// 4) 主动抛错，交给块的「出错时」策略</span>
+if (!document.querySelector('#result')) {
+  automaNextBlock({ data: { $error: true, message: '未找到结果节点' } });
+}</pre>
+
+  <div class="note warn"><b>注意：</b>代码块有超时（默认 20 秒）。若代码是异步的，务必在等待循环里调用 <code class="inl">automaResetTimeout()</code>，否则会被判定超时失败。</div>
+  <div class="note tip"><b>调试：</b>「预加载脚本」会在主代码之前注入页面，可放第三方库；勾选「每次新建标签页都执行」可让脚本在后续新开的页面中常驻。</div>
+</section>
+
+<!-- ============ 11 ============ -->
+<section id="examples">
+  <h2><span class="num">11</span>实战示例</h2>
+
+  <h3>示例 1 · 定时抓取网页并导出 CSV</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · cron-job</span>每天 08:00 触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>打开目标网址</span><span class="arr">→</span>
+    <span class="fb"><span class="i">browser-event</span>等待 tab:loaded</span><span class="arr">→</span>
+    <span class="fb"><span class="i">loop-elements</span>遍历列表项</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text ×2</span>标题 / 链接</span><span class="arr">→</span>
+    <span class="fb"><span class="i">loop-breakpoint</span>断点</span><span class="arr">→</span>
+    <span class="fb"><span class="i">export-data</span>导出 CSV</span>
+  </div>
+  <ul>
+    <li>表格定义两列：<code class="inl">title</code>（Text）、<code class="inl">url</code>（Text）。</li>
+    <li>「导出数据」→ 格式选 CSV，勾选「添加 UTF-8 BOM」以便 Excel 正确识别中文。</li>
+  </ul>
+
+  <h3>示例 2 · 批量填写表单</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">loop-data</span>自定义 JSON 数组</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>姓名 = {{loopData.x.data.name}}</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>邮箱 = {{loopData.x.data.mail}}</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>提交</span><span class="arr">→</span>
+    <span class="fb"><span class="i">delay</span>800ms</span><span class="arr">→</span>
+    <span class="fb"><span class="i">element-exists</span>成功提示？</span><span class="arr">→</span>
+    <span class="fb" style="border-color:var(--c-conditions)"><span class="i">notification</span>失败则提醒</span>
+    <span class="arr">→</span>
+    <span class="fb"><span class="i">loop-breakpoint</span>断点</span>
+  </div>
+  <ul>
+    <li>自定义 JSON 示例：<code class="inl">[{"name":"张三","mail":"a@x.com"},{"name":"李四","mail":"b@x.com"}]</code></li>
+    <li>「表单」块的「输入延迟」可设为 30–100ms，模拟真人输入节奏，显著降低被风控拦截的概率。</li>
+  </ul>
+
+  <h3>示例 3 · 条件分支与数据清洗</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">get-text</span>取价格</span><span class="arr">→</span>
+    <span class="fb"><span class="i">conditions</span>价格 &lt; 100 ?</span><span class="arr">是→</span>
+    <span class="fb"><span class="i">insert-data</span>标记为低价</span>
+    <span class="arr">否→</span>
+    <span class="fb"><span class="i">insert-data</span>标记为高价</span>
+  </div>
+  <ul>
+    <li>条件取值用 <code class="inl">元素文本</code> + <code class="inl">小于</code>，或 <code class="inl">{{table.0.price}}</code> + 数值比较。</li>
+    <li>用「切片变量」截掉价格中的货币符号，再用「增加变量」累加总价。</li>
+  </ul>
+
+  <h3>示例 4 · 调用 API 并按 JSONPath 取值</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">webhook</span>GET 接口</span><span class="arr">→</span>
+    <span class="fb"><span class="i">data-mapping</span>映射字段</span><span class="arr">→</span>
+    <span class="fb"><span class="i">google-sheets</span>追加到表格</span>
+  </div>
+  <ul>
+    <li>HTTP 请求块「响应」页签可直接查看返回内容，勾选赋值到变量后用 <code class="inl">{{variables.resp.data.items}}</code> 引用。</li>
+    <li>请求体为 JSON 时内容类型选 <code class="inl">json</code>；表单提交选 <code class="inl">form</code>；文件上传选 <code class="inl">form-data</code>。</li>
+    <li>也可直接使用内置函数 <code class="inl">{{$filter([[variables.resp]],'$.data[*]')}}</code> 做数组过滤。</li>
+  </ul>
+
+  <h3>示例 5 · 采集结果写回 Google Sheets</h3>
+  <ol>
+    <li>首次使用「Google Sheets」块会引导 OAuth 授权。</li>
+    <li>动作选「追加」，数据来自选「表格」，参考键填一个名字（如 <code class="inl">abc123</code>）。</li>
+    <li>若希望后续「循环数据」能直接遍历该表，把循环来源也设为 Google Sheets 并填同一个参考键。</li>
+  </ol>
+
+  <div class="note" style="margin-top:30px"><b>扩展示例（6–45）说明：</b>以下示例按主题继续编号，目标是让 61 个内置模块除「AI 工作流」外都能至少露面一次（该块依赖 AI Power 云端服务与专用令牌，不在此展开）。同一模块会在多个示例中重复出现；示例中的网址、选择器、列名请替换为你自己的。示例 1–5 中的写法在这里同样适用。</div>
+
+  <h3>示例 6 · 无限滚动加载并采集（循环元素 · 加载更多）</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>打开列表页</span><span class="arr">→</span>
+    <span class="fb"><span class="i">loop-elements</span>遍历 .card · 加载更多=点击元素</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>选择器={{loopData.x.data}}</span><span class="arr">→</span>
+    <span class="fb"><span class="i">attribute-value</span>取 href 写入表格</span><span class="arr">→</span>
+    <span class="fb" style="border-color:var(--c-conditions)"><span class="i">loop-breakpoint</span>断点 · id=x</span><span class="arr">→</span>
+    <span class="fb"><span class="i">export-data</span>导出 CSV</span>
+  </div>
+  <ul>
+    <li>「循环元素」块把「加载更多动作」设为 <b>点击元素</b>，「加载更多元素选择器」填「加载更多」按钮；勾选「滚动到底部」后每轮先滚到底再找新元素。动作最长等待时间（秒）给慢站点留大一点。</li>
+    <li>循环体内操作"当前这一项"的写法：块的选择器填 <code class="inl">{{loopData.x.data}}</code>（<code class="inl">x</code> 为循环 ID），引擎会把它替换成当前项的专用选择器。要取当前项的子元素，后面拼上子选择器，如 <code class="inl">{{loopData.x.data}} h3</code>。</li>
+    <li>「最大循环数」填 <code class="inl">0</code> 表示不限次数，一直循环到加载不出新内容。</li>
+  </ul>
+
+  <h3>示例 7 · 数字区间循环：按页码翻页采集</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">loop-data</span>id=page · 遍历=数字 1→10</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>…/list?page={{loopData.page.data}}</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>标题/价格 写入表格</span><span class="arr">→</span>
+    <span class="fb" style="border-color:var(--c-conditions)"><span class="i">loop-breakpoint</span>断点 · id=page</span><span class="arr">→</span>
+    <span class="fb"><span class="i">export-data</span>导出</span>
+  </div>
+  <ul>
+    <li>「循环数据」块的「遍历目标」选 <b>数字（Numbers）</b>，填起始与结束值；循环体内 <code class="inl">{{loopData.page.data}}</code> 就是当前页码，<code class="inl">{{loopData.page.$index}}</code> 是第几轮。</li>
+    <li>页码除了拼进 URL，也可用于「点击元素」前先定位到对应页码的按钮。</li>
+    <li>「新建标签页」勾选「等待加载完成」再取数，避免拿到上一页的缓存 DOM。</li>
+  </ul>
+
+  <h3>示例 8 · HTTP 接口数据写入表格（$response 与自动分列）</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">webhook</span>GET 接口 · 响应=json · 数据路径=$response.data.list</span><span class="arr">→</span>
+    <span class="fb"><span class="i">data-mapping</span>变量 resp → 目标列</span><span class="arr">→</span>
+    <span class="fb"><span class="i">export-data</span>导出 JSON</span>
+  </div>
+  <ul>
+    <li>「HTTP 请求」的数据路径里包含 <code class="inl">$response</code> 时，返回的是完整对象 <code class="inl">{ok, url, status, statusText, redirected, data}</code>；只想取业务数据就填 <code class="inl">data.list</code>。结果勾选「赋值到变量」存为 <code class="inl">resp</code>。</li>
+    <li>捷径：若响应本身是<b>对象数组</b>且字段名与表格列名一致，直接在 HTTP 块勾选「写入表格」并把列名填 <code class="inl">$assignColumns</code>，数组会按字段自动分列写入，一行一条。</li>
+    <li>「数据映射」块：数据源选变量 <code class="inl">resp</code>，添加源字段（如 <code class="inl">name</code>）到目标字段（如 <code class="inl">title</code>）的映射，数组会逐条映射；结果可写入表格或变量。</li>
+    <li>接口失败（非 2xx 或网络错误）会走 HTTP 块的<b>第 2 个出口</b>，接上「通知」块做告警。</li>
+  </ul>
+
+  <h3>示例 9 · 数据清洗四连（切片 / 正则 / 排序 / 清空）</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">get-text</span>标题 → 变量 title</span><span class="arr">→</span>
+    <span class="fb"><span class="i">slice-variable</span>title 截 0–50</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>价格 → 变量 price</span><span class="arr">→</span>
+    <span class="fb"><span class="i">regex-variable</span>price 匹配 [0-9.]+</span><span class="arr">→</span>
+    <span class="fb"><span class="i">insert-data</span>写入表格列</span><span class="arr">→</span>
+    <span class="fb"><span class="i">sort-data</span>按 price 降序</span><span class="arr">→</span>
+    <span class="fb"><span class="i">delete-data</span>删掉中间变量</span>
+  </div>
+  <ul>
+    <li>「切片变量」对字符串或数组就地截取，分别可启用起始/结束索引。</li>
+    <li>「RegEx 变量」只能处理<b>字符串</b>变量：方法选「匹配」，表达式 <code class="inl">[0-9.]+</code> 就把 <code class="inl">¥1,299.00</code> 里的数字抠出来；不带 <code class="inl">g</code> 标志返回第一个匹配，带 <code class="inl">g</code> 返回所有匹配的数组；方法选「替换」可把货币符号直接删掉。</li>
+    <li>「排序数据」可按多个属性多级排序（各选升/降序），结果写回表格或新变量。</li>
+    <li>「删除数据」选「全部」会清空整张表并<b>复位每列的行指针</b>；也可以只删某一列或删除指定变量，把清洗用的中间变量收尾删掉。</li>
+  </ul>
+
+  <h3>示例 10 · While 循环 + 全局计数器</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">insert-data</span>变量 $$runCount = 0</span><span class="arr">→</span>
+    <span class="fb"><span class="i">while-loop</span>{{variables.$$runCount}} 小于 10？</span><span class="arr">是→</span>
+    <span class="fb"><span class="i">event-click</span>下一页</span><span class="arr">→</span>
+    <span class="fb"><span class="i">delay</span>1500ms</span><span class="arr">→</span>
+    <span class="fb"><span class="i">increase-variable</span>$$runCount +1</span><span class="arr">↺</span><span class="fb">连回 While</span>
+    <span class="arr">否→</span>
+    <span class="fb"><span class="i">export-data</span>导出</span>
+  </div>
+  <ul>
+    <li>While 块条件成立走出口 1（继续循环体），不成立走出口 2（退出）；循环体末尾把线连回 While 块即可，<b>不需要</b>循环断点。</li>
+    <li>变量名以 <code class="inl">$$</code> 开头会持久化到全局变量库，跨工作流、跨运行都有效；想让下一轮运行从头开始，可用「插入数据」块在开头重置为 0，或在「工作流设置 → 清除缓存」里手动清。</li>
+    <li>「增加变量」要求变量已存在且是数字，否则报错——所以先初始化。</li>
+  </ul>
+
+  <h3>示例 11 · 断点续采：复用上次状态</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · interval</span>每 5 分钟</span><span class="arr">→</span>
+    <span class="fb"><span class="i">loop-data</span>恢复上次进度 ✓</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>采集写入表格</span><span class="arr">→</span>
+    <span class="fb" style="border-color:var(--c-conditions)"><span class="i">loop-breakpoint</span>断点</span><span class="arr">→</span>
+    <span class="fb"><span class="i">export-data</span>导出（覆盖同名文件）</span>
+  </div>
+  <ul>
+    <li>勾选「工作流设置 → <b>复用上次工作流状态</b>」：下次运行沿用上次的表格、变量与全局数据，采集结果继续追加而不是从零开始。</li>
+    <li>「循环数据」再勾选「<b>恢复上次进度</b>」，中途失败后从上次的循环索引继续，已采集过的不会重跑。</li>
+    <li>想从头重跑：工作流「设置 → 清除缓存」；或在流程开头放一个「删除数据」块选「全部」主动清表。</li>
+    <li>这套组合适合"几分钟跑一批、分多次跑完"的长任务，避免单次运行超时。</li>
+  </ul>
+
+  <h3>示例 12 · 用凭据自动登录</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · visit-web</span>打开登录页触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>账号={{secrets.username}}</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>密码={{secrets.password}}</span><span class="arr">→</span>
+    <span class="fb"><span class="i">handle-dialog</span>接受弹窗</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>登录按钮</span><span class="arr">→</span>
+    <span class="fb"><span class="i">element-exists</span>欢迎横幅？</span><span class="arr">是→</span>
+    <span class="fb"><span class="i">notification</span>登录成功</span>
+    <span class="arr">否→</span>
+    <span class="fb" style="border-color:var(--c-general)"><span class="i">workflow-state</span>停止并抛错</span>
+  </div>
+  <ul>
+    <li>账号密码放<b>凭据</b>里（Dashboard「存储」页 → 凭据），块里用 <code class="inl">{{secrets.名字}}</code> 引用，运行时自动解密，避免明文写进工作流。</li>
+    <li>「处理对话框」要放在<b>触发弹窗的动作之前</b>——它会预先接管页面的 alert / confirm / prompt；prompt 弹窗可填自动输入的文本。</li>
+    <li>「元素存在」块设置「尝试次数 × 每次超时」当轮询用；不存在且勾选「抛出错误」时直接判失败。两个出口分别是"存在/不存在"。</li>
+  </ul>
+
+  <h3>示例 13 · 完整表单：下拉框、单选、复选</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>表单页</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>文本框（延迟 50ms）</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>下拉：按值 / 首项 / 自定义位置</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>单选：选中 ✓</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>复选：选中 ✗</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>提交</span>
+  </div>
+  <ul>
+    <li>下拉框「按值选择」填的是 <code class="inl">&lt;option&gt;</code> 的 <code class="inl">value</code> 属性；拿不准就选「First option / Last option」，或选「Custom」再填位置序号。</li>
+    <li>单选框 / 复选框用「选中状态」开关控制勾选与取消。</li>
+    <li>文本框勾选「清空后输入」避免残留旧值；「输入延迟」设 30–100ms 可模拟真人节奏。</li>
+    <li>每个表单块填完可以勾选「获取表单值」把最终值写回表格，便于留痕核对。</li>
+  </ul>
+
+  <h3>示例 14 · 上传文件</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">active-tab</span>以当前页面为准</span><span class="arr">→</span>
+    <span class="fb"><span class="i">upload-file</span>input[type=file] · 本地路径</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>上传按钮</span>
+  </div>
+  <ul>
+    <li>「上传文件」直接给 <code class="inl">&lt;input type="file"&gt;</code> 塞文件，文件来源支持<b>本地路径</b>或 <b>URL</b>（Firefox 仅支持 URL）；可填多个路径批量上传。</li>
+    <li>上传只是赋值，之后照常「点击元素」提交。「活动标签页」块把"你现在开着的页面"设为工作流的活动页，手动触发场景很常用。</li>
+  </ul>
+
+  <h3>示例 15 · 在 iframe 里操作</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>目标页</span><span class="arr">→</span>
+    <span class="fb"><span class="i">switch-to</span>iframe · 选择器 #pay-iframe</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>卡号 / 有效期</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>iframe 内按钮</span><span class="arr">→</span>
+    <span class="fb"><span class="i">switch-to</span>主窗口</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>页面结果</span>
+  </div>
+  <ul>
+    <li>「切换框架」的窗口类型选 <b>iframe</b> 并填 iframe 选择器；之后所有交互块都在 iframe 内查找。同源 iframe 直接用选择器定位，跨域 iframe 由引擎按 URL 匹配 frameId。</li>
+    <li>操作完务必切回<b>主窗口</b>，否则后续块还在 iframe 里找元素。</li>
+  </ul>
+
+  <h3>示例 16 · 键盘操作</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>聚焦搜索框</span><span class="arr">→</span>
+    <span class="fb"><span class="i">press-key</span>Control+A</span><span class="arr">→</span>
+    <span class="fb"><span class="i">press-key</span>Delete</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>输入新词</span><span class="arr">→</span>
+    <span class="fb"><span class="i">press-key</span>Enter · 长按 100ms</span>
+  </div>
+  <ul>
+    <li>按键名用标准键盘名（<code class="inl">Enter</code>、<code class="inl">Tab</code>、<code class="inl">Control</code>、<code class="inl">Shift</code>、<code class="inl">ArrowDown</code>…），组合键用 <code class="inl">+</code> 连接。</li>
+    <li>「按键」块可直接填「目标元素」，省去先点击聚焦；「按下时长」实现长按（毫秒）。</li>
+  </ul>
+
+  <h3>示例 17 · 悬停展开菜单再点击</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>目标页</span><span class="arr">→</span>
+    <span class="fb"><span class="i">hover-element</span>悬停一级菜单</span><span class="arr">→</span>
+    <span class="fb"><span class="i">delay</span>600ms</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>点击子菜单项</span>
+  </div>
+  <ul>
+    <li>悬停用于展开 hover 菜单 / 触发悬浮预览；菜单是异步渲染的，中间接一个「延迟」等它出现再点。</li>
+  </ul>
+
+  <h3>示例 18 · 读取并设置元素属性</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">loop-elements</span>遍历商品卡</span><span class="arr">→</span>
+    <span class="fb"><span class="i">attribute-value</span>获取 href → 写入表格</span><span class="arr">→</span>
+    <span class="fb"><span class="i">attribute-value</span>设置 data-done=true</span><span class="arr">→</span>
+    <span class="fb" style="border-color:var(--c-conditions)"><span class="i">loop-breakpoint</span>断点</span>
+  </div>
+  <ul>
+    <li>「属性值」块动作分<b>获取 / 设置</b>：获取图片 <code class="inl">src</code>、链接 <code class="inl">href</code>、各种 <code class="inl">data-*</code>；设置方向可以改写属性值。</li>
+    <li>开启「多选」时对匹配到的所有元素批量执行，不必套循环。</li>
+  </ul>
+
+  <h3>示例 19 · 手工派发 DOM 事件</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>填搜索词</span><span class="arr">→</span>
+    <span class="fb"><span class="i">trigger-event</span>input · 元素=输入框</span><span class="arr">→</span>
+    <span class="fb"><span class="i">trigger-event</span>change</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>搜索按钮</span>
+  </div>
+  <ul>
+    <li>「触发器事件」在元素上主动派发 DOM 事件，共 21 种（click / dblclick / mouse 系 / focus / blur / input / change / touch 系 / keydown / keyup / submit / wheel）。</li>
+    <li>事件参数可勾选 <code class="inl">bubbles</code>（事件向上冒泡，多数框架靠它感知）与 <code class="inl">cancelable</code>；鼠标类事件还能传 clientX / clientY。</li>
+    <li>适用场景：页面监听的是特殊事件序列（如 mousedown+mouseup、touch、wheel），普通点击/输入块不生效时的"补刀"。</li>
+  </ul>
+
+  <h3>示例 20 · 注入悬浮工具条（创建元素）</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>目标页</span><span class="arr">→</span>
+    <span class="fb"><span class="i">create-element</span>HTML+CSS+JS · 插入位置=最后子元素 · 目标=body</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>点击注入的按钮</span>
+  </div>
+  <ul>
+    <li>「创建元素」三个页签分别填 HTML / CSS / JS；「插入位置」：之前/之后 = 目标元素内部开头/末尾，前/后兄弟 = 与目标并列，替换 = 换掉目标元素。</li>
+    <li>「预加载脚本」可引第三方库（必须 http/https 地址），JS 里写按钮的点击逻辑，再用「点击元素」块去点它，把注入 UI 与工作流串起来。</li>
+    <li>勾选「页面加载前执行」可在渲染前注入，适合提前打补丁的场景。</li>
+  </ul>
+
+  <h3>示例 21 · 标签页整理器</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">tab-url</span>所有标签页 · 匹配模式 *://*.example.com/*</span><span class="arr">→</span>
+    <span class="fb"><span class="i">close-tab</span>按 URL 匹配模式关闭</span><span class="arr">→</span>
+    <span class="fb"><span class="i">notification</span>已关闭 $getLength([[variables.urls]]) 个</span>
+  </div>
+  <ul>
+    <li>「获取标签页 URL」选「所有标签页」并填匹配模式，返回 URL 数组存进变量；选「活动标签页」则只取当前页。</li>
+    <li>「关闭标签页 / 窗口」按 <b>匹配模式</b>（如 <code class="inl">*://*.example.com/*</code>）一次性关掉所有匹配标签页，或只关当前活动页；「窗口」页签下可关当前窗口甚至所有窗口。</li>
+    <li>通知正文可用函数算数量：<code class="inl">$getLength([[variables.urls]])</code>（函数参数用双方括号引用）。</li>
+  </ul>
+
+  <h3>示例 22 · 批量打开一组链接</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">insert-data</span>变量 urls = JSON 数组</span><span class="arr">→</span>
+    <span class="fb"><span class="i">loop-data</span>id=urls · 遍历=变量 urls</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>{{loopData.urls.data}} · 等待加载 ✓</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>页面标题写入表格</span><span class="arr">→</span>
+    <span class="fb" style="border-color:var(--c-conditions)"><span class="i">loop-breakpoint</span>断点 · id=urls</span><span class="arr">→</span>
+    <span class="fb"><span class="i">export-data</span>导出</span>
+  </div>
+  <ul>
+    <li>「插入数据」目标选变量，值来源选 JSON，粘贴 <code class="inl">["https://a.com","https://b.com"]</code>；「循环数据」遍历目标选变量并填变量名 <code class="inl">urls</code>。</li>
+    <li>要回到"用户正在看的页面"继续操作时，用「活动标签页」；要在已打开的页面间跳转用「切换标签页」——支持按匹配模式 / 标题 / 索引 / 相邻标签查找，找不到时可勾选「自动创建」并填 URL。</li>
+    <li>「新建标签页」还支持自定义 User-Agent、缩放比例、更新原标签页（当前页直接跳转而不是新开）。</li>
+  </ul>
+
+  <h3>示例 23 · 无痕窗口对照测试</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-window</span>无痕 ✓ · 最大化</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>页面登录态文案</span><span class="arr">→</span>
+    <span class="fb"><span class="i">conditions</span>文本包含"请登录"？</span><span class="arr">是→</span>
+    <span class="fb"><span class="i">notification</span>未登录视角正常</span>
+    <span class="arr">否→</span>
+    <span class="fb"><span class="i">close-tab</span>关闭窗口</span>
+  </div>
+  <ul>
+    <li>「新建窗口」支持无痕模式；「窗口状态」正常/最小化/最大化/全屏，位置与宽高仅"正常"状态生效（填 0 表示不改）。</li>
+    <li>无痕窗口不带现有 Cookie，适合验证"未登录/新用户"视角；收尾用「关闭标签页 / 窗口」的「关闭窗口」清理，避免窗口越积越多。</li>
+  </ul>
+
+  <h3>示例 24 · Cookie 备份与恢复</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">备份：</span>cookie 获取全部 → 变量 cookies</span><span class="arr">→</span>
+    <span class="fb"><span class="i">export-data</span>数据源=变量 · JSON</span>
+    <span class="arr">｜</span>
+    <span class="fb"><span class="i">恢复：</span>insert-data 读入变量</span><span class="arr">→</span>
+    <span class="fb"><span class="i">cookie</span>设置 · 使用 JSON={{!variables.cookies}}</span>
+  </div>
+  <ul>
+    <li>「Cookie」块获取页签勾选「获取全部」并填 URL，结果（Cookie 对象数组）存进变量；再用「导出数据」把变量导出成 JSON 文件。</li>
+    <li>恢复时「插入数据」把 JSON 读回变量，Cookie 块「设置」页签勾选「<b>使用 JSON</b>」，内容填 <code class="inl">{{!variables.cookies}}</code>（<code class="inl">!</code> 前缀强制 JSON 序列化）批量写入。</li>
+    <li>单条设置时「过期时间」填的是<b>距现在的秒数</b>（如 86400 = 一天后过期）；「删除」不填名称会删掉该 URL 下所有 Cookie。需授予 cookies 可选权限。</li>
+  </ul>
+
+  <h3>示例 25 · 代理切换采集</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">proxy</span>socks5 · 127.0.0.1:7890 · 绕过 localhost</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>打开目标站</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>采集</span><span class="arr">→</span>
+    <span class="fb"><span class="i">proxy</span>清空代理 ✓（恢复直连）</span>
+  </div>
+  <ul>
+    <li>「代理」块协议选 http/https/socks4/socks5，主机 + 端口分开填，或直接在主机栏写 <code class="inl">socks5://127.0.0.1:7890</code>（自动解析协议与端口）。</li>
+    <li>「绕过列表」逗号分隔不走代理的地址；「清空代理」勾选后恢复浏览器直连——流程结束前记得清掉。</li>
+    <li>想验证代理是否生效，中间可开 <code class="inl">https://api.ipify.org</code> 用「获取文本」读出口 IP。</li>
+  </ul>
+
+  <h3>示例 26 · 等待新标签页出现并接管</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>点击会 window.open 的按钮</span><span class="arr">→</span>
+    <span class="fb"><span class="i">browser-event</span>tab:create · URL 正则 · 设为活动页 ✓</span><span class="arr">→</span>
+    <span class="fb"><span class="i">tab-url</span>活动标签页 → 变量</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>新页内容</span>
+  </div>
+  <ul>
+    <li>「浏览器事件」支持 5 种等待：tab:loaded（等页面加载完，可填逗号分隔的 URL 模式或只等活动页）、tab:close、tab:create、window:create、window:close，默认超时 10 秒。</li>
+    <li>tab:create 可用<b>正则</b>过滤新页 URL，并勾选「设为活动页」——后续块自动在新页里执行。</li>
+  </ul>
+
+  <h3>示例 27 · 定时刷新盯页面变化</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · interval</span>每 10 分钟</span><span class="arr">→</span>
+    <span class="fb"><span class="i">reload-tab</span>刷新</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>价格 → 变量 price</span><span class="arr">→</span>
+    <span class="fb"><span class="i">conditions</span>price 小于目标值？· 不满足重试 3 次/间隔 2s</span><span class="arr">是→</span>
+    <span class="fb"><span class="i">notification</span>降价提醒</span>
+  </div>
+  <ul>
+    <li>「条件」块勾选「<b>不满足则重试</b>」（次数 + 间隔）就是现成的轮询等待，适合等异步渲染；勾选「重试时刷新条件连线」会重新去页面上取值。</li>
+    <li>「重载标签页」刷新当前活动页。把这个流程配上间隔触发器，就是一个极简监控：比较用「取值类型=值」+ <code class="inl">{{variables.price}}</code> + 数值比较。</li>
+  </ul>
+
+  <h3>示例 28 · 返回与前进导航</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>列表页</span><span class="arr">→</span>
+    <span class="fb"><span class="i">link</span>第 1 条结果 · 新标签页打开</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>详情</span><span class="arr">→</span>
+    <span class="fb"><span class="i">go-back</span>后退</span><span class="arr">→</span>
+    <span class="fb"><span class="i">link</span>第 2 条结果</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forward-page</span>前进</span>
+  </div>
+  <ul>
+    <li>「链接」块只作用于 <code class="inl">&lt;a&gt;</code> 元素，勾选「在新标签页打开」时不离开当前页；「返回」「前进」即浏览器历史导航。</li>
+    <li>不加跳转的纯浏览场景（详情页很大或要滚动）才需要打开新页；如果详情数据在 DOM 里就有，直接多选「获取文本」更快。</li>
+  </ul>
+
+  <h3>示例 29 · 点击下载并重命名</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>报表页</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>导出按钮（触发下载）</span><span class="arr">→</span>
+    <span class="fb"><span class="i">handle-download</span>文件名=报表-{{$date('YYYYMMDD')}}.xlsx · 等待完成 ✓ · 超时 60s</span><span class="arr">→</span>
+    <span class="fb"><span class="i">notification</span>下载完成</span>
+  </div>
+  <ul>
+    <li>「处理下载」放在<b>触发下载的动作之后</b>：等待本次下载完成、按「文件名」重命名（支持表达式），最终文件名可写入表格 / 变量。</li>
+    <li>「冲突处理」：uniquify 自动加序号、overwrite 覆盖；不勾「等待文件完成」则记个名就走。需 downloads 可选权限。</li>
+    <li>拿到的文件名可继续喂给「Google Drive」块上传（见示例 30）。</li>
+  </ul>
+
+  <h3>示例 30 · 批量存图并上传 Google Drive</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>图集页</span><span class="arr">→</span>
+    <span class="fb"><span class="i">loop-elements</span>遍历 img.cover</span><span class="arr">→</span>
+    <span class="fb"><span class="i">attribute-value</span>取 src → 变量 imgUrl</span><span class="arr">→</span>
+    <span class="fb"><span class="i">save-assets</span>来源=URL={{variables.imgUrl}} · 存下载 ID ✓</span><span class="arr">→</span>
+    <span class="fb" style="border-color:var(--c-conditions)"><span class="i">loop-breakpoint</span>断点</span><span class="arr">→</span>
+    <span class="fb"><span class="i">google-drive</span>来源=Download id={{table.$last.downloadId}}</span>
+  </div>
+  <ul>
+    <li>「保存资源」两种来源：<b>页面媒体元素</b>（直接填选择器，批量下载匹配到的图片/视频/音频）或<b>按 URL</b> 保存。「保存下载 ID」把每次下载的 ID 写入表格 / 变量。</li>
+    <li>「Google Drive」块的文件来源支持 URL / 本地路径 / <b>Download id</b>；用 <code class="inl">{{table.$last.downloadId}}</code> 引用刚下载的那条。文件名留空则取 URL 里的原始文件名。</li>
+    <li>前提：登录 Automa 账号并在官网 <b>Integrations</b> 里连接 Google Drive（块配置页有引导链接）。</li>
+  </ul>
+
+  <h3>示例 31 · 整页截图存档</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · cron-job</span>每天 18:00</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>监控页</span><span class="arr">→</span>
+    <span class="fb"><span class="i">take-screenshot</span>类型=整页 · 文件名=shot-{{$date('YYYY-MM-DD')}} · 存表格 ✓</span><span class="arr">→</span>
+    <span class="fb"><span class="i">notification</span>截图完成</span>
+  </div>
+  <ul>
+    <li>「截屏」类型：当前视口 / <b>整页</b>（自动滚动拼接）/ 指定元素（填选择器）。</li>
+    <li>「保存到计算机」默认开；也可以关掉它，只把 dataURL 写入表格或变量，再交给「HTTP 请求」上传到自己的服务。</li>
+    <li>JPEG 格式可调质量（0–100）换体积。</li>
+  </ul>
+
+  <h3>示例 32 · 分段滚动长图（重复任务组合）</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">insert-data</span>变量 idx = 0</span><span class="arr">→</span>
+    <span class="fb"><span class="i">repeat-task</span>重复 5 次 · 出口2</span><span class="arr">→</span>
+    <span class="fb"><span class="i">take-screenshot</span>part-{{variables.idx}}.png</span><span class="arr">→</span>
+    <span class="fb"><span class="i">increase-variable</span>idx +1</span><span class="arr">→</span>
+    <span class="fb"><span class="i">element-scroll</span>垂直 +800 · 平滑 ✓</span><span class="arr">↺</span><span class="fb">连回重复块</span>
+    <span class="arr">出口1→</span>
+    <span class="fb"><span class="i">notification</span>5 段截完</span>
+  </div>
+  <ul>
+    <li>「重复任务」的两个出口：<b>出口 2 连循环体</b>，循环体末尾连回重复块；重复满次数后才走<b>出口 1</b> 继续。重复块本身没有计数变量，配「增加变量」给文件编号。</li>
+    <li>「滚动元素」可填精确的垂直/水平距离，勾「平滑」更接近真人；「滚动到可视区域」模式能把指定元素滚进视野。</li>
+  </ul>
+
+  <h3>示例 33 · 定时触发器的四种配法</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">interval</span>每 30 分钟 + 固定延迟</span><span class="arr">｜</span>
+    <span class="fb"><span class="i">specific-day</span>周一~周五 · 09:00 / 18:00</span><span class="arr">｜</span>
+    <span class="fb"><span class="i">date</span>2026-10-01 09:00 一次性</span><span class="arr">｜</span>
+    <span class="fb"><span class="i">on-startup</span>浏览器启动即执行</span>
+  </div>
+  <ul>
+    <li>「间隔」的「固定延迟」= 以上一次运行<b>结束</b>为基准计时，长任务不会叠加执行；不勾则按固定节奏触发。</li>
+    <li>「在指定的星期」可多选星期几并添加多个时间点；「在指定日期」到点只跑一次，适合一次性提醒。</li>
+    <li>「浏览器启动时」与「右键菜单」全局各只能有一个；同一工作流可以叠加多个触发器，任一命中即运行。所有定时可在 Dashboard「计划任务」页统一查看与启停。</li>
+  </ul>
+
+  <h3>示例 34 · 访问网页即自动执行</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · visit-web</span>URL 匹配 https://oa.company.com/login</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>账号={{secrets.username}}</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>密码={{secrets.password}}</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>登录</span>
+  </div>
+  <ul>
+    <li>「访问网站时」触发器：打开匹配网址即自动运行，支持填正则（勾选「使用正则表达式」）；SPA 页面勾选对应选项，history 路由变化也会触发。</li>
+    <li>注意防重入：登录成功后跳转的页面若仍匹配触发规则会造成循环触发，触发地址要写得足够具体（只匹配登录页）。</li>
+  </ul>
+
+  <h3>示例 35 · 页面元素变化即触发（element-change）</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · element-change</span>监测 #price · 网站匹配 https://shop.example.com/product/*</span><span class="arr">→</span>
+    <span class="fb"><span class="i">get-text</span>价格写入表格</span><span class="arr">→</span>
+    <span class="fb"><span class="i">webhook</span>POST 通知服务</span><span class="arr">→</span>
+    <span class="fb"><span class="i">notification</span>价格变动</span>
+  </div>
+  <ul>
+    <li>触发器类型选「<b>元素更改时</b>」：填目标元素所在网站的匹配模式与要监测的元素选择器。</li>
+    <li>突变选项决定"什么变化算数"：子列表（节点增删）、属性（可加属性过滤，逗号分隔属性名）、字符数据（文本变化）、包含子树（扩大到整个子树）；「基础元素」可先监测一个外层容器，它变化时重新开始监测目标。</li>
+    <li>适合价格、库存、状态徽标等由脚本动态更新的内容，一变就跑。</li>
+  </ul>
+
+  <h3>示例 36 · 右键菜单小工具</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · context-menu</span>菜单位置=选中文本 · 名字"搜索它"</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>https://www.bing.com/search?q={{variables.$ctxTextSelection}}</span>
+    <span class="arr">｜</span>
+    <span class="fb"><span class="i">另一工作流：菜单位置=图片</span></span><span class="arr">→</span>
+    <span class="fb"><span class="i">save-assets</span>URL={{variables.$ctxMediaUrl}}</span>
+  </div>
+  <ul>
+    <li>右键菜单触发会把<b>右键目标</b>注入为变量：<code class="inl">$ctxTextSelection</code> 选中的文本、<code class="inl">$ctxLink</code> 链接地址、<code class="inl">$ctxMediaUrl</code> 图片/媒体地址、<code class="inl">$ctxElSelector</code> 右键元素的 CSS 选择器，用 <code class="inl">{{variables.$ctxXxx}}</code> 引用。</li>
+    <li>菜单类型（页面/链接/图片/选中文本…）可多选；全局只能有一个右键菜单触发器，需授予 contextMenus 权限。</li>
+  </ul>
+
+  <h3>示例 37 · 快捷键 + 剪贴板</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · keyboard-shortcut</span>录制 Ctrl+Alt+E</span><span class="arr">→</span>
+    <span class="fb"><span class="i">clipboard</span>读取 → 变量 clip</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>粘贴 {{variables.clip}}</span><span class="arr">→</span>
+    <span class="fb"><span class="i">event-click</span>提交</span>
+  </div>
+  <ul>
+    <li>键盘快捷键触发<b>仅在访问网页时生效</b>（浏览器限制）；勾选「输入时激活」可在输入框内也响应。</li>
+    <li>「剪贴板」块读取=把剪贴板内容存变量/表格；写入=把指定文本放进剪贴板，勾选「复制页面选中文本」则取当前选中内容。</li>
+    <li><b>Chrome（MV3）下剪贴板块不支持后台（Background）执行</b>，请把工作流执行环境设为 Popup。</li>
+  </ul>
+
+  <h3>示例 38 · 运行前收集参数</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual + 参数</span>keyword（文本，默认"手机"）</span><span class="arr">→</span>
+    <span class="fb"><span class="i">new-tab</span>https://s.example.com?q={{variables.keyword}}</span><span class="arr">→</span>
+    <span class="fb"><span class="i">parameter-prompt</span>中途追问：页码（超时 60s）</span><span class="arr">→</span>
+    <span class="fb"><span class="i">loop-data</span>数字 1→{{variables.页码}}</span>
+  </div>
+  <ul>
+    <li>触发器的「Parameters」里定义参数（名称/类型/默认值），运行时弹窗收集，参数名即变量名；勾选「优先在标签页中输入」则直接在当前网页顶部弹输入条。</li>
+    <li>「参数提示」块让流程<b>中途</b>再向用户要一次输入（可多个参数），超时（默认 60 秒）后按空值继续。</li>
+    <li>一份工作流服务多个关键词/站点时，比复制多份更省事。</li>
+  </ul>
+
+  <h3>示例 39 · 主流程调度子工作流</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">execute-workflow</span>子流程"采集" · 执行Id=scrape · 插入所有变量 ✓ · 插入全部全局数据 ✓</span><span class="arr">→</span>
+    <span class="fb"><span class="i">export-data</span>导出（已并入子流程结果）</span><span class="arr">→</span>
+    <span class="fb"><span class="i">log-data</span>读取"采集"的日志 → 表格</span>
+  </div>
+  <ul>
+    <li>「执行工作流」会<b>等子流程跑完</b>再继续；执行前可传入变量（插入全部，或按名列表）与全局数据（勾选"插入全部"或在文本框填 JSON 覆盖）。</li>
+    <li>子流程结束后它的表格与变量会<b>合并回父流程</b>；流程中也可精确引用：<code class="inl">{{workflow.scrape.table.0.title}}</code>、<code class="inl">{{workflow.scrape.variables.名称}}</code>（<code class="inl">scrape</code> 是执行 Id）。</li>
+    <li>子流程出错会作为本块的错误抛出，接「出错时 → 执行"否"分支」可做降级。</li>
+    <li>「获取日志数据」块选目标工作流，把它的执行日志（JSON）写入表格 / 变量——存档审计或用「HTTP 请求」推送到监控系统都行。</li>
+  </ul>
+
+  <h3>示例 40 · 并行分支汇合与画布整理</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger</span>手动触发</span><span class="arr">→</span>
+    <span class="fb">分支A：webhook GET 汇率</span><span class="arr">＋</span>
+    <span class="fb">分支B：get-text 页面标题</span><span class="arr">→</span>
+    <span class="fb"><span class="i">wait-connections</span>超时 15s</span><span class="arr">→</span>
+    <span class="fb"><span class="i">data-mapping</span>合成一行写入表格</span><span class="arr">→</span>
+    <span class="fb"><span class="i">notification</span>完成</span>
+  </div>
+  <ul>
+    <li>从同一个输出端口拖出<b>两条连线</b>就是并行分支，两个分支同时跑；「等待连接」块卡住直到所有连进来的分支都到齐（或超时放行）。「只等待指定分支」可只等某一条线。</li>
+    <li>画布整理：选中多个块收进「<b>模块组</b>」折叠成一个整体（组内不能放触发器、条件、循环等控制块）；「<b>注释</b>」块当便签，6 种颜色、可调字号，还能切手绘模式。</li>
+  </ul>
+
+  <h3>示例 41 · 失败自动重试的三种做法</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">event-click</span>抢购按钮</span><span class="arr">→</span>
+    <span class="fb"><span class="i">repeat-task</span>重复 3 次 · 出口2</span><span class="arr">→</span>
+    <span class="fb"><span class="i">element-exists</span>订单确认页？</span><span class="arr">是→</span>
+    <span class="fb"><span class="i">notification</span>成功（线直接连到出口1下游，提前跳出）</span>
+    <span class="arr">否→</span>
+    <span class="fb"><span class="i">delay</span>2s</span><span class="arr">↺</span><span class="fb">连回重复块</span>
+  </div>
+  <ul>
+    <li><b>重复任务</b>：整体动作级重试，成功条件满足时把线连到"出口 1 的下游"即可提前跳出。</li>
+    <li><b>块级「出错时 → 重试操作」</b>：单块失败按次数+间隔重试，不用画任何循环，最简单。</li>
+    <li><b>「条件」块的「不满足则重试」</b>：等异步数据 / 等元素出现，带次数与间隔。</li>
+    <li>三者按粒度选：等数据用条件重试，单块不稳用出错时重试，整套动作要重来用重复任务。</li>
+  </ul>
+
+  <h3>示例 42 · 工作流状态控制（急停开关）</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">conditions</span>当前时间在工作时段？</span><span class="arr">否→</span>
+    <span class="fb"><span class="i">workflow-state</span>停止当前 · 抛出错误 ✓ · "非工作时间"</span>
+    <span class="arr">｜</span>
+    <span class="fb"><span class="i">另一工作流（一键清理）：</span></span><span class="arr">→</span>
+    <span class="fb"><span class="i">workflow-state</span>停止全部 · 排除当前 ✓</span>
+  </div>
+  <ul>
+    <li>「停止当前」结束本工作流；勾选「抛出错误」则日志里显示为失败并带上你写的错误信息，方便区分"正常停止"和"异常终止"。</li>
+    <li>「停止指定」从列表里挑工作流，「停止全部」配合「排除当前」可以保留自己、清掉其它所有正在运行的工作流。作用对象是<b>正在运行</b>的工作流状态。</li>
+  </ul>
+
+  <h3>示例 43 · 用块包封装可复用流程</h3>
+  <div class="flow">
+    <span class="fb">Dashboard「块包」页面</span><span class="arr">→</span>
+    <span class="fb">新建块包：框选/搭建内部块 · 定义输入/输出端口 · 命名保存</span><span class="arr">→</span>
+    <span class="fb"><span class="i">block-package</span>在工作流里拖入「块包」块并选择它</span>
+  </div>
+  <ul>
+    <li>块包 = 把一段常用流程（如"登录某网站""滚动到底加载"）封装成<b>单个块</b>，包内定义的输入/输出端口就是这个块对外的连线点。</li>
+    <li>适合沉淀团队公共动作；轻量复用也可以用「执行工作流」块直接调用另一个工作流，二者的差别是块包在画布上就是一个块、随工作流一起保存。</li>
+  </ul>
+
+  <h3>示例 44 · JS 代码块跨域抓取</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">trigger · manual</span>手动触发</span><span class="arr">→</span>
+    <span class="fb"><span class="i">javascript-code</span>automaFetch 抓接口</span><span class="arr">→</span>
+    <span class="fb"><span class="i">conditions</span>数据有效？</span><span class="arr">→</span>
+    <span class="fb"><span class="i">insert-data</span>写入表格</span>
+  </div>
+  <pre><span class="cm">// 上下文选「当前标签页」，用页面身份发请求，绕过 CORS</span>
+automaResetTimeout();
+const res = await automaFetch('json', {
+  url: 'https://api.example.com/v1/list?page=1',
+  method: 'GET',
+});
+automaSetVariable('apiTotal', res.total);
+automaSetVariable('$push:names', res.items[0].name);
+automaNextBlock({ insert: { ok: true } });</pre>
+  <ul>
+    <li><code class="inl">automaFetch(type, resource)</code> 的 type 取 <code class="inl">text / json / base64</code>，resource 与 fetch 参数一致。</li>
+    <li>异步代码记得调用 <code class="inl">automaResetTimeout()</code> 防止块超时（默认 20 秒）；<code class="inl">$push:</code> 前缀向数组变量追加。更多写法见<a href="#js">第 10 节</a>。</li>
+  </ul>
+
+  <h3>示例 45 · Google Sheets 全动作速用</h3>
+  <div class="flow">
+    <span class="fb"><span class="i">google-sheets</span>获取（参考键 sheet123 · 首行作键 ✓）</span><span class="arr">→</span>
+    <span class="fb"><span class="i">loop-data</span>遍历=Google Sheets · 参考键 sheet123</span><span class="arr">→</span>
+    <span class="fb"><span class="i">forms</span>{{loopData.x.data.关键词}} 逐条处理</span><span class="arr">→</span>
+    <span class="fb" style="border-color:var(--c-conditions)"><span class="i">loop-breakpoint</span>断点</span><span class="arr">→</span>
+    <span class="fb"><span class="i">google-sheets</span>追加（数据来自表格 · 首行为键 ✓）</span>
+  </div>
+  <ul>
+    <li>七个动作：<b>获取</b>（结果存参考键，供循环/导出复用）、<b>获取范围</b>（返回 tableRange / lastRange）、<b>更新</b>（覆盖写）、<b>追加</b>（INSERT_ROWS）、<b>清除</b>（清空范围）、<b>创建表格</b>（返回新表格 ID，可存变量）、<b>添加工作表</b>。</li>
+    <li>写入方向「首行为键」勾选时按"列名→值"映射表格列；「值输入选项」RAW 原样写入、USER_ENTERED 让 Google 解析公式与数字。</li>
+    <li>「Google Sheets (GDrive)」是同能力的 Drive 版：表格从连接的 Google Drive 里直接选，配置更省事。首次使用都会引导 OAuth 授权。</li>
+  </ul>
+
+  <div class="note tip"><b>模块覆盖一览：</b>示例 1–45 覆盖了全部 61 个内置模块（唯一例外是「AI 工作流」——它依赖 AI Power 云端服务与专用令牌）。同一个模块在不同示例里的用法可以互相组合，例如「循环元素 + 属性值 + 保存资源 + Google Drive」串成一条完整的图片采集管线。</div>
+</section>
+
+<!-- ============ 12 ============ -->
+<section id="settings">
+  <h2><span class="num">12</span>工作流设置</h2>
+  <p>在工作流编辑器的「设置」面板中分为 <b>常规 / 块 / 表格 / 事件</b> 四组。</p>
+  <div class="tw"><table>
+    <thead><tr><th>设置项</th><th>作用</th></tr></thead>
+    <tbody>
+      <tr><td class="nw"><b>工作流执行环境</b></td><td><code class="inl">Popup</code> 或 <code class="inl">Background</code>。<b>运行超过 5 分钟的工作流请使用 Popup</b>；后台环境在 MV3 Service Worker 中执行，长时间无事件可能被浏览器挂起。Firefox 下此选项不显示</td></tr>
+      <tr><td class="nw">出错时</td><td>继续运行 / 停止工作流 / 重启工作流（可设最大重启次数）</td></tr>
+      <tr><td class="nw">完成通知</td><td>执行结束后弹出成功 / 失败通知（需 notifications 权限）</td></tr>
+      <tr><td class="nw">调试模式</td><td>用 Chrome DevTools 协议执行，便于抓包与排查；Firefox 不支持</td></tr>
+      <tr><td class="nw">自动补全</td><td>在输入框中提示变量 / 函数；若导致扩展不稳定可关闭</td></tr>
+      <tr><td class="nw">复用上次工作流状态</td><td>沿用上一次运行的表格、变量与全局数据（断点续跑场景）</td></tr>
+      <tr><td class="nw">保存工作流日志</td><td>默认开启；可在「设置 → 日志」里设自动清理天数与条数上限</td></tr>
+      <tr><td class="nw">在网页上显示已执行的块</td><td>运行时高亮当前块，调试利器</td></tr>
+      <tr><td class="nw">块延迟（ms）</td><td>每个块执行前的统一等待，用于降低请求频率</td></tr>
+      <tr><td class="nw">标签页加载超时（ms）</td><td>等待标签页加载的上限，0 表示不限制</td></tr>
+      <tr><td class="nw">工作流超时（ms）</td><td>整条流程的最长执行时间</td></tr>
+      <tr><td class="nw">插入到默认列</td><td>块中未选列时，写入指定名称的默认列</td></tr>
+      <tr><td class="nw">清除缓存</td><td>清除该工作流的状态与循环索引，便于从头重跑</td></tr>
+      <tr><td class="nw">Workflow public ID</td><td>供外部网页用自定义事件触发本工作流</td></tr>
+      <tr><td class="nw">保护工作流</td><td>设置密码，之后编辑或删除都需要验证</td></tr>
+      <tr><td class="nw">工作流事件</td><td>「执行成功」「执行失败」时触发自定义动作：执行 JS 代码或发起 HTTP 请求</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>12.1 存储（Storage）</h3>
+  <p>「存储」页面可以创建<b>跨工作流共享的数据表</b>，并在工作流中连接使用 —— 适合做长期累积的数据仓库，避免每次运行都从零开始。</p>
+</section>
+
+<!-- ============ 13 ============ -->
+<section id="share">
+  <h2><span class="num">13</span>导入导出与协作</h2>
+  <div class="tw"><table>
+    <thead><tr><th>方式</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">导出工作流</td><td>生成 <code class="inl">&lt;名称&gt;.automa.json</code>；若工作流调用了其它工作流，会自动把被调用者打包进 <code class="inl">includedWorkflows</code>（最多 3 层嵌套）</td></tr>
+      <tr><td class="nw">导入工作流</td><td>选择 <code class="inl">.automa.json</code> 导入，并自动注册其中的触发器</td></tr>
+      <tr><td class="nw">集合 Collection</td><td>把多个工作流排成序列依次执行，可开启「同时执行全部」</td></tr>
+      <tr><td class="nw">分享</td><td>发布为公开链接（可填描述与分类），他人可下载到本地或直接在线运行</td></tr>
+      <tr><td class="nw">托管 / Host</td><td>把工作流托管到云端，得到 Host ID，可在其它设备同步 / 引用</td></tr>
+      <tr><td class="nw">团队协作</td><td>登录账号后把工作流共享给团队成员，并按角色（所有者 / 可创建）授权</td></tr>
+      <tr><td class="nw">本地备份</td><td>「设置 → 备份工作流 → 本地」：可加密码加密、定时自动备份，并支持恢复（可选择是否覆盖同名工作流）</td></tr>
+      <tr><td class="nw">云备份</td><td>登录后把选定工作流同步到云端，可手动或定时同步</td></tr>
+      <tr><td class="nw">模板市场</td><td><a href="https://extension.automa.site/marketplace" target="_blank" rel="noopener">extension.automa.site/marketplace</a> 浏览与下载他人分享的工作流</td></tr>
+      <tr><td class="nw">扩展构建器</td><td><a href="https://docs.extension.automa.site/extension-builder" target="_blank" rel="noopener">Automa CEB</a> 可把工作流打包成独立的 Chrome 扩展</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note tip"><b>内置示例：</b>首次使用时 Automa 会导入若干示例工作流，可直接参考：Twitter 热搜写入 Google Sheets、Google 搜索、生成 Lorem Ipsum、抓取 ProductHunt、Google 关键词研究。</div>
+</section>
+
+<!-- ============ 14 ============ -->
+<section id="perm">
+  <h2><span class="num">14</span>权限说明</h2>
+  <p>Automa 采用「最小权限」策略：基础权限安装即有，其余按需申请。</p>
+  <div class="tw"><table>
+    <thead><tr><th>权限</th><th>类型</th><th>用途</th><th>谁需要</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">tabs / activeTab</td><td>基础</td><td>创建、切换、关闭标签页</td><td>所有工作流</td></tr>
+      <tr><td class="mono">alarms</td><td>基础</td><td>定时触发（间隔 / Cron / 指定日期）</td><td>定时类工作流</td></tr>
+      <tr><td class="mono">storage / unlimitedStorage</td><td>基础</td><td>保存工作流、日志、备份</td><td>所有工作流</td></tr>
+      <tr><td class="mono">scripting / debugger</td><td>基础</td><td>注入内容脚本、执行 JS、调试模式</td><td>网页交互类块</td></tr>
+      <tr><td class="mono">webNavigation / offscreen / proxy</td><td>基础</td><td>标签页加载事件、后台文档、代理设置</td><td>浏览器类块</td></tr>
+      <tr><td class="mono">cookies</td><td>可选</td><td>读取 / 设置 / 删除 Cookie</td><td>「Cookie」块</td></tr>
+      <tr><td class="mono">downloads</td><td>可选</td><td>保存资源、处理下载</td><td>「保存资源」「处理下载」块</td></tr>
+      <tr><td class="mono">contextMenus</td><td>可选</td><td>右键菜单触发</td><td>「右键菜单」触发器</td></tr>
+      <tr><td class="mono">clipboardRead</td><td>可选</td><td>读写剪贴板</td><td>「剪贴板」块</td></tr>
+      <tr><td class="mono">notifications</td><td>可选</td><td>系统通知</td><td>「通知」块 / 完成通知</td></tr>
+    </tbody>
+  </table></div>
+  <p>Manifest 中还申请了 <code class="inl">&lt;all_urls&gt;</code> 作为主机权限，并声明了仅在 <code class="inl">localhost</code> 与 <code class="inl">*.automa.site</code> 上运行的内容脚本（用于对接官网服务）。</p>
+</section>
+
+<!-- ============ 15 ============ -->
+<section id="faq">
+  <h2><span class="num">15</span>常见问题</h2>
+  <div class="tw"><table>
+    <thead><tr><th>问题</th><th>解答</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">工作流跑到一半就停了？</td><td>多半是超过「工作流超时」或浏览器把 MV3 后台页挂起。把执行环境改为 <b>Popup</b>，并调大超时。</td></tr>
+      <tr><td class="nw">找不到元素？</td><td>开启「等待选择器」并延长超时；对动态渲染的页面，用「浏览器事件 → tab:loaded」或「条件 + 重试」等待渲染完成。</td></tr>
+      <tr><td class="nw">循环只跑了一轮？</td><td>循环体末尾缺少「循环断点」，或断点的循环 ID 与循环数据块不一致。</td></tr>
+      <tr><td class="nw">表格里数据串行 / 覆盖了？</td><td>同一列的多次写入会逐行追加；若要写同一行，请显式指定行索引（如 <code class="inl">{{table.0.x}}</code>）。</td></tr>
+      <tr><td class="nw">CSV 在 Excel 里中文乱码？</td><td>「导出数据」中勾选「添加 UTF-8 BOM」。</td></tr>
+      <tr><td class="nw">选择器失效？</td><td>避免依赖自动生成的 class 名（常含哈希），改用稳定的 <code class="inl">id</code>、<code class="inl">name</code>、<code class="inl">data-*</code> 属性或 XPath。</td></tr>
+      <tr><td class="nw">修改了工作流但运行的是旧版？</td><td>记得保存（<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>）；若开启了「执行时自动保存」则无需手动保存。</td></tr>
+      <tr><td class="nw">换设备后工作流不见了？</td><td>使用「设置 → 备份工作流」导出备份文件，或登录账号做云备份。</td></tr>
+      <tr><td class="nw">想复用一段流程？</td><td>封装成<b>块包</b>（Packages 页面），或改用「执行工作流」块调用子流程。</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ 16 ============ -->
+<section id="dev">
+  <h2><span class="num">16</span>二次开发</h2>
+  <h3>16.1 目录结构</h3>
+  <div class="tw"><table>
+    <thead><tr><th>路径</th><th>职责</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">src/background/</td><td>后台 Service Worker：工作流调度、消息路由</td></tr>
+      <tr><td class="mono">src/content/</td><td>注入页面的内容脚本：元素查找、交互、选择器</td></tr>
+      <tr><td class="mono">src/workflowEngine/</td><td><b>执行引擎</b>：<code>WorkflowEngine.js</code>（总控）、<code>WorkflowWorker.js</code>（单个块的执行）、<code>blocksHandler/</code>（每个块的处理函数）、<code>templating/</code>（<code>{{}}</code> 与函数解析）</td></tr>
+      <tr><td class="mono">src/newtab/</td><td>控制面板（Dashboard）页面与路由</td></tr>
+      <tr><td class="mono">src/popup/</td><td>工具栏弹出面板</td></tr>
+      <tr><td class="mono">src/components/block/</td><td>块在画布上的渲染组件（普通块、延迟、条件、循环、组、注释…）</td></tr>
+      <tr><td class="mono">src/components/newtab/workflow/edit/</td><td>各块右侧配置面板（<code>Edit*.vue</code>）与触发器配置（<code>Trigger/</code>）</td></tr>
+      <tr><td class="mono">src/utils/shared.js</td><td><b>块的注册表</b>：名称、图标、分类、默认数据、可引用字段</td></tr>
+      <tr><td class="mono">src/utils/constants/</td><td>列类型、事件列表等常量</td></tr>
+      <tr><td class="mono">src/stores/</td><td>Pinia 状态（工作流、文件夹、用户、托管工作流…）</td></tr>
+      <tr><td class="mono">src/db/</td><td>Dexie 数据库：工作流、变量、凭据、存储表、日志</td></tr>
+      <tr><td class="mono">src/locales/</td><td>10 种语言的翻译文件（<code>blocks.json</code> / <code>newtab.json</code> / <code>common.json</code> / <code>popup.json</code>）</td></tr>
+      <tr><td class="mono">src/manifest.*.json</td><td>三份扩展清单</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>16.2 新增一个自定义块</h3>
+  <ol>
+    <li>在 <code class="inl">src/utils/shared.js</code> 的 <code class="inl">tasks</code> 中登记：<code>name</code>、<code>description</code>、<code>icon</code>、<code>category</code>、<code>inputs</code>/<code>outputs</code>、<code>maxConnection</code>、<code>refDataKeys</code>（允许 <code>{{}}</code> 引用的字段）以及 <code>data</code> 默认值。</li>
+    <li>在 <code class="inl">src/workflowEngine/blocksHandler/</code> 新建 <code>handlerXxx.js</code>，默认导出 <code>async function (block, prevData, ...)</code>，返回 <code>{ data, nextBlockId }</code>。</li>
+    <li>在 <code class="inl">blocksHandler.js</code> 中注册到映射表。</li>
+    <li>（可选）在 <code class="inl">src/components/newtab/workflow/edit/</code> 新增 <code>EditXxx.vue</code> 配置面板，并在块定义里用 <code>editComponent</code> 指向它。</li>
+    <li>在 <code class="inl">src/locales/*/blocks.json</code> 补充多语言文案。</li>
+  </ol>
+
+  <h3>16.3 工作流数据结构（导出 JSON）</h3>
+<pre>{
+  "name": "工作流名称",
+  "description": "",
+  "icon": "",
+  "version": "1.30.00",
+  "extVersion": "1.30.00",
+  "globalData": "{}",          <span class="cm">// 全局数据（JSON 文本）</span>
+  "table": [                    <span class="cm">// 数据表格：列定义</span>
+    { "id": "abc", "name": "title", "type": "string" }
+  ],
+  "settings": {                 <span class="cm">// 见第 12 节</span>
+    "saveLog": true, "execContext": "popup", "onError": "keep-running",
+    "timeout": 0, "blockDelay": 0, "debugMode": false, "publicId": ""
+  },
+  "drawflow": {
+    "nodes": [ { "id": "...", "label": "trigger", "data": { ... } } ],
+    "edges": [ { "source": "...", "target": "...", ... } ]
+  },
+  "includedWorkflows": { }      <span class="cm">// 被本工作流调用的子工作流</span>
+}</pre>
+  <div class="note"><b>兼容性：</b>导入时会自动把旧字段 <code class="inl">dataColumns</code> 迁移为 <code class="inl">table</code>，并兼容 drawflow 字符串形式的历史数据。</div>
+</section>
+
+<footer>
+  <div>Automa 使用说明 · 依据仓库 <code>D:\project\automa</code>（v1.30.00）源码整理</div>
+  <div style="margin-top:8px">
+    <a href="https://docs.extension.automa.site" target="_blank" rel="noopener">官方文档</a>·
+    <a href="https://github.com/AutomaApp/automa" target="_blank" rel="noopener">GitHub</a>·
+    <a href="https://extension.automa.site/marketplace" target="_blank" rel="noopener">模板市场</a>·
+    <a href="https://discord.gg/C6khwwTE84" target="_blank" rel="noopener">Discord</a>
+  </div>
+</footer>
+
+</main>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById('themeBtn');
+  var saved = null;
+  try { saved = localStorage.getItem('automa-doc-theme'); } catch (e) {}
+  if (saved) root.setAttribute('data-theme', saved);
+  btn.addEventListener('click', function () {
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('automa-doc-theme', next); } catch (e) {}
+  });
+
+  // TOC scroll spy
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var secs = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  function spy() {
+    var y = window.scrollY + 120, idx = 0;
+    for (var i = 0; i < secs.length; i++) { if (secs[i] && secs[i].offsetTop <= y) idx = i; }
+    links.forEach(function (a, i) { a.classList.toggle('active', i === idx); });
+  }
+  window.addEventListener('scroll', spy, { passive: true });
+  spy();
+
+  // block table filter
+  var btns = Array.prototype.slice.call(document.querySelectorAll('.fbtn'));
+  var tables = Array.prototype.slice.call(document.querySelectorAll('.block-table'));
+  var heads = Array.prototype.slice.call(document.querySelectorAll('#blocks h3'));
+  var search = document.getElementById('blockSearch');
+  var empty = document.getElementById('blockEmpty');
+  var cur = 'all';
+
+  function apply() {
+    var q = (search.value || '').trim().toLowerCase();
+    var shown = 0;
+    tables.forEach(function (tb) {
+      var catOk = cur === 'all' || tb.dataset.cat === cur;
+      var rowShown = 0;
+      Array.prototype.forEach.call(tb.querySelectorAll('tbody tr'), function (tr) {
+        var hit = !q || tr.textContent.toLowerCase().indexOf(q) !== -1;
+        var ok = catOk && hit;
+        tr.style.display = ok ? '' : 'none';
+        if (ok) rowShown++;
+      });
+      var vis = catOk && rowShown > 0;
+      tb.style.display = vis ? '' : 'none';
+      if (vis) shown += rowShown;
+    });
+    heads.forEach(function (h) {
+      var n = h.nextElementSibling;
+      while (n && n.tagName !== 'H3' && n.tagName !== 'DIV') n = n.nextElementSibling;
+      var t = n && n.querySelector ? n.querySelector('.block-table') : null;
+      h.style.display = t && t.style.display !== 'none' ? '' : 'none';
+    });
+    empty.style.display = shown ? 'none' : '';
+  }
+  btns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      cur = b.dataset.cat;
+      apply();
+    });
+  });
+  search.addEventListener('input', apply);
+})();
+</script>
+</body>
+</html>
