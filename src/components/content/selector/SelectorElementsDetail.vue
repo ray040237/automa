@@ -1,6 +1,5 @@
 <template>
   <ui-tabs
-    v-if="!hideBlocks || selectElements.length > 0"
     :model-value="activeTab"
     class="mt-2"
     fill

@@ -418,6 +418,7 @@ browser.runtime.onConnect.addListener((port) => {
   // (elementSelectorInstance() only flips display:block on the destroyed card)
   state.hide = false;
   state.showSettings = false;
+  state.activeTab = 'attributes';
   state.elSelector = '';
   state.interact = false;
   state.selectedElements = [];
