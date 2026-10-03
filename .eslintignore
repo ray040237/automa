@@ -1,0 +1,4 @@
+
+
+# agent 测试桩：.mjs + 顶层 await，不参与 lint
+.agent-test/stubs/
