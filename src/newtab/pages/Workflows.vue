@@ -37,9 +37,31 @@
           </button>
         </template>
       </draggable>
-      <button class="h-full px-2" @click="addTab()">
-        <v-remixicon name="riAddLine" />
-      </button>
+      <ui-popover>
+        <template #trigger>
+          <button class="h-full px-2">
+            <v-remixicon name="riAddLine" />
+          </button>
+        </template>
+        <ui-list class="space-y-1">
+          <ui-list-item
+            v-close-popover
+            class="cursor-pointer"
+            @click="addTab()"
+          >
+            <v-remixicon name="riFlowChart" class="mr-2" />
+            {{ t('workflow.new') }}
+          </ui-list-item>
+          <ui-list-item
+            v-close-popover
+            class="cursor-pointer"
+            @click="openAgentTab()"
+          >
+            <v-remixicon name="riSparklingLine" class="mr-2" />
+            {{ t('workflow.agent.tab') }}
+          </ui-list-item>
+        </ui-list>
+      </ui-popover>
     </div>
     <div class="flex-1">
       <router-view v-slot="{ Component }">
@@ -71,12 +93,17 @@ const state = reactive({
 });
 
 function addTab(detail = {}) {
-  const workflowsTab = state.tabs.find(
-    (tab) => tab.path === '/' || tab.path === '/workflows'
+  const targetPath = detail.path || '/';
+
+  // 单例标签页：工作流列表和助手都只开一个，重复点击激活已有的
+  const existingTab = state.tabs.find((tab) =>
+    targetPath === '/'
+      ? tab.path === '/' || tab.path === '/workflows'
+      : tab.path === targetPath
   );
 
-  if (workflowsTab) {
-    state.activeTab = workflowsTab.id;
+  if (existingTab) {
+    state.activeTab = existingTab.id;
     return;
   }
 
@@ -89,6 +116,10 @@ function addTab(detail = {}) {
     ...detail,
   });
   state.activeTab = tabId;
+}
+/** 主面板助手标签页（单例）：已开着就激活，不再重复开。 */
+function openAgentTab() {
+  addTab({ path: '/workflows/agent', name: t('workflow.agent.tab') });
 }
 function closeTab(index, tab) {
   if (state.tabs.length === 1) {
@@ -165,10 +196,18 @@ watch(
 onMounted(() => {
   const tabs = parseJSON(localStorage.getItem('tabs'), null);
   if (tabs) {
+    // 兼容旧数据：助手标签页曾被误存为 /agent（该路由不存在，会导致白屏）
+    tabs.forEach((tab) => {
+      if (tab.path === '/agent') tab.path = '/workflows/agent';
+    });
     state.tabs = tabs;
 
     const activeTab = localStorage.getItem('activeTab');
     state.activeTab = activeTab || tabs[0].id;
+  }
+
+  if (route.path === '/agent') {
+    router.replace('/workflows/agent');
   }
 
   if (state.tabs.length !== 0) {

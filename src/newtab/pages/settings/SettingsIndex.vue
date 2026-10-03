@@ -54,6 +54,8 @@
       {{ t('settings.language.reloadPage') }}
     </p>
   </div>
+  <settings-agent />
+
   <div id="delete-logs" class="mt-12">
     <p class="mb-1 font-semibold">{{ t('settings.deleteLog.workflowLogs') }}</p>
     <div class="flex items-center">
@@ -95,6 +97,7 @@ import { useI18n } from 'vue-i18n';
 import { useStore } from '@/stores/main';
 import { useTheme } from '@/composable/theme';
 import { supportLocales } from '@/utils/shared';
+import SettingsAgent from './SettingsAgent.vue';
 
 const deleteLogDays = ['never', 7, 14, 30, 60, 120];
 

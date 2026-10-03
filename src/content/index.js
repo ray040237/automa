@@ -318,6 +318,11 @@ async function messageListener({ data, source }) {
 
         return cloneContextData;
       }
+      // 编辑器内嵌 agent 的读页通道。走 blocksHandler 拿 content 侧实现，
+      // 不在这里另开一条通路 —— 否则同一个读页逻辑会有两份实现，日后必然走偏。
+      case 'agent:read-page': {
+        return blocksHandler().agentReadPage({ detail: data.detail || 'auto' });
+      }
       default:
         return null;
     }

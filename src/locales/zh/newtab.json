@@ -341,6 +341,21 @@
       "avatar": "头像",
       "username": "用户名",
       "email": "邮箱"
+    },
+    "agent": {
+      "title": "AI 助手",
+      "description": "助手会读你正在看的页面，帮你搭工作流、写 JavaScript。它用的是这里配置的服务商 —— 你的 Key、你的接口，数据不会经过我们。",
+      "provider": "模型服务商",
+      "baseUrl": "接口地址",
+      "model": "模型",
+      "modelPlaceholder": "直接填模型名，例如 gpt-4o-mini",
+      "apiKey": "API Key",
+      "apiKeySet": "已保存 —— 输入新值可覆盖",
+      "clearKey": "删除这个 Key",
+      "privacy": "使用助手时，目标页的正文与结构会发送到你上面填的接口地址（第三方服务）。请勿用于含个人或机密信息的页面。",
+      "saved": "已保存",
+      "contextWindow": "上下文窗口（token）",
+      "contextWindowHint": "你的模型一次能读的最大 token 数。对话历史超过它会被裁剪；不确定就保持默认。"
     }
   },
   "workflow": {
@@ -646,6 +661,61 @@
       "stage": "测试",
       "production": "生产",
       "shareSuccess": "已成功与您的团队共享工作流。"
+    },
+    "agent": {
+      "tab": "助手",
+      "send": "发送",
+      "thinking": "思考中…",
+      "thinkingResult": "思考过程",
+      "scrollToBottom": "回到底部",
+      "placeholder": "问当前这个页面：搜索框在哪、这个列表怎么抓…",
+      "empty": "问我关于你正在看的这个页面。我能读到它的真实结构，并直接给你 selector 或块。",
+      "noTarget": "还没有选中的可读页面",
+      "pickTab": {
+        "title": "选择目标页",
+        "loading": "正在读取标签页…",
+        "empty": "暂时没有可读取的页面。请先打开一个普通网页（扩展页和 chrome:// 内置页读不了）。",
+        "mainWindow": "主窗口",
+        "window": "窗口 {n}"
+      },
+      "copy": "复制",
+      "copied": "已复制",
+      "notConfigured": "请先配置 API Key",
+      "error": "出了点问题",
+      "tool": {
+        "ok": "完成",
+        "error": "失败",
+        "rejected": "已拒绝",
+        "running": "执行中"
+      },
+      "config": {
+        "title": "助手设置",
+        "provider": "服务商",
+        "baseUrl": "接口地址",
+        "apiKey": "API Key",
+        "apiKeyPlaceholder": "sk-…",
+        "apiKeySet": "已保存",
+        "model": "模型",
+        "modelPlaceholder": "例如 gpt-4o-mini",
+        "privacy": "页面正文与结构会发送到你上面填的接口地址（第三方服务）。请勿用于含敏感信息的页面。"
+      },
+      "confirm": {
+        "title": "需要你确认",
+        "hint": "这一步会在你选中的页面上执行代码。放行前请先看一眼。",
+        "allow": "允许执行",
+        "deny": "不允许"
+      },
+      "notConfiguredHint": "助手通过你配置的模型服务来读页面，所以需要先填一个 API Key。",
+      "goSettings": "去设置页填写",
+      "interject": "插话",
+      "stop": "停止生成",
+      "queued": "已加入插话队列，将在当前任务下一步执行前送达",
+      "usage": "本会话 token 用量：输入 {in} / 输出 {out}",
+      "session": {
+        "new": "新会话",
+        "delete": "删除当前会话",
+        "placeholder": "选择历史会话"
+      }
     }
   },
   "collection": {

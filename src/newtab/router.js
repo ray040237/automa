@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import Welcome from './pages/Welcome.vue';
 import Packages from './pages/Packages.vue';
+import AgentPage from './pages/Agent.vue';
 import Workflows from './pages/workflows/index.vue';
 import WorkflowContainer from './pages/Workflows.vue';
 import WorkflowHost from './pages/workflows/Host.vue';
@@ -54,6 +55,11 @@ const routes = [
         path: '',
         name: 'workflows',
         component: Workflows,
+      },
+      {
+        path: 'agent',
+        name: 'agent',
+        component: AgentPage,
       },
       {
         path: ':id',

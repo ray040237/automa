@@ -7,20 +7,25 @@
     "url": "https://github.com/AutomaApp/automa.git"
   },
   "scripts": {
-    "build": "node utils/build.js",
+    "build": "cross-env OFFLINE_MODE=1 node utils/build.js",
+    "build:offline": "npm run build",
+    "build:offline:firefox": "cross-env BROWSER=firefox npm run build",
+    "build:offline:prod": "npm run build:prod-chrome",
+    "build:full": "cross-env OFFLINE_MODE=0 node utils/build.js",
+    "build:full:firefox": "cross-env BROWSER=firefox npm run build:full",
+    "build:full:prod": "cross-env OFFLINE_MODE=0 npm run build:prod-chrome",
     "build:firefox": "cross-env BROWSER=firefox npm run build",
     "build:zip": "node utils/build-zip.js",
     "build:prod": "npm run build:prod-chrome && npm run build:prod-firefox",
     "build:prod-chrome": "node utils/clean-build-cache.js && npm run build && npm run build:zip",
     "build:prod-firefox": "npm run build:firefox && cross-env BROWSER=firefox npm run build:zip",
-    "build:offline": "cross-env OFFLINE_MODE=1 npm run build",
-    "build:offline:firefox": "cross-env OFFLINE_MODE=1 BROWSER=firefox npm run build",
-    "build:offline:prod": "cross-env OFFLINE_MODE=1 npm run build:prod-chrome",
     "dev": "node utils/webserver.js",
     "dev:firefox": "cross-env BROWSER=firefox npm run dev",
     "prettier": "prettier --write '**/*.{js,jsx,css,html}'",
     "lint": "eslint --ext .js,.vue --ignore-path .gitignore .",
-    "check:i18n": "node utils/check-i18n.js"
+    "test": "node --import ./utils/test-loader.mjs --test \"src/agent/**/*.test.js\"",
+    "check:i18n": "node utils/check-i18n.js",
+    "test:dom": "node --test .agent-test/dom.test.mjs"
   },
   "engines": {
     "node": ">=14.18.1"
@@ -70,6 +75,7 @@
     "dayjs": "^1.11.6",
     "defu": "^6.1.2",
     "dexie": "^3.2.3",
+    "eventsource-parser": "^4.1.1",
     "html2canvas": "^1.4.1",
     "idb": "^7.0.2",
     "js-base64": "^3.7.5",
@@ -109,6 +115,7 @@
   "devDependencies": {
     "@babel/core": "^7.20.7",
     "@babel/eslint-parser": "^7.18.2",
+    "@babel/parser": "^7.29.9",
     "@babel/preset-env": "^7.20.2",
     "@intlify/vue-i18n-loader": "^4.2.0",
     "@tailwindcss/typography": "^0.5.1",

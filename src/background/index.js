@@ -511,6 +511,225 @@ function automaFetch(type, resource) {
   return str;
 };
 
+/**
+ * agent 的页面执行通道。
+ *
+ * 为什么不用现有的 script:execute-callback：那个 handler 两条路径都只返回 true/false，
+ * 执行结果被整个丢掉了 —— 而 agent 要的恰恰就是结果（选择器命中几个、JS 报什么错）。
+ * 所以另开一条专门回传结果的通道，而不是去改老 handler：
+ * 老逻辑被工作流引擎依赖，改它的返回值可能波及既有流程。
+ *
+ * 安全边界：只在用户已选定的那一个标签页上执行；执行前由 agent runtime 的确认门把关
+ *（本文件只是通道，不做审批）。
+ */
+/**
+ * 真正在页面里跑的那段。
+ *
+ * 必须自包含：executeScript 会把函数序列化后注入页面，
+ * 闭包里的任何外部变量在页面里都不存在。
+ *
+ * async 求值 + 10s 超时（技术方案 §7.4 的轻量版）：模型经常写出返回
+ * Promise 的代码（忘了 await），同步求值会把结果变成 "[object Promise]"；
+ * fetch 之类也确实需要异步。Promise.race 兜底防止页面代码挂死通道。
+ *
+ * @param {string} src
+ * @returns {Promise<Object>}
+ */
+async function agentEvalInPage(src) {
+  let value;
+
+  try {
+    /* eslint-disable-next-line no-new-func */
+    const fn = new Function(`return (${src})`);
+    /* eslint-disable-next-line no-async-promise-executor */
+    value = await Promise.race([
+      Promise.resolve(fn()()),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('执行超时（10s）')), 10000);
+      }),
+    ]);
+  } catch (err) {
+    const msg = (err && err.message) || String(err);
+
+    return { ok: false, error: `代码执行出错：${msg}` };
+  }
+
+  if (value === undefined) return { ok: true, value: 'undefined', json: true };
+
+  // 模型给的代码可能返回 DOM 节点、循环引用或函数，直接回传会序列化失败
+  try {
+    const json = JSON.stringify(value);
+    if (json !== undefined) return { ok: true, value: json, json: true };
+  } catch (e) {
+    // 序列化失败就退回字符串
+  }
+
+  return { ok: true, value: String(value), json: false };
+}
+
+/**
+ * agent 页面执行的公共通道：注入 MAIN world、取回首个结果、把注入失败
+ * 归一成 {ok:false,error}。三个 agent handler 的重复形状都收在这里。
+ *
+ * @param {number} tabId
+ * @param {Function} func 会序列化进页面的函数（必须自包含）
+ * @param {Array=} args
+ * @returns {Promise<Object>}
+ */
+async function runInPage(tabId, func, args = []) {
+  try {
+    const res = await browser.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func,
+      args,
+    });
+
+    return res && res[0] && res[0].result;
+  } catch (err) {
+    return { ok: false, error: (err && err.message) || String(err) };
+  }
+}
+
+async function runAgentJs(payload) {
+  const { tabId, code } = payload;
+
+  if (!tabId) return { ok: false, error: 'no-tab-id' };
+  if (!code || !code.trim()) return { ok: false, error: 'empty-code' };
+
+  return runInPage(tabId, agentEvalInPage, [code]);
+}
+
+message.on('agent:run-js', async (data) => runAgentJs(data));
+
+/**
+ * 查选择器命中情况。
+ *
+ * 刻意独立于 run-js：模型最常做的事就是「这个选择器命中几个、第一个长什么样」，
+ * 为此没必要开一条能执行任意代码的路子 —— 少一条要审的面。
+ *
+ * @param {string} sel
+ * @param {number} max
+ * @returns {Object}
+ */
+function agentQueryInPage(sel, max) {
+  let nodes;
+
+  try {
+    nodes = document.querySelectorAll(sel);
+  } catch (err) {
+    const msg = (err && err.message) || String(err);
+
+    return { ok: false, error: `选择器不合法：${msg}` };
+  }
+
+  const describe = (el) => {
+    const raw = (el.innerText || el.textContent || '').trim();
+    const cls =
+      el.className && typeof el.className === 'string'
+        ? el.className.trim()
+        : '';
+    const href = el.getAttribute('href');
+    const inputType = el.getAttribute('type');
+
+    const info = {
+      tag: el.tagName.toLowerCase(),
+      text: raw.split(/\s+/).join(' ').slice(0, 80),
+      visible: el.getClientRects().length > 0,
+    };
+
+    if (el.id) info.id = el.id;
+    if (cls) info.class = cls.split(/\s+/).slice(0, 3).join('.');
+    if (href) info.href = href;
+    if (inputType) info.inputType = inputType;
+
+    return info;
+  };
+
+  return {
+    ok: true,
+    count: nodes.length,
+    sample: Array.from(nodes).slice(0, max).map(describe),
+  };
+}
+
+message.on('agent:query', async (data) => {
+  const { tabId, selector, limit: rawLimit } = data;
+  const limit = Math.max(1, Math.min(Number(rawLimit) || 5, 20));
+
+  if (!tabId) return { ok: false, error: 'no-tab-id' };
+  if (!selector || !selector.trim())
+    return { ok: false, error: 'empty-selector' };
+
+  return runInPage(tabId, agentQueryInPage, [selector, limit]);
+});
+
+/**
+ * 高亮目标页上的某些元素。
+ *
+ * 存在的理由：模型说「用 .card .title 这个选择器」时，用户是看不见这句话意味着什么的。
+ * 高亮出来，用户一眼就能判断模型有没有找错。
+ *
+ * 只改 presentation：给命中的元素临时加一圈描边，定时撤掉。
+ * 不动 DOM 结构、不动任何数据，所以能被安全地反复调用。
+ */
+function agentHighlightInPage(sel, max, ms) {
+  let nodes;
+
+  try {
+    nodes = document.querySelectorAll(sel);
+  } catch (err) {
+    const msg = (err && err.message) || String(err);
+
+    return { ok: false, error: `选择器不合法：${msg}` };
+  }
+
+  // 上一轮还没撤干净就先撤掉，免得描边叠成一片
+  if (window.__automaAgentHighlighted) {
+    window.__automaAgentHighlighted.forEach((el) => {
+      el.style.outline = '';
+      el.style.outlineOffset = '';
+    });
+  }
+
+  const hit = Array.from(nodes).slice(0, max);
+
+  hit.forEach((el, i) => {
+    // 描边叠一层半透明底色：有的元素本身有背景色，光靠 outline 看不出边界
+    el.style.outline = '2px solid #f97316';
+    el.style.outlineOffset = '2px';
+
+    if (i === 0) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  });
+
+  window.__automaAgentHighlighted = hit;
+  setTimeout(() => {
+    hit.forEach((el) => {
+      el.style.outline = '';
+      el.style.outlineOffset = '';
+    });
+
+    if (window.__automaAgentHighlighted === hit)
+      window.__automaAgentHighlighted = null;
+  }, ms);
+
+  return { ok: true, count: nodes.length, highlighted: hit.length };
+}
+
+message.on('agent:highlight', async (data) => {
+  const { tabId, selector, limit, durationMs } = data;
+  const max = Math.max(1, Math.min(Number(limit) || 10, 50));
+  const ms = Math.max(500, Math.min(Number(durationMs) || 4000, 20000));
+
+  if (!tabId) return { ok: false, error: 'no-tab-id' };
+  if (!selector || !selector.trim())
+    return { ok: false, error: 'empty-selector' };
+
+  return runInPage(tabId, agentHighlightInPage, [selector, max, ms]);
+});
+
 message.on(
   'script:execute',
   async ({ target, blockData, varName, preloadScripts }) => {

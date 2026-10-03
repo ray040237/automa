@@ -341,6 +341,21 @@
         "documentation": "Documentation",
         "blog": "Blog"
       }
+    },
+    "agent": {
+      "title": "AI assistant",
+      "description": "The assistant reads the page you are looking at and helps you build workflows and write JavaScript. It talks to the model service configured here — your own key, your own endpoint.",
+      "provider": "Model provider",
+      "baseUrl": "API endpoint",
+      "model": "Model",
+      "modelPlaceholder": "Type the model name, e.g. gpt-4o-mini",
+      "apiKey": "API key",
+      "apiKeySet": "Saved — type to replace",
+      "clearKey": "Forget this key",
+      "privacy": "When you use the assistant, the text and structure of the target page are sent to the endpoint above — a third-party service. Do not use pages containing personal or confidential information.",
+      "saved": "Saved",
+      "contextWindow": "Context window (tokens)",
+      "contextWindowHint": "Max tokens your model can read in one call. Older turns get trimmed past it; keep the default if unsure."
     }
   },
   "workflow": {
@@ -646,6 +661,61 @@
       "stage": "Stage",
       "production": "Production",
       "shareSuccess": "Share the workflow with your team successfully."
+    },
+    "agent": {
+      "tab": "Assistant",
+      "send": "Send",
+      "thinking": "Thinking…",
+      "thinkingResult": "Thought process",
+      "scrollToBottom": "Jump to latest",
+      "placeholder": "Ask about the current page: where is the search box, how do I scrape this list…",
+      "empty": "Ask me about the page you're looking at. I can read its real structure and write a selector or a block for you.",
+      "noTarget": "No readable page selected",
+      "pickTab": {
+        "title": "Pick a page",
+        "loading": "Reading tabs…",
+        "empty": "No page can be read yet. Open a normal webpage first (extension and chrome:// pages can't be read).",
+        "mainWindow": "Main window",
+        "window": "Window {n}"
+      },
+      "copy": "Copy",
+      "copied": "Copied",
+      "notConfigured": "Configure your API key first",
+      "error": "Something went wrong",
+      "tool": {
+        "ok": "done",
+        "error": "failed",
+        "rejected": "declined",
+        "running": "running"
+      },
+      "config": {
+        "title": "Assistant settings",
+        "provider": "Provider",
+        "baseUrl": "API address",
+        "apiKey": "API key",
+        "apiKeyPlaceholder": "sk-…",
+        "apiKeySet": "Saved",
+        "model": "Model",
+        "modelPlaceholder": "e.g. gpt-4o-mini",
+        "privacy": "The page's text and structure are sent to the API address above — a third-party service. Do not use pages with sensitive information."
+      },
+      "confirm": {
+        "title": "Needs your confirmation",
+        "hint": "This step runs code on the page you selected. Read it before allowing.",
+        "allow": "Run it",
+        "deny": "Don't run"
+      },
+      "notConfiguredHint": "Configure an API first — the assistant reads the page through your own model provider, so it needs an API key.",
+      "goSettings": "Go to settings",
+      "interject": "Add",
+      "stop": "Stop generating",
+      "queued": "Queued — it will be delivered before the next step of the running task",
+      "usage": "Session token usage: {in} in / {out} out",
+      "session": {
+        "new": "New chat",
+        "delete": "Delete current chat",
+        "placeholder": "Pick a past chat"
+      }
     }
   },
   "collection": {

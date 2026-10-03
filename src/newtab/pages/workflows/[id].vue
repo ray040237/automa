@@ -7,7 +7,7 @@
           ? 'absolute h-full md:relative z-50'
           : 'hidden md:flex'
       "
-      class="sidebar w-80 flex-col border-l border-gray-100 bg-white py-6 dark:border-gray-700 dark:border-opacity-50 dark:bg-gray-800"
+      class="sidebar w-80 flex flex-col border-l border-gray-100 bg-white py-6 dark:border-gray-700 dark:border-opacity-50 dark:bg-gray-800"
       :style="{
         width: `${sidebarCss.width}px`,
         padding: sidebarCss.padding,
@@ -22,6 +22,36 @@
         @update="updateBlockData"
         @close="closeEditingCard"
       />
+      <!-- 助手：只改内存画布，改完标未保存，由用户自己点保存（G5） -->
+      <div
+        v-else-if="state.sidebarPanel === 'agent'"
+        class="relative flex min-h-0 flex-1 flex-col"
+      >
+        <agent-panel
+          :events="agentHost.events"
+          :target-tab="agentHost.targetTab"
+          :config="agentHost.config"
+          :busy="agentHost.busy"
+          :list-tabs="listTabs"
+          :sessions="agentHost.sessions"
+          :current-session-id="agentHost.sessionId"
+          :usage="agentHost.usage"
+          @no-target="agentHost.noTarget"
+          @go-settings="agentHost.goToSettings"
+          @send="agentHost.send"
+          @pick-tab="agentHost.pickTab"
+          @select-session="agentHost.openSession"
+          @new-session="agentHost.newSession"
+          @delete-session="agentHost.deleteSession"
+          @abort="agentHost.abort"
+        />
+        <agent-confirm-card
+          v-if="agentHost.pendingConfirm"
+          class="absolute inset-x-3 bottom-3"
+          :code="agentHost.pendingConfirm.code"
+          @answer="agentHost.pendingConfirm.resolve($event)"
+        />
+      </div>
       <workflow-details-card
         v-else
         :workflow="workflow"
@@ -81,6 +111,20 @@
             <v-remixicon
               :name="state.showSidebar ? 'riSideBarFill' : 'riSideBarLine'"
             />
+          </button>
+          <button
+            v-if="haveEditAccess"
+            :class="[
+              'flex items-center rounded-lg px-2 py-1 text-sm transition-colors hoverable',
+              state.sidebarPanel === 'agent'
+                ? 'bg-accent bg-opacity-10 text-accent dark:bg-opacity-20'
+                : 'text-gray-600 dark:text-gray-300',
+            ]"
+            style="margin-right: 6px"
+            @click="toggleAgentPanel"
+          >
+            <v-remixicon name="riSparklingLine" size="18" />
+            <span class="ml-1">{{ t('workflow.agent.tab') }}</span>
           </button>
           <ui-tab value="editor">{{ t('common.editor') }}</ui-tab>
           <template v-if="isPackage">
@@ -297,6 +341,8 @@
   </ui-modal>
 </template>
 <script setup>
+import AgentConfirmCard from '@/components/newtab/workflow/agent/AgentConfirmCard.vue';
+import AgentPanel from '@/components/newtab/workflow/agent/AgentPanel.vue';
 import PackageDetails from '@/components/newtab/package/PackageDetails.vue';
 import PackageSettings from '@/components/newtab/package/PackageSettings.vue';
 import SharedPermissionsModal from '@/components/newtab/shared/SharedPermissionsModal.vue';
@@ -315,6 +361,8 @@ import WorkflowGlobalData from '@/components/newtab/workflow/WorkflowGlobalData.
 import WorkflowSettings from '@/components/newtab/workflow/WorkflowSettings.vue';
 import WorkflowShare from '@/components/newtab/workflow/WorkflowShare.vue';
 import WorkflowShareTeam from '@/components/newtab/workflow/WorkflowShareTeam.vue';
+import { listTabs } from '@/agent';
+import { useAgentHost } from '@/composable/agentHost';
 import { useCommandManager } from '@/composable/commandManager';
 import { useGroupTooltip } from '@/composable/groupTooltip';
 import {
@@ -424,6 +472,8 @@ const startDrag = (event) => {
 const state = reactive({
   showSidebar: true,
   sidebarState: true,
+  // 侧栏当前显示哪个面板：details（工作流信息）/ agent（助手）
+  sidebarPanel: 'details',
   dataChanged: false,
   animateBlocks: false,
   isExecuteCommand: false,
@@ -571,9 +621,36 @@ const workflow = computed(() => {
 
   return workflowStore.getById(workflowId);
 });
+
+/**
+ * 编辑器里的助手宿主。
+ *
+ * 与主面板那个独立助手页的唯一差别是这里握着画布句柄，于是 canvas 组工具
+ * （list_canvas / add_block / update_block）是开放的 —— 助手能看着真实页面
+ * 把块直接放到画布上。会话也按当前工作流过滤，不再是一个全局大列表。
+ *
+ * onCanvasChanged 只标「未保存」：保存永远是用户自己的动作（G5）。
+ */
+const agentHost = useAgentHost({
+  enabledGroups: haveEditAccess.value
+    ? ['page', 'context', 'tab', 'canvas']
+    : ['page', 'context', 'tab'],
+  getWorkflowId: () => workflowId,
+  sessionWorkflowId: workflowId,
+  canvas: {
+    blocks,
+    // editor 是 ref，agent 可能在画布就绪前就被调用，必须走 getter
+    getEditor: () => editor.value,
+    newId: nanoid,
+    onCanvasChanged: () => {
+      state.dataChanged = true;
+    },
+  },
+});
 const workflowStates = computed(() =>
   workflowStore.getWorkflowStates(route.params.id)
 );
+
 const activeWorkflowModal = computed(
   () => workflowModals[modalState.name] || {}
 );
@@ -1082,6 +1159,30 @@ function toggleSidebar() {
   state.showSidebar = !state.showSidebar;
   localStorage.setItem('workflow:sidebar', state.showSidebar);
 }
+/**
+ * 切到助手面板。首次打开才建 runtime —— 多数人多数时候不碰助手，
+ * 没必要每进一个工作流都去读配置、探标签页。
+ */
+function toggleAgentPanel() {
+  const next = state.sidebarPanel === 'agent' ? 'details' : 'agent';
+
+  state.sidebarPanel = next;
+  localStorage.setItem('workflow:sidebarPanel', next);
+
+  if (next !== 'agent') return;
+
+  if (!state.showSidebar) {
+    state.showSidebar = true;
+    localStorage.setItem('workflow:sidebar', true);
+  }
+
+  // 编辑某个块时 node 编辑卡优先，助手在它让位后才可见
+  editState.editing = false;
+
+  agentHost.init().catch((err) => {
+    console.warn('[agent] init failed:', err);
+  });
+}
 function initEditBlock(data) {
   const { editComponent, data: blockDefData, name } = blocks[data.id];
 
@@ -1283,6 +1384,8 @@ function onDragoverEditor({ target }) {
   }
 }
 function onDropInEditor({ dataTransfer, clientX, clientY, target }) {
+  if (!editor.value) return;
+
   const savedBlocks = parseJSON(dataTransfer.getData('savedBlocks'), null);
 
   const editorRect = editor.value.viewportRef.value.getBoundingClientRect();
@@ -1643,6 +1746,15 @@ onMounted(() => {
     JSON.parse(localStorage.getItem('workflow:sidebar')) ?? true;
   state.showSidebar = sidebarState;
   state.sidebarState = sidebarState;
+
+  const sidebarPanel = localStorage.getItem('workflow:sidebarPanel');
+  if (sidebarPanel === 'agent') {
+    state.sidebarPanel = 'agent';
+    // 上次离开时停在助手上 → 这次直接把它拉起来
+    agentHost.init().catch((err) => {
+      console.warn('[agent] init failed:', err);
+    });
+  }
 
   if (!isPackage) {
     const convertedData = convertWorkflowData(workflow.value);
