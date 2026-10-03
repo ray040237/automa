@@ -36,3 +36,17 @@ getPassKey.js
 .agent-test/node_modules/
 .agent-test/out.txt
 .agent-test/err.txt
+
+# .agent-test/handler.iife.js 由 handlerAgentReadPage.js 生成（README 里写了重生成方式）
+.agent-test/handler.iife.js
+# 一次性探针：验证某个具体问题用的，问题结了脚本就没用了
+.agent-test/probe-*.mjs
+.agent-test/live-*.mjs
+.agent-test/agent-live.mjs
+.agent-test/repro-*.mjs
+
+# 第三方参考仓库，自带 .git、1.6 万个文件，只在本机读
+/pie-ai-agent
+
+# WorkBuddy 工作台：本机会话记录与技能，不该随项目代码走
+/.workbuddy

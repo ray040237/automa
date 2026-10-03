@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>商品列表 - 测试站</title>
+<style>
+  .hidden { display: none; }
+  .card { border: 1px solid #ddd; padding: 8px; }
+</style>
+</head>
+<body>
+  <header><h1>搜索结果</h1></header>
+
+  <form id="search">
+    <input type="text" id="q" name="q" placeholder="搜索商品">
+    <button type="submit">搜索</button>
+  </form>
+
+  <div class="grid">
+    <div class="card">
+      <h3 class="title">无线鼠标</h3>
+      <span class="price">￥89.00</span>
+      <a class="link" href="/item/1">详情</a>
+    </div>
+    <div class="card">
+      <h3 class="title">机械键盘</h3>
+      <span class="price">￥399.00</span>
+      <a class="link" href="/item/2">详情</a>
+    </div>
+    <div class="card">
+      <h3 class="title">27寸显示器</h3>
+      <span class="price">￥1299.00</span>
+      <a class="link" href="/item/3">详情</a>
+    </div>
+    <div class="card">
+      <h3 class="title">人体工学椅</h3>
+      <span class="price">￥899.00</span>
+      <a class="link" href="/item/4">详情</a>
+    </div>
+    <div class="card">
+      <h3 class="title">USB-C 扩展坞</h3>
+      <span class="price">￥159.00</span>
+      <a class="link" href="/item/5">详情</a>
+    </div>
+  </div>
+
+  <ul class="pager">
+    <li>上一页</li><li>1</li><li>2</li><li>下一页</li>
+  </ul>
+
+  <table class="stats">
+    <tr><th>名称</th><th>数量</th></tr>
+    <tr><td>订单A</td><td>3</td></tr>
+    <tr><td>订单B</td><td>7</td></tr>
+  </table>
+
+  <footer><p>页脚</p></footer>
+</body>
+</html>
