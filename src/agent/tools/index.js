@@ -11,7 +11,7 @@
  * 本文件只允许 import 同目录下的纯模块，不得引入 webextension-polyfill 或 @/ 别名。
  */
 
-import { readPage, getVariables, getBlockSchema } from './page';
+import { readPage, findText, getVariables, getBlockSchema } from './page';
 import { testJsTool, queryElementsTool } from './page-write';
 import { highlightSelector } from './highlight';
 import { addBlockTool, updateBlockTool, listCanvasTool } from './canvas';
@@ -44,6 +44,7 @@ export const highlightSelectorTool = {
 
 export const TOOLS = [
   readPage,
+  findText,
   getVariables,
   getBlockSchema,
   queryElementsTool,

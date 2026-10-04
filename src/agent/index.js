@@ -109,23 +109,36 @@ export function collectPromptFacts(tools = TOOLS) {
 }
 
 /**
- * 读目标页。通过 content script 通道拿结构化观察值。
+ * 读目标页 / 页内找文本。通过 content script 通道拿结构化观察值。
  *
  * 失败时回一句人话而不是抛异常：工具异常会被 loop 转成 error 观察值喂回模型，
  * 模型能据此换一种参数重试；把栈抛上去只会让它原地打转。
  *
  * @param {Object} tab
- * @param {string} detail
- * @returns {Promise<string>}
+ * @param {{detail?: string, maxChars?: number, op?: string, keyword?: string, limit?: number}|string} params
+ *   传字符串时按 detail 处理（兼容旧调用点）
+ * @returns {Promise<string|{text: string, fingerprint: (string|null)}>}
  */
-export async function readPageFromTab(tab, detail) {
+export async function readPageFromTab(tab, params) {
+  const options =
+    typeof params === 'string' ? { detail: params } : params || {};
+
   if (!tab) return '没有确定目标页。请先让用户选一个标签页。';
 
   try {
     const res = await browser.tabs.sendMessage(tab.id, {
       type: 'agent:read-page',
-      detail,
+      op: options.op || 'read',
+      detail: options.detail,
+      maxChars: options.maxChars,
+      keyword: options.keyword,
+      limit: options.limit,
     });
+
+    // content 侧读页返回 {text, fingerprint}；指纹必须原样带回来 ——
+    // 它是「页面变没变」的唯一判据，塞进文本会被陈旧快照剔除抹掉（设计稿 §6.2）
+    if (res && typeof res === 'object' && typeof res.text === 'string')
+      return { text: res.text, fingerprint: res.fingerprint || null };
 
     if (typeof res === 'string' && res) return res;
 
@@ -176,12 +189,28 @@ export function createAgentRuntime(deps) {
   let focusedTabId = null;
   // 同一条 notice 不逐条重复刷：只在内容变化时再次注入
   let lastNoticeKey = '';
+  // 模型最后一次 read_page 看到的页面指纹（{tabId, fingerprint}）。
+  // 只有它非空才说明「模型的结论依赖过某个页面状态」，才有比对的必要。
+  let lastRead = null;
+  // 指纹比对结果的去重键：页面变了提示一次，模型没重读不逐轮重复刷
+  let fpNoticeKey = '';
+  // 每轮 send 开头做一次轻量 probe（advisory，不进 prompt，每轮最多一次）
+  let fpCheckPending = false;
   // 当前这轮的对外事件通道，focus_tab 等工具改目标页时用它同步 UI
   let currentOnEvent = null;
   const lockId = `rt_${(runtimeSeq += 1)}`;
 
   const toolCtx = {
-    readPage: (detail) => readPageFromTab(targetTab, detail),
+    readPage: async (params) => {
+      const res = await readPageFromTab(targetTab, params);
+      // 记住模型最后一次真正看到的页面指纹（按 tabId 记，切页不串味）。
+      // 下一轮 send 开头拿它和一次轻量 probe 比，变了才提示重读（设计稿 §6.4）。
+      if (res && typeof res === 'object' && res.fingerprint && targetTab)
+        lastRead = { tabId: targetTab.id, fingerprint: res.fingerprint };
+      return res;
+    },
+    findText: (params) =>
+      readPageFromTab(targetTab, { op: 'find-text', ...params }),
     getVariables,
     getBlockSchema,
     // 画布写工具要用的东西。宿主把 vue-flow 的 editor 实例传进来，
@@ -282,6 +311,32 @@ export function createAgentRuntime(deps) {
       );
     }
 
+    // 指纹比对（设计稿 §6.4）：advisory，runtime 不替模型决定读不读。
+    // 每轮最多一次 probe；模型从没读过页就没有基线，跳过省一次 content 往返。
+    if (fpCheckPending) {
+      fpCheckPending = false;
+
+      if (lastRead && lastRead.tabId === tab.id) {
+        const res = await readPageFromTab(targetTab, { detail: 'probe' });
+        const fp = res && typeof res === 'object' ? res.fingerprint : null;
+
+        if (fp && fp !== lastRead.fingerprint) {
+          const key = 'fp:' + lastRead.fingerprint + '>' + fp;
+          if (key !== fpNoticeKey) {
+            fpNoticeKey = key;
+            return (
+              '系统提示：目标页内容已变化（指纹 ' +
+              lastRead.fingerprint +
+              ' → ' +
+              fp +
+              '）。此前基于该页得出的选择器/结论可能已失效，请重新 read_page 确认；' +
+              '如果页面没变，沿用上次结论即可，不要重复读页。'
+            );
+          }
+        }
+      }
+    }
+
     return null;
   };
 
@@ -377,6 +432,9 @@ export function createAgentRuntime(deps) {
       : guardedTools;
 
     lastNoticeKey = '';
+    // 只有模型读过页才值得花一次 probe 去比指纹（没有基线就无从比起）。
+    // fpNoticeKey 故意不在每轮重置：页面变了提示一次，模型没重读就别逐轮刷屏。
+    fpCheckPending = Boolean(lastRead);
     currentOnEvent = onEvent || null;
 
     const agent = createAgent({

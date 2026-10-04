@@ -87,7 +87,10 @@ module.exports = {
       env: { node: true, es2022: true },
     },
     {
-      files: ['src/agent/**/*.js', 'src/content/blocksHandler/handlerAgent*.js'],
+      files: [
+        'src/agent/**/*.js',
+        'src/content/blocksHandler/handlerAgent*.js',
+      ],
       rules: {
         'prefer-template': 'off',
         'no-continue': 'off',

@@ -14,7 +14,7 @@
  */
 
 import { buildSystemPrompt } from './prompt';
-import { applyTokenBudget } from './window';
+import { applyTokenBudget, elideStaleObservations } from './window';
 import { buildWireMessages } from './wire';
 import {
   AGENT_EVENTS,
@@ -77,17 +77,64 @@ export function toAgentEvent(chunk) {
   }
 }
 
+/**
+ * 解开工具返回的信封 `{payload, status?, ...meta}`（T-21）。
+ *
+ * 为什么要解：不解的话 `{status:'ok', payload:'63 字符的正文'}` 会被整个
+ * JSON.stringify 成 100 字符的 JSON 包裹；内层 `status:'error'` 更是走不到
+ * 错误分支，模型看到的是 `{"status":"error","payload":"选择器不合法"}` 这种
+ * 机器话而不是一句人话（实测 +59% 字符，见设计稿 §9-F6）。
+ *
+ * meta（`pageFingerprint` 之类）上提到事件顶层：观察值文本会被陈旧快照剔除
+ * 换成占位符，runtime 判断页面变没变只能读事件字段，不能读文本
+ * （设计稿 §6.2）。没有 `payload` 键的返回值原样通过 —— 不认识的结构不猜。
+ *
+ * @param {*} observation
+ * @returns {{payload: *, status: string|null, meta: Object}}
+ */
+function normalizeToolOutcome(observation) {
+  const isEnvelope =
+    observation &&
+    typeof observation === 'object' &&
+    !Array.isArray(observation) &&
+    Object.prototype.hasOwnProperty.call(observation, 'payload');
+
+  if (!isEnvelope) return { payload: observation, status: null, meta: {} };
+
+  const { payload, status, ...meta } = observation;
+
+  return {
+    payload,
+    status: status === TOOL_STATUS.ERROR ? TOOL_STATUS.ERROR : null,
+    meta,
+  };
+}
+
 /** 工具结果事件。page 组的结果用 untrusted_page_content 包装，其余用 tool_result。 */
 function resultEvent(call, tool, status, observation) {
+  const {
+    payload,
+    status: innerStatus,
+    meta,
+  } = normalizeToolOutcome(observation);
+  // 内层 error 要盖过外层的 ok：工具自己报的失败同样是「错误即观察值」
+  const finalStatus = innerStatus || status;
+
   return {
+    ...meta,
     kind: AGENT_EVENTS.TOOL_RESULT,
     step: call.step,
     name: call.name,
     toolCallId: call.toolCallId,
-    status,
+    status: finalStatus,
     observation: wrapObservation({
-      status,
-      payload: observation,
+      status: finalStatus,
+      payload,
+      // 错误分支读 message，成功分支读 payload —— 两个都给就不用分两次传
+      message:
+        typeof payload === 'string'
+          ? payload
+          : JSON.stringify(payload ?? null, null, 2),
       wrap:
         tool && tool.group === 'page'
           ? 'untrusted_page_content'
@@ -318,8 +365,10 @@ export function createAgent(deps) {
           }
         }
 
+        // 顺序不能反：先把旧的页面快照换成占位符（省 90% 的那一刀），
+        // 再按预算裁剪 —— 先裁的话，12 步单轮整组法一条都丢不掉，等于没裁（T-24）。
         const { messages } = applyTokenBudget(
-          buildWireMessages(history, { system }),
+          elideStaleObservations(buildWireMessages(history, { system })),
           { contextWindow }
         );
 

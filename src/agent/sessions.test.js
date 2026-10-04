@@ -6,6 +6,7 @@ import {
   createSessionStore,
   cropToTurns,
   indexEntryFromSession,
+  sessionOptionLabel,
   titleFromEvents,
 } from './sessions';
 import { AGENT_EVENTS } from './events';
@@ -69,6 +70,55 @@ test('indexEntryFromSession 不带 events', () => {
   });
   assert.ok(!('events' in entry));
   assert.equal(entry.messageCount, 2);
+});
+
+/* ---------------- 会话下拉的选项文案（面板切换入口） ---------------- */
+
+test('sessionOptionLabel 拼「标题 · MM-DD HH:mm」，时间取 lastAccessedAt', () => {
+  // 本地时间构造，期望自己算而不是硬编码日期 —— 换时区也能跑
+  const ts = new Date(2026, 9, 4, 9, 5).getTime();
+
+  assert.equal(
+    sessionOptionLabel({ id: 'a', title: '抓列表', lastAccessedAt: ts }),
+    '抓列表 · 10-04 09:05'
+  );
+  assert.equal(
+    sessionOptionLabel({ id: 'a', title: '抓列表', createdAt: ts }),
+    '抓列表 · 10-04 09:05',
+    '没有 lastAccessedAt 时退回 createdAt'
+  );
+});
+
+test('sessionOptionLabel 缺字段时不出半截分隔符', () => {
+  const ts = new Date(2026, 9, 4, 9, 5).getTime();
+
+  // 标题空 → 用调用方给的兜底文案（文案由面板翻译）
+  assert.equal(
+    sessionOptionLabel(
+      { id: 'a', title: '', lastAccessedAt: ts },
+      '未命名会话'
+    ),
+    '未命名会话 · 10-04 09:05'
+  );
+  // 两个时间都没有（老索引条目）→ 只有标题，绝不能出现「 · 」
+  assert.equal(
+    sessionOptionLabel({ id: 'a', title: '抓列表' }),
+    '抓列表',
+    '缺时间时不能留下悬空的分隔符'
+  );
+  // 时间有、标题没有 → 只出时间，同样不带分隔符
+  assert.equal(
+    sessionOptionLabel({ id: 'a', lastAccessedAt: ts }),
+    '10-04 09:05'
+  );
+  // 全空 / null 条目 → 兜底文案或空串，不炸
+  assert.equal(sessionOptionLabel({}, '未命名会话'), '未命名会话');
+  assert.equal(sessionOptionLabel(null), '');
+  // 非法时间戳（NaN）当没有时间处理
+  assert.equal(
+    sessionOptionLabel({ id: 'a', title: 'T', lastAccessedAt: 'oops' }),
+    'T'
+  );
 });
 
 test('store 往返：save 后 load 原样读回，索引同步且不带 events', async () => {

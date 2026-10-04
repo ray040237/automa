@@ -89,6 +89,40 @@ export function indexEntryFromSession(session) {
 }
 
 /**
+ * 会话下拉的选项文案：「标题 · 最后访问时间」。
+ *
+ * 放在这里而不是面板模板里，是因为这段拼装必须能被单测钉住 —— 面板是 SFC，
+ * 本仓没有组件测试基建，写在模板里的展示逻辑等于测不到。
+ *
+ * 时间取 lastAccessedAt，没有就退回 createdAt；两个都没有（老索引条目）
+ * 就只出标题，绝不拼出「 · 」这种半截分隔符。标题为空时用调用方给的兜底文案
+ * （文案由面板翻译，这个模块不认识 i18n）。
+ *
+ * @param {Object|null} entry listIndex 的一条
+ * @param {string=} untitledText 标题为空时的兜底文案
+ * @returns {string}
+ */
+export function sessionOptionLabel(entry, untitledText = '') {
+  const title = String((entry && entry.title) || untitledText || '').trim();
+  const ts = (entry && (entry.lastAccessedAt || entry.createdAt)) || 0;
+  const at = new Date(Number(ts));
+
+  if (!ts || Number.isNaN(at.getTime())) return title;
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const time =
+    pad(at.getMonth() + 1) +
+    '-' +
+    pad(at.getDate()) +
+    ' ' +
+    pad(at.getHours()) +
+    ':' +
+    pad(at.getMinutes());
+
+  return title ? `${title} · ${time}` : time;
+}
+
+/**
  * 会话仓库。io 形态与 configIO 一致：{ get, set, remove }，值走 JSON。
  *
  * @param {{get: Function, set: Function, remove: Function}} io

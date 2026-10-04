@@ -159,3 +159,46 @@ test('单条消息就超预算时不硬丢，原样交给 provider 并如实返�
   assert.equal(r.dropped, 0);
   assert.ok(r.estimated > r.threshold, '如实反映超预算，不假装解决了');
 });
+
+test('单轮多步超预算时在轮内降级：从最旧的一组 assistant+tool* 开始丢', () => {
+  // 单轮 send 的 wire：只有一个 user，整组法无候选可丢（T-25 的场景）
+  const big = 'x'.repeat(6000); // 4000 token
+  const history = [sys, user('任务')];
+  for (let i = 0; i < 6; i += 1) {
+    history.push(asst('', [tc('c' + i, 'read_page')]));
+    history.push(pageObs('c' + i, '第 ' + i + ' 步页面 ' + big));
+  }
+
+  const r = applyTokenBudget(history, { contextWindow: 8000 });
+
+  assert.ok(r.dropped > 0, '单轮内必须能丢，dropped=0 等于预算层失效');
+  assert.ok(r.estimated <= r.threshold, r.estimated + ' <= ' + r.threshold);
+  assert.equal(r.messages[0].role, 'system', 'system 不能被丢');
+  assert.equal(r.messages[1].content, '任务', '末轮 user 不能被丢');
+
+  // 最近一组是当前步骤的现场，必须留下
+  const last = r.messages[r.messages.length - 1];
+  assert.equal(last.role, 'tool');
+  assert.ok(last.content.includes('第 5 步页面'), '最近一组必须保留');
+
+  // 不留孤儿 tool 消息
+  const ids = new Set();
+  r.messages.forEach((m) => (m.tool_calls || []).forEach((c) => ids.add(c.id)));
+  r.messages.forEach((m) => {
+    if (m.role === 'tool')
+      assert.ok(ids.has(m.tool_call_id), '孤儿 tool: ' + m.tool_call_id);
+  });
+});
+
+test('单轮内只剩一组时不再丢，如实返回超预算', () => {
+  const history = [
+    sys,
+    user('任务'),
+    asst('', [tc('c1')]),
+    pageObs('c1', 'x'.repeat(30000)),
+  ];
+  const r = applyTokenBudget(history, { contextWindow: 1000 });
+  assert.equal(r.dropped, 0, '只剩一组时不能把现场也丢掉');
+  assert.equal(r.messages.length, 4);
+  assert.ok(r.estimated > r.threshold, '如实反映超预算');
+});

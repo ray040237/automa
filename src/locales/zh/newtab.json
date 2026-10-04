@@ -714,7 +714,11 @@
       "session": {
         "new": "新会话",
         "delete": "删除当前会话",
-        "placeholder": "选择历史会话"
+        "placeholder": "选择历史会话",
+        "untitled": "未命名会话",
+        "currentLabel": "{label}（当前）",
+        "deleteConfirmTitle": "删除这个会话？",
+        "deleteConfirmBody": "将永久删除「{title}」及其中的全部对话，删除后无法恢复。"
       }
     }
   },

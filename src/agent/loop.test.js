@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { createAgent, toAgentEvent } from './loop';
 import { AGENT_EVENTS, TOOL_STATUS } from './events';
 import { wrapUntrusted } from './untrusted';
+import { STALE_MARKER } from './window';
 
 /** 把若干轮响应排成队列的假 streamChat，并记录每次收到的参数 */
 function fakeStream(turns) {
@@ -211,6 +212,77 @@ test('非页面类工具用 untrusted_tool_result 包装', async () => {
   const res = of(h, AGENT_EVENTS.TOOL_RESULT)[0];
   assert.ok(res.observation.includes('<untrusted_tool_result>'));
   assert.ok(!res.observation.includes('page_content'));
+});
+
+test('旧的页面快照在下一步被压成占位符，只保留最近一组（elide 已接线）', async () => {
+  const h = makeAgent(
+    [
+      [call(0, 'read_page', {}, 'r1')],
+      [call(0, 'read_page', {}, 'r2')],
+      [text('完成')],
+    ],
+    { tools: [pageTool] }
+  );
+  await send(h);
+
+  // buildWireMessages 每步现算：第三步的 wire 里必须已经压掉前两步的快照
+  const third = h.streamChat.calls[2].messages;
+  const toolMsgs = third.filter((m) => m.role === 'tool');
+
+  assert.equal(toolMsgs.length, 2, '两次 read_page 都要有配对的 tool 消息');
+  assert.equal(
+    toolMsgs[0].content,
+    STALE_MARKER,
+    '除最近一组外的页面观察值必须被换成占位符'
+  );
+  assert.ok(
+    toolMsgs[1].content.includes('页面正文'),
+    '最近一组必须保留真实内容'
+  );
+  assert.equal(toolMsgs[0].tool_call_id, 'r1', 'tool_call_id 配对不能丢');
+});
+
+test('结构化返回被解包：payload 当正文、内层 error 升级、meta 上提', async () => {
+  const make = (name, result) => ({
+    ...echoTool,
+    name,
+    execute: async () => result,
+  });
+  const okTool = make('okTool', {
+    status: 'ok',
+    payload: '正文只有 63 字符',
+  });
+  const h = makeAgent([[call(0, 'okTool')], []], { tools: [okTool] });
+  await send(h);
+  let res = of(h, AGENT_EVENTS.TOOL_RESULT)[0];
+  assert.ok(res.observation.includes('正文只有 63 字符'));
+  assert.ok(
+    !res.observation.includes('"status"'),
+    '解包后不能再给模型套一层 JSON'
+  );
+  assert.equal(res.status, TOOL_STATUS.OK);
+
+  const errTool = make('errTool', {
+    status: 'error',
+    payload: '选择器不合法：bad [',
+  });
+  const h2 = makeAgent([[call(0, 'errTool')], []], { tools: [errTool] });
+  await send(h2);
+  [res] = of(h2, AGENT_EVENTS.TOOL_RESULT);
+  assert.equal(res.status, TOOL_STATUS.ERROR, '内层 error 必须升级为事件状态');
+  assert.ok(res.observation.includes('工具未成功执行'), '走错误观察值分支');
+  assert.ok(res.observation.includes('选择器不合法'));
+
+  const fpTool = make('fpTool', {
+    payload: '地址正文',
+    pageFingerprint: '9f2c1a4e',
+  });
+  const h3 = makeAgent([[call(0, 'fpTool')], []], { tools: [fpTool] });
+  await send(h3);
+  [res] = of(h3, AGENT_EVENTS.TOOL_RESULT);
+  assert.equal(res.pageFingerprint, '9f2c1a4e', 'meta 必须上提到事件顶层');
+  assert.ok(res.observation.includes('地址正文'));
+  assert.ok(!res.observation.includes('9f2c1a4e'), 'meta 不进观察值文本');
 });
 
 /* ---------------- 确认门 ---------------- */

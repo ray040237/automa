@@ -321,7 +321,15 @@ async function messageListener({ data, source }) {
       // 编辑器内嵌 agent 的读页通道。走 blocksHandler 拿 content 侧实现，
       // 不在这里另开一条通路 —— 否则同一个读页逻辑会有两份实现，日后必然走偏。
       case 'agent:read-page': {
-        return blocksHandler().agentReadPage({ detail: data.detail || 'auto' });
+        // 整包透传：detail/maxChars/op（find-text）/keyword/limit 全链路都在这里交接。
+        // 之前只透传 detail，maxChars 在这一跳被丢掉，预算永远是默认值（T-23）。
+        return blocksHandler().agentReadPage({
+          op: data.op || 'read',
+          detail: data.detail || 'addresses',
+          ...(data.maxChars !== undefined ? { maxChars: data.maxChars } : {}),
+          ...(data.keyword !== undefined ? { keyword: data.keyword } : {}),
+          ...(data.limit !== undefined ? { limit: data.limit } : {}),
+        });
       }
       default:
         return null;

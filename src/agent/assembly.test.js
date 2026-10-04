@@ -15,6 +15,8 @@ const {
   loadConfig,
   saveConfig,
 } = await import('./index');
+const { createSessionStore } = await import('./sessions');
+const { AGENT_EVENTS } = await import('./events');
 
 const TAB = { id: 7, url: 'https://shop.example.com/list', title: '商品列表' };
 
@@ -91,6 +93,122 @@ describe('createAgentRuntime', () => {
 
     assert.ok(rt);
     assert.equal(rt.getTargetTab(), TAB);
+  });
+});
+
+/**
+ * 会话切换 / 删除 —— 面板上那两个入口背后的 runtime 契约。
+ * 这里刻意用内存版会话仓库：要验的是切换语义，不是存储层（后者见 sessions.test.js）。
+ */
+describe('会话切换与删除', () => {
+  const user = (text) => ({
+    kind: AGENT_EVENTS.USER_MESSAGE,
+    text,
+    wire: text,
+  });
+
+  function memoryIO() {
+    const data = new Map();
+    return {
+      data,
+      get: async (k) => data.get(k),
+      set: async (k, v) => data.set(k, v),
+      remove: async (k) => data.delete(k),
+    };
+  }
+
+  async function seededStore() {
+    const store = createSessionStore(memoryIO());
+
+    await store.save({
+      id: 's-a',
+      workflowId: null,
+      status: 'active',
+      createdAt: 1,
+      lastAccessedAt: 1,
+      events: [user('A')],
+    });
+    await store.save({
+      id: 's-b',
+      workflowId: null,
+      status: 'active',
+      createdAt: 2,
+      lastAccessedAt: 2,
+      events: [user('B1'), user('B2')],
+    });
+
+    return store;
+  }
+
+  test('openSession 读回历史，切换后 id 与事件都跟着换', async () => {
+    const rt = createAgentRuntime(deps({ sessionStore: await seededStore() }));
+
+    const a = await rt.openSession('s-a');
+    assert.equal(rt.getSessionId(), 's-a');
+    assert.deepEqual(
+      a.events.map((e) => e.text),
+      ['A']
+    );
+
+    const b = await rt.openSession('s-b');
+    assert.equal(rt.getSessionId(), 's-b');
+    assert.deepEqual(
+      b.events.map((e) => e.text),
+      ['B1', 'B2'],
+      '切过去的必须是目标会话自己的历史，不能是上一个会话的残留'
+    );
+  });
+
+  test('切到不存在的会话不炸：空历史收下，不继承上一个会话的事件', async () => {
+    const rt = createAgentRuntime(deps({ sessionStore: await seededStore() }));
+    await rt.openSession('s-a');
+
+    const missing = await rt.openSession('not-there');
+
+    assert.deepEqual(missing.events, []);
+    assert.equal(missing.targetTab, null);
+  });
+
+  test('删除当前会话：存储清掉、回到未选态，别的会话不被殃及', async () => {
+    const store = await seededStore();
+    const rt = createAgentRuntime(deps({ sessionStore: store }));
+    await rt.openSession('s-a');
+
+    await rt.deleteSession('s-a');
+
+    assert.equal(rt.getSessionId(), null, '删完必须回到「还没有会话」的状态');
+    assert.equal(await store.load('s-a'), null, '本体要真的删掉');
+    assert.deepEqual(
+      (await store.listIndex()).map((e) => e.id),
+      ['s-b']
+    );
+  });
+
+  test('删的不是当前会话时，当前会话原样不动', async () => {
+    const store = await seededStore();
+    const rt = createAgentRuntime(deps({ sessionStore: store }));
+    await rt.openSession('s-b');
+
+    await rt.deleteSession('s-a');
+
+    assert.equal(rt.getSessionId(), 's-b', '删别的会话不能顺手把当前会话切走');
+    assert.equal(await store.load('s-a'), null);
+    assert.ok(await store.load('s-b'), '当前会话必须还在');
+  });
+
+  test('newSession 回到未选态，之后还能正常切回历史会话', async () => {
+    const store = await seededStore();
+    const rt = createAgentRuntime(deps({ sessionStore: store }));
+    await rt.openSession('s-a');
+
+    rt.newSession();
+    assert.equal(rt.getSessionId(), null);
+
+    const again = await rt.openSession('s-b');
+    assert.deepEqual(
+      again.events.map((e) => e.text),
+      ['B1', 'B2']
+    );
   });
 });
 

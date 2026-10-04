@@ -16,8 +16,10 @@ await page.addScriptTag({ content: handler });
 const has = await page.evaluate(() => typeof window.__agentReadPage);
 console.log('注入后 window.__agentReadPage =', has);
 
-const out = await page.evaluate(() => window.__agentReadPage({ detail: 'summary' }));
-console.log('---- read_page(detail=summary) 输出 ----');
-console.log(out);
+const res = await page.evaluate(() =>
+  window.__agentReadPage({ detail: 'addresses' })
+);
+console.log('---- read_page(detail=addresses) 输出  fingerprint=' + res.fingerprint + ' ----');
+console.log(res.text);
 
 await browser.close();

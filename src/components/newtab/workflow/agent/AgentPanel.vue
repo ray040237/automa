@@ -32,13 +32,13 @@
         :model-value="currentSessionId || ''"
         :disabled="busy"
         class="min-w-0 flex-1"
-        @change="emit('select-session', $event.target.value)"
+        @change="onSelectSession"
       >
         <option v-if="!currentSessionId" value="">
           {{ t('workflow.agent.session.placeholder') }}
         </option>
         <option v-for="s in sessions" :key="s.id" :value="s.id">
-          {{ s.title || s.id }}
+          {{ sessionOptionText(s) }}
         </option>
       </ui-select>
 
@@ -127,6 +127,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { sessionOptionLabel } from '@/agent/sessions';
 import AgentTranscript from './AgentTranscript.vue';
 import AgentTabPicker from './AgentTabPicker.vue';
 
@@ -166,6 +167,32 @@ const configured = computed(() => Boolean(props.config && props.config.apiKey));
 function goSettings() {
   emit('go-settings');
 }
+
+/**
+ * 会话下拉选中一项。
+ *
+ * UiSelect 的 change emit 出去的是字符串 value，不是原生 DOM 事件 ——
+ * 早先这里写 `$event.target.value`，取到 undefined 再读 .value 直接抛
+ * TypeError，用户点了没有任何反应（切换入口等于不存在）。
+ * 空串是那个「选择历史会话」占位项，不算一次切换。
+ */
+function onSelectSession(value) {
+  if (!value) return;
+  emit('select-session', value);
+}
+
+/**
+ * 选项文案：标题 · 最后访问时间；当前会话再套一层「（当前）」，
+ * 下拉收起时显示的就是这一行，用户能直接看出自己停在哪个会话。
+ */
+function sessionOptionText(entry) {
+  const label = sessionOptionLabel(entry, t('workflow.agent.session.untitled'));
+
+  return entry.id === props.currentSessionId
+    ? t('workflow.agent.session.currentLabel', { label })
+    : label;
+}
+
 /**
  * 打开弹窗前先扫一遍有没有可注入的页面：一个都没有的话，
  * 与其让用户点进去看一个空列表，不如直接告诉他为什么。

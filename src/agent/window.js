@@ -155,18 +155,19 @@ export function applyTokenBudget(messages, options = {}) {
 
 /**
  * 丢掉最旧的一整个对话轮，返回 null 表示已无可丢。
+ *
+ * 两级策略：
+ *   1. 优先丢整组 (user, assistant, 其后连续的 tool*) —— 语义干净，整轮上下文一起消失；
+ *   2. 整组法对不上任何候选时（典型：单轮 send 的 wire 里只有 index=1 一个 user，
+ *      第一个候选就撞上 `i >= lastUserIdx` → break），退化成「在最后一轮内部
+ *      从最旧的一组 assistant+tool* 开始丢」。没有第 2 级，一轮 12 步攒的
+ *      12 份页面快照一条都丢不掉，applyTokenBudget 形同虚设（T-25）。
+ *
  * @param {Array<Object>} messages
  * @returns {Array<Object>|null}
  */
 function dropOldestTurn(messages) {
-  // 最后一轮 user 的位置 —— 它和它之后的全部内容都不能丢
-  let lastUserIdx = -1;
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i].role === 'user') {
-      lastUserIdx = i;
-      break;
-    }
-  }
+  const lastUserIdx = lastUserIndex(messages);
 
   for (let i = 1; i < messages.length; i += 1) {
     if (messages[i].role !== 'user') continue;
@@ -180,5 +181,46 @@ function dropOldestTurn(messages) {
     return [...messages.slice(0, i), ...messages.slice(end)];
   }
 
-  return null;
+  return dropOldestStepInLastTurn(messages, lastUserIdx);
+}
+
+/** 最后一条 user 消息的下标；没有返回 -1。 */
+function lastUserIndex(messages) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role === 'user') return i;
+  }
+  return -1;
+}
+
+/**
+ * 单轮内降级：丢掉最后一轮里最旧的一组 (assistant, tool*)。
+ *
+ * 安全边界（每条都对应一个 wire 400）：
+ *   - 只在最后一个 user **之后**找组 —— system 与任何 user 都不参与；
+ *   - assistant 与其后连续的 tool 一起丢，绝不留孤儿 tool 消息；
+ *   - 只剩一组时返回 null —— 最近那组是当前步骤的现场，丢了模型就没有行动依据，
+ *     宁可如实超预算（交给 provider 报错）也不要交一份没有现场的上下文。
+ *
+ * @param {Array<Object>} messages
+ * @param {number} lastUserIdx
+ * @returns {Array<Object>|null}
+ */
+function dropOldestStepInLastTurn(messages, lastUserIdx) {
+  const groups = [];
+
+  for (let i = Math.max(lastUserIdx, -1) + 1; i < messages.length; i += 1) {
+    if (messages[i].role !== 'assistant') continue;
+
+    let end = i + 1;
+    while (messages[end]?.role === 'tool') end += 1;
+
+    groups.push([i, end]);
+    i = end - 1;
+  }
+
+  if (groups.length <= 1) return null;
+
+  const [start, end] = groups[0];
+
+  return [...messages.slice(0, start), ...messages.slice(end)];
 }

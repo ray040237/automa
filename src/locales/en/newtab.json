@@ -714,7 +714,11 @@
       "session": {
         "new": "New chat",
         "delete": "Delete current chat",
-        "placeholder": "Pick a past chat"
+        "placeholder": "Pick a past chat",
+        "untitled": "Untitled chat",
+        "currentLabel": "{label} (current)",
+        "deleteConfirmTitle": "Delete this chat?",
+        "deleteConfirmBody": "This permanently deletes \"{title}\" and every message in it. This can't be undone."
       }
     }
   },

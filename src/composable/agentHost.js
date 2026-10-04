@@ -19,6 +19,7 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { useToast } from 'vue-toastification';
 import browser from 'webextension-polyfill';
+import { useDialog } from '@/composable/dialog';
 import {
   configIO,
   createAgentRuntime,
@@ -43,6 +44,7 @@ export function useAgentHost(deps) {
   const { t } = useI18n();
   const toast = useToast();
   const router = useRouter();
+  const dialog = useDialog();
 
   const agent = reactive({
     events: [],
@@ -92,7 +94,9 @@ export function useAgentHost(deps) {
   }
 
   async function openAgentSession(id) {
-    if (!guardAgentSwitch() || !agent.runtime) return;
+    // id 为空是下拉里的占位项，不是一次切换 —— 交给它会把 runtime 的
+    // 会话 id 置空但不清 pins/插话队列，落到一个不新不旧的状态。
+    if (!id || !guardAgentSwitch() || !agent.runtime) return;
 
     const { events, targetTab, usage } = await agent.runtime.openSession(id);
     agent.sessionId = id;
@@ -110,14 +114,39 @@ export function useAgentHost(deps) {
     agent.usage = null;
   }
 
-  async function deleteAgentSession() {
+  /**
+   * 删除当前会话。先过二次确认：按钮挨着「新建」、图标相似，而会话是唯一的
+   * 历史载体，一次误触就是整段对话与工具执行记录没了、且不可撤销。
+   *
+   * 弹窗期间可能又开跑了一轮（确认时再核一次 busy 与 id）：删在途会话会在收尾
+   * 时被那一轮 save 回写成「幽灵会话」，比不删更让人困惑。
+   */
+  function deleteAgentSession() {
     if (!guardAgentSwitch() || !agent.runtime || !agent.sessionId) return;
 
-    await agent.runtime.deleteSession(agent.sessionId);
-    agent.sessionId = null;
-    agent.events = [];
-    agent.usage = null;
-    await refreshAgentSessions();
+    const id = agent.sessionId;
+    const entry = agent.sessions.find((s) => s.id === id);
+    const title =
+      (entry && entry.title) || t('workflow.agent.session.untitled');
+
+    dialog.confirm({
+      title: t('workflow.agent.session.deleteConfirmTitle'),
+      body: t('workflow.agent.session.deleteConfirmBody', { title }),
+      okText: t('common.delete'),
+      okVariant: 'danger',
+      async: true,
+      onConfirm: async () => {
+        if (agent.busy || agent.sessionId !== id) return false;
+
+        await agent.runtime.deleteSession(id);
+        agent.sessionId = null;
+        agent.events = [];
+        agent.usage = null;
+        await refreshAgentSessions();
+
+        return true;
+      },
+    });
   }
 
   function onPickTab(tab) {

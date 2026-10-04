@@ -76,8 +76,13 @@ export function buildSystemPrompt(facts) {
     '- 选择器要稳定：避开自动生成的哈希 class（如 css-1x2y3z，构建后会变），'
   );
   say('  优先用 id / name / data-* 属性 / 语义标签。');
-  say('- 抓列表时先看页面给出的重复项检测结果（列表容器、单项、每项字段），');
-  say('  那比逐个元素试 selector 可靠得多。');
+  say('- 抓列表时先看页面给出的列表段（容器、单项、条数、每项字段），');
+  say(
+    '  那比逐个元素试 selector 可靠得多。字段会写明取值方式（text / title 属性 / href）：'
+  );
+  say(
+    '  按它给的方式取值，不要默认取 textContent —— 链接文本常被站点截断，真值在 title 属性里。'
+  );
   say(
     '- 页面里如果给出了网络请求列表，抓列表往往有更稳的做法：直接用 automaFetch 调那个接口，'
   );
@@ -94,7 +99,13 @@ export function buildSystemPrompt(facts) {
   say('');
   say(
     '- 你的操作目标页由会话的 pin 列表决定。页面随时可能被用户导航或刷新，' +
-      '重要结论（选择器、元素结构）在写进方案前要重新 read_page 确认。'
+      '但别为了「保险」反复读页：先用 read_page 的 detail=probe 或 <page> 头部的' +
+      ' fingerprint 确认页面变没变，变了再重读，没变就沿用上次结论。'
+  );
+  say(
+    '- read_page 的历史快照会被压缩成一行占位（只保留最近一次）。' +
+      '关键 selector、条数与取值方式要复述进你自己的方案里，别只留在观察值里 —' +
+      '— 旧观察值被压掉之后就找不回来了。'
   );
   say(
     '- 跨页任务（在 A 页读数据、B 页填表）用 focus_tab 切换目标，' +

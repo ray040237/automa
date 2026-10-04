@@ -468,8 +468,11 @@ test('tools 完整落进请求体 —— 用真实链路，不手写形状', asy
     );
   });
 
-  assert.equal(captured.tools[0].function.name, 'read_page');
-  assert.equal(captured.tools[8].function.name, 'update_block');
+  // 断言「顺序与注册表一致」而不是写死下标：注册表加一个工具就挪位的断言是噪音
+  assert.deepEqual(
+    captured.tools.map((t) => t.function.name),
+    TOOLS.map((t) => t.name)
+  );
   assert.equal(captured.tool_choice, 'auto');
   assert.equal(captured.stream, true);
 });

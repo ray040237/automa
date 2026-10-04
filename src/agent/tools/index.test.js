@@ -8,7 +8,13 @@ import {
   findTool,
   requiresConfirmation,
 } from './index';
-import { readPage, getVariables, getBlockSchema } from './page';
+import {
+  readPage,
+  findText,
+  normalizeReadPageArgs,
+  getVariables,
+  getBlockSchema,
+} from './page';
 
 const ok = (extra = {}) => ({
   name: 'x',
@@ -26,6 +32,7 @@ test('真实工具表全部通过校验', () => {
     TOOLS.map((t) => t.name),
     [
       'read_page',
+      'find_text',
       'get_variables',
       'get_block_schema',
       'query_elements',
@@ -98,29 +105,95 @@ test('findTool 找不到返回 null 而不是抛错', () => {
 
 /* ---------------- execute 行为 ---------------- */
 
-test('read_page 默认 auto，且把 detail 透传给 ctx', async () => {
+test('read_page 默认 addresses，且把归一化后的参数透传给 ctx', async () => {
   const calls = [];
   const ctx = {
-    readPage: async (d) => {
-      calls.push(d);
-      return 'PAGE:' + d;
+    readPage: async (p) => {
+      calls.push(p);
+      return 'PAGE:' + p.detail;
     },
   };
-  assert.equal(await readPage.execute({}, ctx), 'PAGE:auto');
-  assert.equal(
-    await readPage.execute({ detail: 'interactive' }, ctx),
-    'PAGE:interactive'
-  );
-  assert.deepEqual(calls, ['auto', 'interactive']);
+  const res = await readPage.execute({}, ctx);
+
+  assert.equal(res.payload, 'PAGE:addresses');
+  assert.deepEqual(calls, [{ detail: 'addresses', maxChars: undefined }]);
+
+  await readPage.execute({ detail: 'content', maxChars: 2000 }, ctx);
+  assert.deepEqual(calls[1], { detail: 'content', maxChars: 2000 });
 });
 
-test('read_page 参数里 detail 只能是枚举内的值', () => {
+test('read_page 的 detail 枚举是新口径的四档', () => {
   assert.deepEqual(readPage.parameters.properties.detail.enum, [
-    'auto',
-    'summary',
-    'interactive',
+    'addresses',
+    'probe',
+    'content',
     'full',
   ]);
+});
+
+test('read_page 旧档位映射到新档位，不静默拒绝旧会话的参数', async () => {
+  const norm = (d) => normalizeReadPageArgs({ detail: d });
+
+  assert.equal(norm('auto').detail, 'addresses');
+  assert.equal(norm('summary').detail, 'content');
+  assert.equal(norm('interactive').detail, 'addresses');
+  assert.equal(norm('full').detail, 'full');
+  assert.equal(norm(undefined).detail, 'addresses');
+});
+
+test('read_page 未知 detail 报错而不是降级（T-18）', () => {
+  const res = normalizeReadPageArgs({ detail: 'bogus' });
+  assert.ok(res.error, '必须返回 error');
+  assert.ok(res.error.includes('bogus'), '要指名道姓说是哪个值不对');
+  assert.ok(res.error.includes('addresses'), '要把合法值列出来');
+  assert.equal(res.detail, undefined, '有 error 时不得附带静默生效的档位');
+});
+
+test('read_page 的 maxChars 超出 400–8000 范围报错（T-23）', () => {
+  assert.equal(normalizeReadPageArgs({ maxChars: 3000 }).maxChars, 3000);
+  assert.ok(normalizeReadPageArgs({ maxChars: 100 }).error);
+  assert.ok(normalizeReadPageArgs({ maxChars: 99999 }).error);
+  assert.ok(normalizeReadPageArgs({ maxChars: 'abc' }).error);
+  assert.equal(normalizeReadPageArgs({}).maxChars, undefined, '不传不校验');
+});
+
+test('read_page 把 content 侧的指纹上提到事件字段', async () => {
+  const ctx = {
+    readPage: async () => ({
+      text: '<page…>正文</page>',
+      fingerprint: '9f2c1a4e',
+    }),
+  };
+  const res = await readPage.execute({ detail: 'probe' }, ctx);
+
+  assert.equal(res.payload, '<page…>正文</page>');
+  assert.equal(res.pageFingerprint, '9f2c1a4e', '指纹必须走 meta 而不是进正文');
+  assert.ok(
+    !res.payload.includes('9f2c1a4e'),
+    '指纹不进观察值文本，否则会被 elide 抹掉'
+  );
+});
+
+test('find_text：keyword 空时报错，正常时返回 content 侧文本', async () => {
+  const seen = [];
+  const ctx = {
+    findText: async (p) => {
+      seen.push(p);
+      return 'HITS';
+    },
+  };
+
+  const bad = await findText.execute({}, ctx);
+  assert.equal(bad.status, 'error');
+  assert.equal(seen.length, 0, '空 keyword 不该打到 content');
+
+  const res = await findText.execute({ keyword: ' 运费 ', limit: 999 }, ctx);
+  assert.equal(res.payload, 'HITS');
+  assert.deepEqual(
+    seen[0],
+    { keyword: '运费', limit: 20 },
+    'limit 要夹到上限 20'
+  );
 });
 
 test('get_variables 渲染出变量与全局变量', async () => {
