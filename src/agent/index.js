@@ -33,6 +33,11 @@ import {
 } from './tab';
 import { loadConfig, saveConfig } from './config';
 import { createSessionId, createSessionStore } from './sessions';
+import {
+  accumulateUsage,
+  buildTurnRecord,
+  pruneEphemeralEvents,
+} from './turnRecord';
 import { buildTitleMessages, cleanTitle } from './title';
 import { raceTimeout } from './agentEvalInPage';
 import { createAgentLog } from './log';
@@ -670,30 +675,24 @@ export function createAgentRuntime(deps) {
       });
 
       // 收尾后把完整历史写回存储（getHistory 是唯一权威来源）。
-      // thinking 事件是流式碎片且不进 wire，落盘前剪掉，历史不膨胀。
-      const events = agent
-        .getHistory()
-        .filter((ev) => ev.kind !== AGENT_EVENTS.THINKING);
-
-      const usage = {
-        input: usageBefore.input + (result.usage ? result.usage.input : 0),
-        output: usageBefore.output + (result.usage ? result.usage.output : 0),
-      };
+      // 形状只在 turnRecord.js 构造一次——转中落盘（T-34）也从它出。
+      const events = pruneEphemeralEvents(agent.getHistory());
+      const usage = accumulateUsage(usageBefore, result.usage);
 
       if (sessionStore) {
         const isFirstTurn = !createdAt;
         if (!currentSessionId) currentSessionId = createSessionId();
-        await sessionStore.save({
-          id: currentSessionId,
-          workflowId: getWorkflowId(),
-          status: 'active',
-          createdAt: createdAt || Date.now(),
-          lastAccessedAt: Date.now(),
-          events,
-          pins,
-          focusedTabId,
-          usage,
-        });
+        await sessionStore.save(
+          buildTurnRecord({
+            id: currentSessionId,
+            workflowId: getWorkflowId(),
+            createdAt,
+            events,
+            pins,
+            focusedTabId,
+            usage,
+          })
+        );
         agentLog('turn.saved', {
           sessionId: currentSessionId,
           events: events.length,
