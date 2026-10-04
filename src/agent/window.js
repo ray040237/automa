@@ -88,9 +88,14 @@ export function truncateObservation(text, maxChars = MAX_OBSERVATION_CHARS) {
 /**
  * 剔除陈旧的页面观察值。
  *
- * 除最近一轮工具调用外，所有 role:'tool' 且内容以 <untrusted_page_content 开头的
- * 观察值，替换为占位符。必须保留 role/tool_call_id 本身 —— OpenAI wire 要求
- * 每条 assistant.tool_calls 都有对应的 tool 消息，删掉会直接 400。
+ * 保留**最后一条**页面快照，比它更旧的页面快照替换为占位符。必须保留
+ * role/tool_call_id 本身 —— OpenAI wire 要求每条 assistant.tool_calls 都有
+ * 对应的 tool 消息，删掉会直接 400。
+ *
+ * 「陈旧」的判定是「有没有更新的页面快照」，不是「后面有没有别的工具调用」：
+ * read_page 之后调 get_variables / list_canvas 这类非页面工具，快照仍是
+ * 上下文里唯一的页面知识，压掉它模型就只能反复 read_page（backlog T-37）。
+ * 非页面工具的观察值永远不剔。
  *
  * 不移植 pie 的 elide-stale-observations.ts：它绑定对方的 content-block 结构，
  * 这里用等价的简化实现。
@@ -99,19 +104,23 @@ export function truncateObservation(text, maxChars = MAX_OBSERVATION_CHARS) {
  * @returns {Array<Object>}
  */
 export function elideStaleObservations(messages) {
-  // 找出最后一轮 assistant 发起的工具调用的位置
-  let lastToolGroupStart = -1;
+  // 从尾往前找最后一条页面快照
+  let lastPageSnapshot = -1;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i].role === 'tool') {
-      lastToolGroupStart = i;
-    } else if (lastToolGroupStart !== -1) {
+    const m = messages[i];
+    if (
+      m.role === 'tool' &&
+      typeof m.content === 'string' &&
+      m.content.trimStart().startsWith('<untrusted_page_content')
+    ) {
+      lastPageSnapshot = i;
       break;
     }
   }
 
   return messages.map((m, i) => {
     if (m.role !== 'tool') return m;
-    if (i >= lastToolGroupStart) return m;
+    if (i === lastPageSnapshot) return m;
     if (typeof m.content !== 'string') return m;
     if (!m.content.trimStart().startsWith('<untrusted_page_content')) return m;
 

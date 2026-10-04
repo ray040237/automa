@@ -105,6 +105,56 @@ test('非页面类工具观察值不剔除', () => {
   assert.ok(out[3].content.includes('untrusted_tool_result'));
 });
 
+test('页面快照后面只跟非页面工具：快照必须保留（T-37）', () => {
+  // 致病场景：read_page 之后调 get_variables / list_canvas 这类非页面工具，
+  // 旧实现按「最后一组工具消息」判定，把仍是最新页面知识的快照压成占位符，
+  // 模型上下文里没了页面结构，只能反复 read_page。
+  const history = [
+    sys,
+    user('u'),
+    asst('', [tc('c1')]),
+    pageObs('c1', '页面 A 的结构'),
+    asst('', [tc('c2')]),
+    tool(
+      'c2',
+      '<untrusted_tool_result>{"status":"ok"}</untrusted_tool_result>'
+    ),
+    asst('', [tc('c3')]),
+    tool('c3', '<untrusted_tool_result>y</untrusted_tool_result>'),
+  ];
+  const out = elideStaleObservations(history);
+
+  assert.ok(
+    out[3].content.includes('页面 A 的结构'),
+    '后面没有更新的页面快照，这份必须保留'
+  );
+  assert.equal(out[3].elided, undefined, '保留的不该带 elided 标记');
+  assert.ok(
+    out.every((m) => m.role !== 'tool' || !m.elided),
+    '此历史里没有任何被压缩的快照'
+  );
+});
+
+test('多条页面快照：只保留最后一条，更旧的照旧压缩', () => {
+  const history = [
+    sys,
+    user('u'),
+    asst('', [tc('c1')]),
+    pageObs('c1', '旧页面 A'),
+    asst('', [tc('c2')]),
+    pageObs('c2', '中间页面 B'),
+    asst('', [tc('c3')]),
+    tool('c3', '<untrusted_tool_result>x</untrusted_tool_result>'),
+    asst('', [tc('c4')]),
+    pageObs('c4', '新页面 C'),
+  ];
+  const out = elideStaleObservations(history);
+
+  assert.equal(out[3].content, STALE_MARKER);
+  assert.equal(out[5].content, STALE_MARKER, '中间那份也该压');
+  assert.ok(out[9].content.includes('新页面 C'), '最后一条页面快照保留');
+});
+
 test('超预算时丢最旧的一整轮，且 system 与末轮 user 永不被丢', () => {
   const big = '页面内容'.repeat(4000);
   const history = [

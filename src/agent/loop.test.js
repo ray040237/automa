@@ -72,6 +72,7 @@ function makeAgent(turns, opts = {}) {
     toolCtx: opts.toolCtx || {},
     requestConfirmation:
       opts.requestConfirmation || (async () => ({ approved: true })),
+    log: opts.log,
   });
   return { agent, streamChat, events, onEvent: (e) => events.push(e) };
 }
@@ -289,7 +290,7 @@ test('结构化返回被解包：payload 当正文、内层 error 升级、meta 
 
 test('写类工具必须经过确认', async () => {
   const asked = [];
-  const h = makeAgent([[call(0, 'do_write')], []], {
+  const h = makeAgent([[call(0, 'do_write', { code: '1 + 1' })], []], {
     tools: [writeTool],
     requestConfirmation: async (c) => {
       asked.push(c);
@@ -299,6 +300,13 @@ test('写类工具必须经过确认', async () => {
   await send(h);
   assert.equal(asked.length, 1);
   assert.equal(asked[0].name, 'do_write');
+  // T-27：确认卡要展示的就是这些参数。顶层没有 code，宿主只能从 args 取 ——
+  // 这条断言钉住载荷形状，谁再把它裁掉，确认卡就又变成空框了。
+  assert.deepEqual(
+    asked[0].args,
+    { code: '1 + 1' },
+    'requestConfirmation 必须带上完整的 args'
+  );
 });
 
 test('读类工具不问确认', async () => {
@@ -859,4 +867,73 @@ test('abort 走 DONE(aborted) 而不是 error（§5.4 回归）', async () => {
   // 半截话入史，重开 session 时 wire 净化能安全接住
   const hist = agent.getHistory();
   assert.ok(hist.some((e) => e.kind === AGENT_EVENTS.TEXT_DELTA));
+});
+
+/* ---------------- 全链路日志接线 ---------------- */
+
+test('log 全链路打点：turn/step/tool.call/tool.result/confirm/budget/turn.end', async () => {
+  const entries = [];
+  const log = (event, data) => entries.push({ event, data });
+  log.warn = (event, data) => entries.push({ event, data });
+  log.error = log.warn;
+
+  const h = makeAgent([[call(0, 'echo', { a: 1 })], [text('完成')]], {
+    log,
+  });
+  await send(h);
+
+  const kinds = entries.map((e) => e.event);
+  for (const name of [
+    // turn.start 在装配层（index.js）打点，loop 只管步骤与工具
+    'step.start',
+    'budget',
+    'tool.call',
+    'tool.result',
+    'turn.end',
+  ]) {
+    assert.ok(kinds.includes(name), `缺 ${name} 打点`);
+  }
+
+  const toolCall = entries.find((e) => e.event === 'tool.call');
+  assert.equal(toolCall.data.name, 'echo');
+  assert.match(
+    String(toolCall.data.args),
+    /"a":1/,
+    '参数摘要要能看出模型传了什么'
+  );
+
+  const toolResult = entries.find((e) => e.event === 'tool.result');
+  assert.equal(toolResult.data.name, 'echo');
+  assert.equal(toolResult.data.status, 'ok');
+
+  const budget = entries.find((e) => e.event === 'budget');
+  assert.equal(typeof budget.data.estimated, 'number');
+  assert.equal(typeof budget.data.dropped, 'number');
+});
+
+test('write 工具的确认门打点：confirm.ask 带参数摘要、confirm.answer 带结果', async () => {
+  const entries = [];
+  const log = (event, data) => entries.push({ event, data });
+  log.warn = log;
+  log.error = log;
+
+  const h = makeAgent([[call(0, 'do_write')], []], {
+    tools: [writeTool],
+    log,
+  });
+  await send(h);
+
+  assert.ok(
+    entries.some((e) => e.event === 'confirm.ask'),
+    '缺 confirm.ask'
+  );
+  const answer = entries.find((e) => e.event === 'confirm.answer');
+  assert.ok(answer, '缺 confirm.answer');
+  assert.equal(answer.data.approved, true);
+});
+
+test('默认无日志时不炸：makeAgent 不传 log 照常跑完', async () => {
+  const h = makeAgent([[call(0, 'echo', { a: 1 })], []]);
+  await send(h);
+  assert.equal(of(h, AGENT_EVENTS.DONE).length, 1);
 });

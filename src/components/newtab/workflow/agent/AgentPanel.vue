@@ -84,6 +84,16 @@
       </button>
     </div>
 
+    <!-- 确认门放在流内、输入框上方，而不是 absolute 浮层：
+         浮层会盖住输入区与发送按钮，往回翻历史时还一直悬着（T-06）。
+         这里是文档流，面板高度不够时压缩的是 transcript，输入框永远点得到。 -->
+    <agent-confirm-card
+      v-if="pendingConfirm"
+      class="mx-3 mb-3"
+      :confirm="pendingConfirm"
+      @answer="emit('confirm-answer', $event)"
+    />
+
     <form
       class="flex items-end gap-2 border-t border-gray-200 p-3 dark:border-gray-700"
       @submit.prevent="send"
@@ -130,6 +140,7 @@ import { useI18n } from 'vue-i18n';
 import { sessionOptionLabel } from '@/agent/sessions';
 import AgentTranscript from './AgentTranscript.vue';
 import AgentTabPicker from './AgentTabPicker.vue';
+import AgentConfirmCard from './AgentConfirmCard.vue';
 
 const props = defineProps({
   events: { type: Array, default: () => [] },
@@ -140,6 +151,7 @@ const props = defineProps({
   sessions: { type: Array, default: () => [] },
   currentSessionId: { type: String, default: null },
   usage: { type: Object, default: null },
+  pendingConfirm: { type: Object, default: null },
 });
 
 const emit = defineEmits([
@@ -150,6 +162,7 @@ const emit = defineEmits([
   'select-session',
   'new-session',
   'delete-session',
+  'confirm-answer',
   'abort',
 ]);
 

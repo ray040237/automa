@@ -9,6 +9,7 @@
       :sessions="agent.sessions"
       :current-session-id="agent.sessionId"
       :usage="agent.usage"
+      :pending-confirm="agent.pendingConfirm"
       @no-target="agent.noTarget"
       @go-settings="agent.goToSettings"
       @send="agent.send"
@@ -16,13 +17,8 @@
       @select-session="agent.openSession"
       @new-session="agent.newSession"
       @delete-session="agent.deleteSession"
+      @confirm-answer="agent.answerConfirm"
       @abort="agent.abort"
-    />
-    <agent-confirm-card
-      v-if="agent.pendingConfirm"
-      class="absolute inset-x-3 bottom-3"
-      :code="agent.pendingConfirm.code"
-      @answer="agent.pendingConfirm.resolve($event)"
     />
   </div>
 </template>
@@ -30,7 +26,6 @@
 <script setup>
 import { onMounted } from 'vue';
 import { listTabs } from '@/agent';
-import AgentConfirmCard from '@/components/newtab/workflow/agent/AgentConfirmCard.vue';
 import AgentPanel from '@/components/newtab/workflow/agent/AgentPanel.vue';
 import { useAgentHost } from '@/composable/agentHost';
 

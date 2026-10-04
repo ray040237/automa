@@ -16,6 +16,7 @@ import { automaFuncsSnippets } from '@/utils/codeEditorAutocomplete';
 import templatingFunctions from '@/workflowEngine/templating/templatingFunctions';
 import { tasks } from '@/utils/shared';
 import credentialUtil from '@/utils/credentialUtil';
+import { sendMessage as backgroundSend } from '@/utils/message';
 
 import { buildFacts } from './facts';
 import { createAgent } from './loop';
@@ -33,6 +34,25 @@ import {
 import { loadConfig, saveConfig } from './config';
 import { createSessionId, createSessionStore } from './sessions';
 import { buildTitleMessages, cleanTitle } from './title';
+import { raceTimeout } from './agentEvalInPage';
+import { createAgentLog } from './log';
+
+/** 全链路日志（控制台 + 环形缓冲）。排查卡死/异常时的现场，见 log.js 头注。 */
+export const agentLog = createAgentLog();
+
+// 环形缓冲暴露到页面：转中不落盘（T-34），页面卡死时刷新前还能从这里导出现场。
+if (typeof window !== 'undefined') {
+  window.__agentLogs = agentLog.ring;
+  window.__agentLogDownload = () => {
+    const data = JSON.stringify(window.__agentLogs, null, 1);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(
+      new Blob([data], { type: 'application/json' })
+    );
+    a.download = 'agent-log.json';
+    a.click();
+  };
+}
 
 /**
  * 轻量跨会话锁（P2）：tabId -> 锁持有者 id。
@@ -109,6 +129,78 @@ export function collectPromptFacts(tools = TOOLS) {
 }
 
 /**
+ * get_block_schema 工具的真实现：查块目录。
+ *
+ * 目录就是上面已经导入的 tasks（@/utils/shared），按块 id 或块名查；
+ * '*' 返回全量 [{id, name}]。形状与 tools/page.js 的渲染约定对齐
+ * （字段清单读 schema.data 的键）。此前这里是 `async () => null` 的默认桩
+ * 且无任何宿主传入真实现 —— 工具永远回「可用块（一个都没有）」，与事实表
+ * 「61 个块」自相矛盾，模型会陷进 read_page ↔ get_block_schema 的死循环
+ * （backlog T-32）。
+ *
+ * @param {string} name 块 id、块名，或 '*' 表示全量
+ * @returns {Promise<Object|Array|null>} 查不到返回 null
+ */
+export async function lookupBlockSchema(name) {
+  if (!name || !tasks || typeof tasks !== 'object') return null;
+
+  if (name === '*') {
+    return Object.entries(tasks).map(([id, def]) => ({
+      id,
+      name: (def && def.name) || id,
+    }));
+  }
+
+  const id = Object.keys(tasks).find(
+    (k) => k === name || (tasks[k] && tasks[k].name) === name
+  );
+
+  if (!id) return null;
+
+  const def = tasks[id];
+
+  return {
+    id,
+    name: def.name,
+    description: def.description,
+    category: def.category,
+    data: def.data || {},
+  };
+}
+
+/**
+ * 工具 → background 的唯一通道。
+ *
+ * 工具侧约定发 `{type, ...params}`，background 侧的 MessageListener 只认
+ * `{name: 'background--<type>', data: params}` —— 两个协议在这是唯一交汇点。
+ * 导出是为了让测试能拿真实 MessageListener 验路由（backlog T-28：协议对不上时
+ * 报的是一句指不到真因的 Unhandled Background Error，只能靠契约测试钉住）。
+ *
+ * @param {{type: string} & Object} msg
+ * @returns {Promise<Object>}
+ */
+export function toBackground({ type, ...payload }) {
+  agentLog('channel.send', { type });
+  return backgroundSend(type, payload, 'background').then(
+    (res) => {
+      agentLog('channel.reply', {
+        type,
+        ok: Boolean(res && res.ok),
+        error: res && res.error,
+      });
+      return res;
+    },
+    (err) => {
+      agentLog.error('channel.fail', {
+        type,
+        message: err && err.message ? err.message : String(err),
+      });
+      throw err;
+    }
+  );
+}
+
+/**
  * 读目标页 / 页内找文本。通过 content script 通道拿结构化观察值。
  *
  * 失败时回一句人话而不是抛异常：工具异常会被 loop 转成 error 观察值喂回模型，
@@ -119,34 +211,79 @@ export function collectPromptFacts(tools = TOOLS) {
  *   传字符串时按 detail 处理（兼容旧调用点）
  * @returns {Promise<string|{text: string, fingerprint: (string|null)}>}
  */
+/**
+ * tabs 消息通道的硬超时。
+ *
+ * 目标页主线程被注入代码占死时（test_js 的死循环/alert），同进程的
+ * content script 无法应答，tabs.sendMessage 的 promise 永不 settle ——
+ * executeScript 通道有 raceTimeout 兜底（background 侧 T-30），这条通道
+ * 没有的话整轮 agent 就挂死在下一步的 probe / read_page 上（T-33，
+ * 已在 t33-probe.mjs 实测复现：占死后 read_page 15s 仍无回应）。
+ */
+export const TAB_CHANNEL_TIMEOUT_MS = 15000;
+
 export async function readPageFromTab(tab, params) {
   const options =
     typeof params === 'string' ? { detail: params } : params || {};
 
   if (!tab) return '没有确定目标页。请先让用户选一个标签页。';
 
+  const timeoutMs = options.timeoutMs || TAB_CHANNEL_TIMEOUT_MS;
+
   try {
-    const res = await browser.tabs.sendMessage(tab.id, {
-      type: 'agent:read-page',
-      op: options.op || 'read',
-      detail: options.detail,
-      maxChars: options.maxChars,
-      keyword: options.keyword,
-      limit: options.limit,
-    });
+    const res = await raceTimeout(
+      browser.tabs.sendMessage(tab.id, {
+        type: 'agent:read-page',
+        op: options.op || 'read',
+        detail: options.detail,
+        maxChars: options.maxChars,
+        keyword: options.keyword,
+        limit: options.limit,
+      }),
+      timeoutMs,
+      {
+        __timeout: true,
+      }
+    );
+
+    // 页面无应答 ≠ 通道坏了：八成是之前注入的代码把页面占死了。
+    // 必须给模型一句能行动的话（换页/让用户刷新），否则它会原地反复重试。
+    if (res && res.__timeout) {
+      agentLog.warn('page.timeout', { tabId: tab.id, timeoutMs });
+      return (
+        '页面无响应（' +
+        Math.round(timeoutMs / 1000) +
+        's 无应答）：页面可能被之前注入的代码占死了。请停止对本页的读页和执行操作，' +
+        '让用户手动刷新或关闭该页，或用 focus_tab 换一个标签页。'
+      );
+    }
 
     // content 侧读页返回 {text, fingerprint}；指纹必须原样带回来 ——
     // 它是「页面变没变」的唯一判据，塞进文本会被陈旧快照剔除抹掉（设计稿 §6.2）
-    if (res && typeof res === 'object' && typeof res.text === 'string')
+    if (res && typeof res === 'object' && typeof res.text === 'string') {
+      agentLog('page.read', {
+        tabId: tab.id,
+        detail: options.detail || options.op || 'read',
+        chars: res.text.length,
+        fingerprint: res.fingerprint || null,
+      });
       return { text: res.text, fingerprint: res.fingerprint || null };
+    }
 
-    if (typeof res === 'string' && res) return res;
+    if (typeof res === 'string' && res) {
+      agentLog.warn('page.read.odd', { tabId: tab.id, res: res.slice(0, 80) });
+      return res;
+    }
 
     return (
       '这个页面读不到结构。常见原因：页面尚未加载完；这是一个扩展内置页' +
       '（chrome:// 与扩展自己的页面都没有注入 content script）；或站点未授予扩展权限。'
     );
   } catch (err) {
+    agentLog.warn('page.read.fail', {
+      tabId: tab.id,
+      message: err && err.message ? err.message : String(err),
+    });
     return (
       '读取目标页失败：' +
       (err && err.message ? err.message : String(err)) +
@@ -173,7 +310,7 @@ export function createAgentRuntime(deps) {
     getConfig,
     requestConfirmation,
     getVariables = async () => ({}),
-    getBlockSchema = async () => null,
+    getBlockSchema = lookupBlockSchema,
     sessionStore = null,
     getWorkflowId = () => null,
     enabledGroups = null,
@@ -225,8 +362,12 @@ export function createAgentRuntime(deps) {
     // 只标「未保存」，绝不落盘 —— 这是 G5 唯一允许的副作用
     onCanvasChanged: deps.onCanvasChanged,
     // 写类工具（test_js）走 background 执行：要 scripting 权限且世界是 MAIN，
-    // 那是 background 的活，content script 和 newtab 都做不了
-    sendMessage: (msg) => browser.runtime.sendMessage(msg),
+    // 那是 background 的活，content script 和 newtab 都做不了。
+    // 工具发的是 {type, ...} 载荷，但 background 的 MessageListener 按
+    // {name: 'background--<type>', data} 查表 —— 必须过这里的翻译，且要用
+    // utils/message 的 sendMessage（Firefox 下它会把载荷 stringify 成字符串），
+    // 裸 runtime.sendMessage 在 Firefox 会让 background 的 JSON.parse 炸掉。
+    sendMessage: toBackground,
     // 工具执行时读到的是「这一刻」的目标页：
     // 工具是直接读 ctx.targetTab 的，所以这里放的是快照而不是闭包，
     // setTargetTab 必须同步把 toolCtx.targetTab 换掉，否则工具会一直用旧标签页。
@@ -459,11 +600,16 @@ export function createAgentRuntime(deps) {
       preStepNotice,
       // busy 期间用户补充的指令，每步开工前送达模型（P3 插话队列）
       drainInstructions: () => instructionQueue.splice(0),
+      log: agentLog,
     });
 
     activeAgent = agent;
 
     try {
+      agentLog('turn.start', {
+        sessionId: currentSessionId,
+        userLen: userText.length,
+      });
       const result = await agent.send({
         userText,
         targetTab,
@@ -497,6 +643,10 @@ export function createAgentRuntime(deps) {
           focusedTabId,
           usage,
         });
+        agentLog('turn.saved', {
+          sessionId: currentSessionId,
+          events: events.length,
+        });
 
         // LLM 标题：只在首轮结束后生成一次，失败静默回退到消息前缀。
         // fire-and-forget，不拖住 send 的返回。
@@ -516,9 +666,14 @@ export function createAgentRuntime(deps) {
                 usage,
                 title,
               });
+              agentLog('title.saved', { sessionId: currentSessionId });
               if (deps.onSessionsChanged) deps.onSessionsChanged();
             })
-            .catch(() => {});
+            .catch((err) => {
+              agentLog.warn('title.skip', {
+                message: err && err.message ? err.message : String(err),
+              });
+            });
         }
       }
 

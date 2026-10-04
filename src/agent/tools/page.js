@@ -265,13 +265,31 @@ export const getBlockSchema = {
 
     if (!name) return '请提供块名。';
 
-    const schema = await ctx.getBlockSchema(name);
+    const raw = await ctx.getBlockSchema(name);
+
+    // 形状守卫：契约是「单块对象或 null」。数组/其他真值一律当查不到处理，
+    // 否则空数组会走「查到了」分支渲染出 ## undefined（真踩过）。
+    const schema =
+      raw && !Array.isArray(raw) && typeof raw === 'object' && raw.id
+        ? raw
+        : null;
 
     if (!schema) {
       // 模型猜错块名是最常见的情况，所以这一条要把「有什么」直接摆出来。
       // id 和块名都要给：add_block 用 id，get_block_schema 两种写法都认。
       const all = await ctx.getBlockSchema('*');
       const list = Array.isArray(all) ? all : [];
+
+      // 目录合法但为空 ≠ 没有匹配块：真实目录有 61 个块，这里空说明
+      // runtime 的 getBlockSchema 又没接上线（backlog T-32 的旧病）。
+      // 必须说破，否则模型看到的是「没有任何块可用」，和事实表矛盾，
+      // 会陷进 read_page ↔ get_block_schema 的重试循环。
+      if (Array.isArray(all) && all.length === 0) {
+        return (
+          '块目录查不到任何块——get_block_schema 没接上线（agent runtime 缺陷），' +
+          '这不是块名写错。请停止用本工具重试，改用其他方式完成任务。'
+        );
+      }
 
       return [
         `没有名为 ${name} 的块。`,

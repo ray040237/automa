@@ -14,9 +14,14 @@ const {
   createAgentRuntime,
   loadConfig,
   saveConfig,
+  toBackground,
+  lookupBlockSchema,
+  readPageFromTab,
+  agentLog,
 } = await import('./index');
 const { createSessionStore } = await import('./sessions');
 const { AGENT_EVENTS } = await import('./events');
+const { tasks } = await import('../utils/shared');
 
 const TAB = { id: 7, url: 'https://shop.example.com/list', title: '商品列表' };
 
@@ -208,6 +213,264 @@ describe('会话切换与删除', () => {
     assert.deepEqual(
       again.events.map((e) => e.text),
       ['B1', 'B2']
+    );
+  });
+});
+
+/**
+ * 工具 → background 的路由契约（backlog T-28）。
+ *
+ * 之前 toolCtx 裸发 browser.runtime.sendMessage({type,...})，而 background 的
+ * MessageListener 只按 {name: 'background--<type>', data} 查表 —— 三个页面工具
+ * （test_js / query_elements / highlight_selector）在真实浏览器里全部打不通，
+ * 只回一句指不到真因的 Unhandled Background Error。工具单测注入假 sendMessage
+ * 测不出这条断链，所以这里必须走真的：toBackground 的产物喂进真实
+ * MessageListener('background')，handler 必须收到参数、返回值必须原路带回。
+ */
+describe('toBackground —— 到 background 的路由契约', () => {
+  async function wireRealRouting() {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    const { MessageListener } = await import('../utils/message');
+
+    const ml = new MessageListener('background');
+    const received = {};
+
+    // 注册名与 src/background/index.js:603/656/721 一致
+    ml.on('agent:run-js', (data) => {
+      received['agent:run-js'] = data;
+      return { ok: true, value: '"done"', json: true };
+    });
+    ml.on('agent:query', (data) => {
+      received['agent:query'] = data;
+      return { ok: true, count: 1, sample: [] };
+    });
+    ml.on('agent:highlight', (data) => {
+      received['agent:highlight'] = data;
+      return { ok: true, highlighted: 1 };
+    });
+
+    stub.default.runtime.sendMessage = (payload) => ml.listener(payload);
+
+    return received;
+  }
+
+  test('test_js 的载荷必须路由到 agent:run-js，参数原样到达、返回原路带回', async () => {
+    const received = await wireRealRouting();
+
+    // 与 page-write.js:29-33 实际发出的形状一致
+    const res = await toBackground({
+      type: 'agent:run-js',
+      tabId: 7,
+      code: 'document.title',
+    });
+
+    assert.deepEqual(received['agent:run-js'], {
+      tabId: 7,
+      code: 'document.title',
+    });
+    assert.deepEqual(res, { ok: true, value: '"done"', json: true });
+  });
+
+  test('query_elements 与 highlight_selector 的载荷同样要能路由', async () => {
+    const received = await wireRealRouting();
+
+    await toBackground({
+      type: 'agent:query',
+      tabId: 7,
+      selector: 'a',
+      limit: 5,
+    });
+    await toBackground({
+      type: 'agent:highlight',
+      tabId: 7,
+      selector: 'a',
+      limit: 10,
+      durationMs: 4000,
+    });
+
+    assert.deepEqual(received['agent:query'], {
+      tabId: 7,
+      selector: 'a',
+      limit: 5,
+    });
+    assert.deepEqual(received['agent:highlight'], {
+      tabId: 7,
+      selector: 'a',
+      limit: 10,
+      durationMs: 4000,
+    });
+  });
+});
+
+/**
+ * get_block_schema 的真实现（backlog T-32）：此前 runtime 默认 `async () => null`
+ * 且无宿主接线，任何查询都回「可用块（一个都没有）」，与事实表「61 个块」矛盾，
+ * 模型陷进 read_page ↔ get_block_schema 死循环。这里直接对真目录断言。
+ */
+describe('lookupBlockSchema —— 块目录查询（T-32）', () => {
+  test('按 id 查 javascript-code：拿到块名与 data 字段清单', async () => {
+    const s = await lookupBlockSchema('javascript-code');
+
+    assert.equal(s.id, 'javascript-code');
+    assert.equal(s.name, 'JavaScript code');
+    assert.ok(s.data && 'code' in s.data, 'data 里必须有 code 字段');
+  });
+
+  test('按块名查（get_block_schema 两种写法都认）', async () => {
+    const s = await lookupBlockSchema('JavaScript code');
+
+    assert.equal(s.id, 'javascript-code');
+  });
+
+  test("'*' 镜像真实目录：条数与 tasks 一致，且含 javascript-code", async () => {
+    const all = await lookupBlockSchema('*');
+
+    assert.ok(Array.isArray(all));
+    assert.equal(all.length, Object.keys(tasks).length);
+    assert.ok(
+      all.some((b) => b.id === 'javascript-code'),
+      '全量列表必须包含 javascript-code'
+    );
+    assert.ok(
+      all.every((b) => b.id && b.name),
+      '每条都要有 id 和 name'
+    );
+  });
+
+  test('查不到的块名返回 null（工具据此回可用块列表）', async () => {
+    assert.equal(await lookupBlockSchema('no-such-block'), null);
+    assert.equal(await lookupBlockSchema(''), null);
+  });
+
+  test('工具层防御：目录为空 = 接线断了，必须说破而不是「一个都没有」', async () => {
+    const { TOOLS } = await import('./tools');
+    const tool = TOOLS.find((t) => t.name === 'get_block_schema');
+
+    assert.ok(tool, 'TOOLS 里必须有 get_block_schema');
+
+    const broken = await tool.execute(
+      { name: 'javascript-code' },
+      { getBlockSchema: async () => [] }
+    );
+
+    assert.match(
+      broken,
+      /没接上线/,
+      '空目录要说人话，不能渲染成「一个都没有」'
+    );
+
+    // 对照：桩回 null（查不到 + 全量也 null）才是旧形态，走「一个都没有」分支
+    const legacyNull = await tool.execute(
+      { name: 'javascript-code' },
+      { getBlockSchema: async () => null }
+    );
+
+    assert.match(legacyNull, /一个都没有/);
+  });
+
+  test('工具走真实现端到端：javascript-code 返回字段清单', async () => {
+    const { TOOLS } = await import('./tools');
+    const tool = TOOLS.find((t) => t.name === 'get_block_schema');
+
+    const out = await tool.execute(
+      { name: 'javascript-code' },
+      { getBlockSchema: lookupBlockSchema }
+    );
+
+    assert.match(out, /## JavaScript code/);
+    assert.match(out, /code/, '字段清单里必须出现 code');
+  });
+});
+
+/**
+ * tabs 通道的硬超时（backlog T-33）。
+ *
+ * test_js 注入的代码把目标页主线程占死后，同进程的 content script 无法应答，
+ * tabs.sendMessage 的 promise 永不 settle —— read_page / 指纹 probe 全走这条
+ * 通道，没有超时就是「同意执行后整个 agent 卡死」。探针 t33-probe.mjs 已在
+ * 真机复现；这里用永不 settle 的桩把超时分支钉住。
+ */
+describe('readPageFromTab —— tabs 通道超时兜底（T-33）', () => {
+  test('页面无应答时按 timeoutMs 返回人话，而不是永久挂起', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    const original = stub.default.tabs.sendMessage;
+    stub.default.tabs.sendMessage = () => new Promise(() => {});
+
+    try {
+      const out = await readPageFromTab(
+        { id: 7 },
+        { detail: 'summary', timeoutMs: 20 }
+      );
+
+      assert.match(out, /页面无响应/);
+      assert.match(out, /刷新|换一个标签页/, '必须给模型一句能行动的话');
+    } finally {
+      stub.default.tabs.sendMessage = original;
+    }
+  });
+
+  test('健康通道照常返回，不被超时分支干扰', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    const original = stub.default.tabs.sendMessage;
+    stub.default.tabs.sendMessage = async () => ({
+      text: '页面正文',
+      fingerprint: 'abc',
+    });
+
+    try {
+      const out = await readPageFromTab(
+        { id: 7 },
+        { detail: 'summary', timeoutMs: 500 }
+      );
+
+      assert.deepEqual(out, { text: '页面正文', fingerprint: 'abc' });
+    } finally {
+      stub.default.tabs.sendMessage = original;
+    }
+  });
+});
+
+describe('agentLog —— 关键事件打点（接线回归）', () => {
+  test('toBackground 每次调用都留下 channel.send / channel.reply', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    const { MessageListener } = await import('../utils/message');
+
+    const ml = new MessageListener('background');
+    ml.on('agent:run-js', () => ({ ok: true, value: '"1"' }));
+    stub.default.runtime.sendMessage = (payload) => ml.listener(payload);
+
+    const before = agentLog.ring.length;
+    await toBackground({ type: 'agent:run-js', tabId: 7, code: '1' });
+
+    const fresh = agentLog.ring.slice(before);
+    assert.ok(
+      fresh.some((e) => e.event === 'channel.send'),
+      'send 打点缺失'
+    );
+    assert.ok(
+      fresh.some(
+        (e) => e.event === 'channel.reply' && e.data && e.data.ok === true
+      ),
+      'reply 打点缺失或 ok 不符'
+    );
+  });
+
+  test('通道失败走 channel.fail 且不吞异常', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    stub.default.runtime.sendMessage = async () => {
+      throw new Error('boom');
+    };
+
+    await assert.rejects(() =>
+      toBackground({ type: 'agent:run-js', tabId: 7, code: '1' })
+    );
+    assert.ok(
+      agentLog.ring.some(
+        (e) =>
+          e.event === 'channel.fail' &&
+          e.data &&
+          String(e.data.message).includes('boom')
+      )
     );
   });
 });

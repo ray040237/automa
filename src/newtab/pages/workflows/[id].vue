@@ -36,6 +36,7 @@
           :sessions="agentHost.sessions"
           :current-session-id="agentHost.sessionId"
           :usage="agentHost.usage"
+          :pending-confirm="agentHost.pendingConfirm"
           @no-target="agentHost.noTarget"
           @go-settings="agentHost.goToSettings"
           @send="agentHost.send"
@@ -43,13 +44,8 @@
           @select-session="agentHost.openSession"
           @new-session="agentHost.newSession"
           @delete-session="agentHost.deleteSession"
+          @confirm-answer="agentHost.answerConfirm"
           @abort="agentHost.abort"
-        />
-        <agent-confirm-card
-          v-if="agentHost.pendingConfirm"
-          class="absolute inset-x-3 bottom-3"
-          :code="agentHost.pendingConfirm.code"
-          @answer="agentHost.pendingConfirm.resolve($event)"
         />
       </div>
       <workflow-details-card
@@ -341,7 +337,6 @@
   </ui-modal>
 </template>
 <script setup>
-import AgentConfirmCard from '@/components/newtab/workflow/agent/AgentConfirmCard.vue';
 import AgentPanel from '@/components/newtab/workflow/agent/AgentPanel.vue';
 import PackageDetails from '@/components/newtab/package/PackageDetails.vue';
 import PackageSettings from '@/components/newtab/package/PackageSettings.vue';

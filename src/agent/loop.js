@@ -25,9 +25,23 @@ import {
 
 import { toWireTools, requiresConfirmation } from './tools';
 import { streamChat } from './llm/providers/openai-compat';
+import { noopLog } from './log';
 
 /** 一轮里最多来回多少次工具调用，防止模型卡在工具循环里。 */
 export const MAX_STEPS = 12;
+
+/** 日志用的参数摘要：模型给的 args 可能是几 KB 的代码串，截断即可辨形。 */
+function summarize(value) {
+  try {
+    const s = JSON.stringify(value);
+
+    return s.length > 300
+      ? s.slice(0, 300) + '…(+' + (s.length - 300) + ')'
+      : s;
+  } catch {
+    return String(value);
+  }
+}
 
 /** 半截参数 JSON 不炸调用方：解析失败按空参数处理。 */
 function safeParseArgs(argsDelta) {
@@ -155,7 +169,7 @@ function failEvent(call, status, message) {
   };
 }
 
-async function executeCall({ call, tools, requestConfirmation, toolCtx }) {
+async function executeCall({ call, tools, requestConfirmation, toolCtx, log }) {
   const tool = tools.find((t) => t.name === call.name);
 
   if (!tool) {
@@ -183,8 +197,14 @@ async function executeCall({ call, tools, requestConfirmation, toolCtx }) {
   };
 
   if (requiresConfirmation(call.name, tools)) {
+    log('confirm.ask', { name: call.name, args: summarize(call.args) });
     const answer = await requestConfirmation({
       ...call,
+    });
+
+    log('confirm.answer', {
+      name: call.name,
+      approved: Boolean(answer && answer.approved),
     });
 
     if (!answer || answer.approved === false) {
@@ -201,8 +221,23 @@ async function executeCall({ call, tools, requestConfirmation, toolCtx }) {
 
   try {
     const observation = await tool.execute(call.args || {}, toolCtx);
-    return [runningEv, resultEvent(call, tool, TOOL_STATUS.OK, observation)];
+    const result = resultEvent(call, tool, TOOL_STATUS.OK, observation);
+
+    // resultEvent 的 finalStatus 可能被工具内层 error 盖成 error，按实际状态分级
+    const evt = {
+      name: call.name,
+      status: result.status,
+      obsChars: (result.observation || '').length,
+    };
+    if (result.status === TOOL_STATUS.OK) log('tool.result', evt);
+    else log.warn('tool.result', evt);
+
+    return [runningEv, result];
   } catch (err) {
+    log.error('tool.throw', {
+      name: call.name,
+      message: toolError(err).message,
+    });
     return [
       runningEv,
       failEvent(call, TOOL_STATUS.ERROR, toolError(err).message),
@@ -243,6 +278,8 @@ export function createAgent(deps) {
     toolCtx = {},
     model = 'gpt-4o-mini',
     contextWindow,
+    // 全链路日志（log.js）：纯模块默认 noop，装配层传 createAgentLog() 的实例
+    log = noopLog,
   } = deps;
 
   let controller = null;
@@ -327,6 +364,7 @@ export function createAgent(deps) {
       const usage = { input: 0, output: 0 };
 
       for (let step = 0; step < MAX_STEPS; step += 1) {
+        log('step.start', { step });
         // 每步开工前做一次环境预检（tab 是否还在、origin 是否漂移）。
         // notice 是观察值不是错误：模型看到后自己决定继续、换页还是收手。
         if (preStepNotice) {
@@ -367,10 +405,18 @@ export function createAgent(deps) {
 
         // 顺序不能反：先把旧的页面快照换成占位符（省 90% 的那一刀），
         // 再按预算裁剪 —— 先裁的话，12 步单轮整组法一条都丢不掉，等于没裁（T-24）。
-        const { messages } = applyTokenBudget(
+        const budgeted = applyTokenBudget(
           elideStaleObservations(buildWireMessages(history, { system })),
           { contextWindow }
         );
+        log('budget', {
+          estimated: budgeted.estimated,
+          threshold: budgeted.threshold,
+          dropped: budgeted.dropped,
+          historyEvents: history.length,
+        });
+
+        const { messages } = budgeted;
 
         const pendingToolCalls = [];
         let streamError = null;
@@ -420,6 +466,11 @@ export function createAgent(deps) {
         }
 
         if (streamError) {
+          log.error('stream.error', {
+            kind: streamError.kind,
+            httpStatus: streamError.httpStatus,
+            message: streamError.message,
+          });
           // 错误形状只在 toAgentEvent 定义一次，这里直接复用
           const errEv = toAgentEvent(streamError);
           // 错误也要入史：否则会话重开后，用户看到助手话说一半就没了下文
@@ -464,11 +515,14 @@ export function createAgent(deps) {
 
           call.args = args;
 
+          log('tool.call', { name: call.name, args: summarize(args) });
+
           const results = await executeCall({
             call,
             tools,
             requestConfirmation,
             toolCtx,
+            log,
           });
           results.forEach(record);
         }
@@ -480,6 +534,11 @@ export function createAgent(deps) {
         aborted: controller.signal.aborted,
         usage,
       };
+      log('turn.end', {
+        stopped,
+        aborted: controller.signal.aborted,
+        usage,
+      });
       emit(doneEv);
       return doneEv;
     },

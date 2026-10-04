@@ -141,8 +141,10 @@ export const testJsTool = {
       code: {
         type: 'string',
         description:
-          '一段表达式形式的 JS（会被包成 (function(){ return (…) })() 执行）。' +
-          '要用页面 DOM 就直接写 document.xxx。返回可 JSON 序列化的值最稳妥。',
+          '要试跑的 JS。支持两种形式：表达式（如 JSON.stringify(...) 或 ' +
+          '(() => { … })()），或语句序列（const/let 等，数据用 return 带回，' +
+          '支持顶层 await）。要用页面 DOM 就直接写 document.xxx。' +
+          '返回可 JSON 序列化的值最稳妥。',
       },
     },
     required: ['code'],

@@ -9,6 +9,7 @@ import {
 import getFile, { readFileAsBase64 } from '@/utils/getFile';
 import { sleep } from '@/utils/helper';
 import { MessageListener } from '@/utils/message';
+import { agentEvalInPage, raceTimeout } from '@/agent/agentEvalInPage';
 
 // import { getDocumentCtx } from '@/content/handleSelector';
 import { automaRefDataStr } from '@/workflowEngine/helper';
@@ -522,54 +523,18 @@ function automaFetch(type, resource) {
  * 安全边界：只在用户已选定的那一个标签页上执行；执行前由 agent runtime 的确认门把关
  *（本文件只是通道，不做审批）。
  */
-/**
- * 真正在页面里跑的那段。
- *
- * 必须自包含：executeScript 会把函数序列化后注入页面，
- * 闭包里的任何外部变量在页面里都不存在。
- *
- * async 求值 + 10s 超时（技术方案 §7.4 的轻量版）：模型经常写出返回
- * Promise 的代码（忘了 await），同步求值会把结果变成 "[object Promise]"；
- * fetch 之类也确实需要异步。Promise.race 兜底防止页面代码挂死通道。
- *
- * @param {string} src
- * @returns {Promise<Object>}
- */
-async function agentEvalInPage(src) {
-  let value;
 
-  try {
-    /* eslint-disable-next-line no-new-func */
-    const fn = new Function(`return (${src})`);
-    /* eslint-disable-next-line no-async-promise-executor */
-    value = await Promise.race([
-      Promise.resolve(fn()()),
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('执行超时（10s）')), 10000);
-      }),
-    ]);
-  } catch (err) {
-    const msg = (err && err.message) || String(err);
-
-    return { ok: false, error: `代码执行出错：${msg}` };
-  }
-
-  if (value === undefined) return { ok: true, value: 'undefined', json: true };
-
-  // 模型给的代码可能返回 DOM 节点、循环引用或函数，直接回传会序列化失败
-  try {
-    const json = JSON.stringify(value);
-    if (json !== undefined) return { ok: true, value: json, json: true };
-  } catch (e) {
-    // 序列化失败就退回字符串
-  }
-
-  return { ok: true, value: String(value), json: false };
-}
+/** 页面执行的硬超时：页面主线程被同步代码占死时 executeScript 永不 settle，通道必须在 background 侧兜底（backlog T-30）。 */
+const AGENT_PAGE_TIMEOUT_MS = 15000;
 
 /**
  * agent 页面执行的公共通道：注入 MAIN world、取回首个结果、把注入失败
  * 归一成 {ok:false,error}。三个 agent handler 的重复形状都收在这里。
+ *
+ * executeScript 包了硬超时：模型经 test_js 跑出同步死循环（或页面自身卡死）时，
+ * 注入的 promise 永不 settle，页内那个 10s setTimeout 也没机会触发 ——
+ * 没有这一层，agent 整轮就永久挂在工具调用上，停止按钮都救不回来。
+ * 超时返回的是 error 形状而不是 reject，让 loop 照常把 error 观察值喂回模型。
  *
  * @param {number} tabId
  * @param {Function} func 会序列化进页面的函数（必须自包含）
@@ -577,7 +542,7 @@ async function agentEvalInPage(src) {
  * @returns {Promise<Object>}
  */
 async function runInPage(tabId, func, args = []) {
-  try {
+  const exec = (async () => {
     const res = await browser.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
@@ -586,9 +551,17 @@ async function runInPage(tabId, func, args = []) {
     });
 
     return res && res[0] && res[0].result;
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
+  })();
+
+  return raceTimeout(exec, AGENT_PAGE_TIMEOUT_MS, {
+    ok: false,
+    error: `页面执行超时（${
+      AGENT_PAGE_TIMEOUT_MS / 1000
+    }s）。页面可能被同步代码占死了，请换个思路，别再在这页上执行代码。`,
+  }).catch((err) => ({
+    ok: false,
+    error: (err && err.message) || String(err),
+  }));
 }
 
 async function runAgentJs(payload) {

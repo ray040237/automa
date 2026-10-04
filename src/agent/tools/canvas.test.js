@@ -213,3 +213,49 @@ describe('G5：agent 永远不能保存工作流', () => {
     assert.deepEqual(writeNames.sort(), ['add_block', 'update_block']);
   });
 });
+
+/* ---------------- 参数校验失败时回显收到的参数（backlog T-36） ----------------
+ * 模型经常混用 add_block 的 blockId 与 update_block 的 nodeId，错误里带上
+ * 「实际收到了什么」它才能一步自纠——dump 实测过一轮连错 6 次。 */
+
+test('add_block 缺 blockId：回显收到的键，并点破 blockId/nodeId 的分工', async () => {
+  const r = await addBlock(
+    { blocks: BLOCKS, editor: fakeEditor([]) },
+    { nodeId: 'pg8rzgv', data: { code: 'x' } }
+  );
+
+  assert.equal(r.status, 'error');
+  assert.match(r.payload, /blockId 不能为空/);
+  assert.match(r.payload, /"nodeId"/, '要回显实际收到的键');
+  assert.match(r.payload, /update_block 才用 nodeId/);
+});
+
+test('update_block 缺 nodeId：同样回显并指路', async () => {
+  const r = await updateBlock(
+    { editor: fakeEditor([]) },
+    { blockId: 'create-element', data: { description: 'x' } }
+  );
+
+  assert.equal(r.status, 'error');
+  assert.match(r.payload, /nodeId 不能为空/);
+  assert.match(r.payload, /"blockId"/);
+  assert.match(r.payload, /add_block 才用 blockId/);
+});
+
+test('长字符串值截断到 60 字符，错误信息不会被大 data 撑爆', async () => {
+  const long = 'x'.repeat(500);
+  const r = await addBlock(
+    { blocks: BLOCKS, editor: fakeEditor([]) },
+    { data: { code: long } }
+  );
+
+  assert.match(r.payload, /x{10}…/);
+  assert.ok(r.payload.length < 400, `实际 ${r.payload.length}`);
+});
+
+test('完全没传参数：给占位说明而不是炸', async () => {
+  const r = await addBlock({ blocks: BLOCKS, editor: fakeEditor([]) }, {});
+
+  assert.equal(r.status, 'error');
+  assert.match(r.payload, /blockId 不能为空/);
+});

@@ -6,12 +6,15 @@
  * 差别只有两处：开放哪些工具组、有没有画布句柄。宿主本身除了接线没有别的逻辑，
  * 所以接线放这里，避免两份各自漂移。
  *
- * 两个陷阱，改这里之前先读：
+ * 三个陷阱，改这里之前先读：
  *
  * 1. agent 必须是 reactive 而不是 shallowReactive —— events 是靠 push 增长的，
  *    浅响应下数组内新增不会触发渲染，transcript 会「发了消息但屏幕不动」。
  * 2. 卸载前必须把挂着的确认门放行（否）：loop 那侧一直在 await 这个 promise，
  *    宿主没了它永远不会结束（CONTEXT.md「确认门」条）。见文件末尾。
+ * 3. 会话级授权（test_js 的「本会话允许试跑代码」）只有三个失效点：abort、
+ *    切会话（guardAgentSwitch）、面板卸载（随闭包消失）。想让它更早失效，
+ *    改 `sessionAuth` 的赋值点，别去动 `src/agent/confirm.js` 的判定。
  */
 
 import { onBeforeUnmount, reactive } from 'vue';
@@ -27,6 +30,12 @@ import {
   resolveTarget,
   sessionStore,
 } from '@/agent';
+import {
+  buildConfirmation,
+  nextSessionAuth,
+  normalizeAnswer,
+  shouldSkipConfirmation,
+} from '@/agent/confirm';
 
 /**
  * @param {Object} deps
@@ -59,21 +68,53 @@ export function useAgentHost(deps) {
   });
 
   /**
+   * 会话级授权：test_js 勾过「本会话允许试跑代码」后不再弹卡。
+   *
+   * 只在内存里，且有三个失效点（技术方案 §8.2）：abort、切会话、面板卸载。
+   * 不落盘 —— 「本会话」的意思就是面板还活着的这段时间。
+   */
+  let sessionAuth = false;
+
+  /**
    * 写类工具的确认门。
    *
-   * 把 promise 存在 pendingConfirm 上，卡片点「允许」时再 resolve ——
+   * 把 promise 存在 pendingConfirm 上，卡片点「执行」时再 resolve ——
    * loop 那一侧会一直 await 住，不会超时也不会偷偷放行。
+   *
+   * 载荷是结构化的（`src/agent/confirm.js`）：loop 传的是 `{ name, args }`，
+   * 没有顶层 `code`，早先这里读 `req.code` 恒为 `''`，卡片上那个代码框一直是
+   * 空的 —— 用户在盲批（docs/backlog.md T-27）。
    */
   function askAgentConfirmation(req) {
+    const name = (req && req.name) || '';
+
+    // 会话授权只对 test_js 生效；workflow 写操作无论授权状态都逐次问
+    if (shouldSkipConfirmation(name, sessionAuth)) {
+      return Promise.resolve({ approved: true });
+    }
+
     return new Promise((resolve) => {
       agent.pendingConfirm = {
-        code: (req && req.code) || '',
-        resolve: (approved) => {
+        ...buildConfirmation(req, {
+          targetTitle: agent.targetTab ? agent.targetTab.title || '' : '',
+        }),
+        resolve: (answer) => {
+          const normalized = normalizeAnswer(answer);
+
+          sessionAuth = nextSessionAuth(sessionAuth, name, normalized);
           agent.pendingConfirm = null;
-          resolve({ approved });
+          resolve({ approved: normalized.approved });
         },
       };
     });
+  }
+
+  /**
+   * 卡片的应答入口。pendingConfirm 可能已被切会话/卸载路径清掉，先判空 ——
+   * 直接 `agent.pendingConfirm.resolve(...)` 会在那次点击上抛 TypeError。
+   */
+  function answerConfirm(answer) {
+    if (agent.pendingConfirm) agent.pendingConfirm.resolve(answer);
   }
 
   /** 刷新会话列表。有 deps.sessionWorkflowId 时只列该工作流的会话。 */
@@ -84,12 +125,17 @@ export function useAgentHost(deps) {
   /**
    * 切会话前的共同守卫：busy 时不能切；挂着待确认的写操作时必须先拒绝，
    * 否则旧会话的 loop 会永远 await 下去（确认门 promise 挂在 runtime 闭包上）。
+   *
+   * 顺带把会话级授权作废：授权的文案是「本会话允许」，换会话就不该还作数。
+   * 放在 resolve(false) 之后 —— resolve 内部会自己算一次 nextSessionAuth，
+   * 要是先置 false 会被那次写回覆盖。
    */
   function guardAgentSwitch() {
     if (agent.busy) return false;
     if (agent.pendingConfirm) {
       agent.pendingConfirm.resolve(false);
     }
+    sessionAuth = false;
     return true;
   }
 
@@ -160,9 +206,13 @@ export function useAgentHost(deps) {
     router.push({ path: '/settings', hash: '#agent' });
   }
 
-  /** 用户点停止：只发中止信号，收尾由 loop 以 DONE(aborted) 完成。 */
+  /**
+   * 用户点停止：只发中止信号，收尾由 loop 以 DONE(aborted) 完成。
+   * 中止同时作废会话授权（技术方案 §8.2：abort 即失效）。
+   */
   function abort() {
     if (agent.runtime) agent.runtime.abort();
+    sessionAuth = false;
   }
 
   async function send(userText) {
@@ -260,6 +310,7 @@ export function useAgentHost(deps) {
   onBeforeUnmount(() => {
     // 宿主没了但 loop 还在 await 确认门 → 那个工具调用永远悬着，这一轮的会话也再
     // 不会保存。必须显式放行（否），让 loop 拿 error 观察值收尾。
+    // 会话级授权随闭包一起消失，不用另置 false（技术方案 §8.2：面板卸载即失效）。
     if (agent.pendingConfirm) agent.pendingConfirm.resolve(false);
   });
 
@@ -268,6 +319,7 @@ export function useAgentHost(deps) {
     send,
     abort,
     pickTab: onPickTab,
+    answerConfirm,
     noTarget: () => toast.error(t('workflow.agent.noTarget')),
     goToSettings: goToAgentSettings,
     openSession: openAgentSession,

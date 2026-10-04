@@ -28,11 +28,50 @@
  * @param {number} [params.y]
  * @returns {Promise<Object>}
  */
+/**
+ * 参数校验失败的错误信息：带上「实际收到了什么」。
+ *
+ * 只说「nodeId 不能为空」模型无法一步自纠——它经常把 add_block 的
+ * blockId 和 update_block 的 nodeId 混用（dump 实测一轮连错 6 次）。
+ * 回显收到的顶层键 + 截断的值，模型看一眼就知道该改哪个键。
+ *
+ * @param {string} missing 缺哪个参数
+ * @param {Object} params 工具实际收到的参数
+ * @param {string} hint 正确用法的一句话提示
+ * @returns {string}
+ */
+function missingParamError(missing, params, hint) {
+  let received = '(什么都没收到)';
+
+  try {
+    const keys = params ? Object.keys(params) : [];
+
+    if (keys.length) {
+      received = JSON.stringify(params, (_k, v) =>
+        typeof v === 'string' && v.length > 60 ? v.slice(0, 60) + '…' : v
+      );
+    }
+  } catch (e) {
+    received = '(参数无法序列化)';
+  }
+
+  return `${missing} 不能为空。收到参数: ${received}。${hint}`;
+}
+
 export async function addBlock(ctx, params) {
   const { blocks, editor, onCanvasChanged, newId } = ctx;
   const { blockId } = params;
 
-  if (!blockId) return { status: 'error', payload: 'blockId 不能为空。' };
+  if (!blockId) {
+    return {
+      status: 'error',
+      payload: missingParamError(
+        'blockId',
+        params,
+        '本工具是 add_block，用 blockId 指定要加哪种块；update_block 才用 nodeId。'
+      ),
+    };
+  }
 
   const def = blocks && blocks[blockId];
 
@@ -90,7 +129,16 @@ export async function updateBlock(ctx, params) {
   const { nodeId } = params;
 
   if (!editor) return { status: 'error', payload: '画布还没准备好。' };
-  if (!nodeId) return { status: 'error', payload: 'nodeId 不能为空。' };
+  if (!nodeId) {
+    return {
+      status: 'error',
+      payload: missingParamError(
+        'nodeId',
+        params,
+        '本工具是 update_block，用 nodeId 指定要改哪个已存在的节点；add_block 才用 blockId。'
+      ),
+    };
+  }
 
   const node = editor.getNodes.value.find((n) => n.id === nodeId);
 
