@@ -54,5 +54,4 @@ Automa 分支版：上游 [AutomaApp/automa](https://github.com/AutomaApp/automa
 
 不许做的事：**口头知道但不记录**；把多个发现挤成一条；用户还没明确批准就「顺手一起改了」。
 
-> 分工：`docs/backlog.md`（T 编号）= 会话里捕获的一切 bug / 改进 / 新功能，全仓库范围。
-> `docs/agent-backlog.md`（B 编号）= 内置助手功能自身的已知欠账，沿用它原有格式。两处不混写。
+> 编号分工：`docs/backlog.md` 一个文档记全 —— **T 编号** = 会话捕获的一切 bug / 改进 / 新功能（全仓库范围）；**B 编号** = 内置助手功能自身的已知欠账（原 `agent-backlog.md`，2026-10-04 并入，沿用原格式与编号）。两区不混写。

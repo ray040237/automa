@@ -31,7 +31,7 @@ pie 的 `history-validation.ts` 在模型调用前做纯函数防御:
 
 pie 的策略:① **race-guard**——仅当存储的 title 仍等于预期 fallback 才覆盖;② LLM 失败静默保留 fallback,**永不重试**;③ 输出清洗(escape + 去 emoji + 按 locale 截断)。
 
-**对照 Automa 发现一个真 bug**:我们的标题回写(`index.js` generateTitleAsync 的 `.then`)用**整记录 save()**,写入的是首轮捕获的旧 `events`——若用户在标题生成期间发出第二轮,晚到的标题会用首轮事件覆盖第二轮已落盘的事件。修复方向:标题只 patch title 字段,或回写前比对会话的 `lastAccessedAt` 未变。已登记 docs/agent-backlog.md #B1。
+**对照 Automa 发现一个真 bug**:我们的标题回写(`index.js` generateTitleAsync 的 `.then`)用**整记录 save()**,写入的是首轮捕获的旧 `events`——若用户在标题生成期间发出第二轮,晚到的标题会用首轮事件覆盖第二轮已落盘的事件。修复方向:标题只 patch title 字段,或回写前比对会话的 `lastAccessedAt` 未变。已登记 docs/backlog.md B1。
 
 ### A4. 测试基建手法
 
@@ -47,7 +47,7 @@ pie 的策略:① **race-guard**——仅当存储的 title 仍等于预期 fall
 
 ## B. 流程与文档,零代码成本 ✅ 已落地
 
-本文档 + `docs/adr/0001~0003` + 根目录 `CONTEXT.md` 术语表(带 Avoid 禁用词)+ `docs/agent-backlog.md` 欠账登记,即本轮借鉴的直接产物。后续约定:
+本文档 + `docs/adr/0001~0003` + 根目录 `CONTEXT.md` 术语表(带 Avoid 禁用词)+ `docs/backlog.md` 的 B 编号欠账区(原 `agent-backlog.md`,2026-10-04 并入),即本轮借鉴的直接产物。后续约定:
 
 - **ADR**:一个决策一篇,编号 `NNNN-短名.md`;必须有"被拒备选(含量化理由)"和"已知欠账"两节;
 - **CONTEXT.md**:新术语先登记再使用,禁用词出现即改;
