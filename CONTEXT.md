@@ -77,11 +77,15 @@ agent 的挂载点,共两个,共用 `src/composable/agentHost.js` 的接线与 `
 _Avoid_: 第三档分类(曾提议 soft-write,被拒,见 docs/adr/0002)。
 
 **确认门(requestConfirmation)**:
-write 工具执行前的用户裁决,以 pending promise 挂在宿主;切会话/卸载前必须先 `resolve(false)`,否则 loop 永远 await。
+write 工具执行前的用户裁决,以 pending promise 挂在宿主。**只要卡片变得不可达就必须先 `resolve(false)`** —— 三个入口:切会话(`guardAgentSwitch`)、宿主卸载(`agentHost` 的 `onBeforeUnmount`)、**卡片所在的 `AgentPanel.vue` 自身被卸载**(切走助手面板/打开块编辑卡/收起侧栏都是 `v-if` 真卸载)。缺任何一个,loop 都会永远 await,那一轮不收尾也不落盘,表现与「助手卡死」无异(T-02)。
+_Avoid_: 「卡片被藏起来了,先挂着等用户切回来再批」——切回来之前 loop 已经永久挂起。
 
 **观察值(observation)**:
 工具结果经 untrusted 包装 + 8K 截断后喂回模型的形式。工具抛错转成 error 观察值让模型自纠,不终止循环。
 _Avoid_: result(与 tool_call_id 配对的 wire tool 消息易混)。
+
+**通道超时兜底(channel timeout)**:
+每条跨进程通道的**发送侧**都有硬超时,且**外层必须大于内层**:页内求值 10s → background `executeScript` 15s(`AGENT_PAGE_TIMEOUT_MS`)与 `tabs.sendMessage` 15s(`TAB_CHANNEL_TIMEOUT_MS`)→ 发送侧 `toBackground` round trip 20s(`BACKGROUND_CHANNEL_TIMEOUT_MS`)。超时一律回 `{ok:false, error}` 的**人话观察值**而不是 reject —— 模型拿到「这一步是否已执行无法确认」才知道先读页再决定,抛栈只会让它原地重调。根因(如 SW 回程丢失)不会因此消失,但任何一层失灵都不能再把整轮 agent 挂死(T-39)。
 
 ## 安全
 

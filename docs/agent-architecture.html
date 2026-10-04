@@ -828,20 +828,21 @@ parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str
 
 <p>这是整个设计里<strong>唯一的写操作安全闸门</strong>。它的实现方式很朴素：<strong>一个挂着不 resolve 的 Promise</strong>。</p>
 
-<pre><code><span class="cm">// src/composable/agentHost.js:61-77</span>
-<span class="cm">/**
- * 写类工具的确认门。
- *
- * 把 promise 存在 pendingConfirm 上，卡片点「允许」时再 resolve ——
- * loop 那一侧会一直 await 住，不会超时也不会偷偷放行。
- */</span>
+<pre><code><span class="cm">// src/composable/agentHost.js:88-111（节选）</span>
 <span class="kw">function</span> <span class="fn">askAgentConfirmation</span>(req) {
+  <span class="kw">const</span> name = (req &amp;&amp; req.name) || <span class="str">''</span>;
+  <span class="cm">// 会话授权只对 test_js 生效；workflow 写操作无论授权在不在都逐次问</span>
+  <span class="kw">if</span> (<span class="fn">shouldSkipConfirmation</span>(name, sessionAuth))
+    <span class="kw">return</span> <span class="fn">Promise.resolve</span>({ approved: <span class="kw">true</span> });
+
   <span class="kw">return new</span> <span class="fn">Promise</span>((resolve) =&gt; {
     agent.pendingConfirm = {
-      code: (req &amp;&amp; req.code) || <span class="str">''</span>,
-      <span class="fn">resolve</span>: (approved) =&gt; {
+      ...<span class="fn">buildConfirmation</span>(req, { targetTitle }),   <span class="cm">// ← 结构化载荷（T-27 修，不再读 req.code）</span>
+      <span class="fn">resolve</span>: (answer) =&gt; {
+        <span class="kw">const</span> normalized = <span class="fn">normalizeAnswer</span>(answer);  <span class="cm">// 对象 {approved,remember} / 布尔都认</span>
+        sessionAuth = <span class="fn">nextSessionAuth</span>(sessionAuth, name, normalized);
         agent.pendingConfirm = <span class="kw">null</span>;
-        <span class="fn">resolve</span>({ approved });
+        <span class="fn">resolve</span>({ approved: normalized.approved });
       },
     };
   });
@@ -860,24 +861,25 @@ parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str
      │                        模型看到这个观察值，自己换个做法或直接回答
      └─ approved === true  → tool.execute(args, toolCtx)</div>
 
-<h3>三条必须放行（否）的路径</h3>
+<h3>四条必须放行（否）的路径</h3>
 <table>
 <tr><th>时机</th><th>代码</th><th>不做的后果</th></tr>
-<tr><td>切会话前</td><td><code>agentHost.js:88-94</code> <code>guardAgentSwitch()</code></td><td>旧会话的 loop 永远 await，这一轮永不收尾</td></tr>
+<tr><td>切会话前</td><td><code>agentHost.js:133-138</code> <code>guardAgentSwitch()</code></td><td>旧会话的 loop 永远 await，这一轮永不收尾</td></tr>
 <tr><td>删除会话前</td><td>同上（<code>deleteAgentSession</code> 第一行就调）</td><td>同上</td></tr>
-<tr><td>宿主卸载前</td><td><code>agentHost.js:260-264</code> <code>onBeforeUnmount</code></td><td>面板被关，loop 悬着，会话永不落盘</td></tr>
+<tr><td><strong>卡片所在面板卸载前</strong></td><td><code>AgentPanel.vue:191-193</code> <code>onBeforeUnmount</code> → <code>emit('confirm-answer', false)</code></td><td>侧栏三处 <code>v-if</code>（切走助手面板 / 打开块编辑卡 / 收起整个侧栏）任一触发，卡片连同面板一起被卸载，而 loop 还在 await —— <strong>宿主那个钩子只兜「整页卸载」，兜不住「面板被藏起来」</strong></td></tr>
+<tr><td>宿主卸载前</td><td><code>agentHost.js:310-315</code> <code>onBeforeUnmount</code></td><td>面板被关，loop 悬着，会话永不落盘</td></tr>
 </table>
-<pre><code><span class="cm">// src/composable/agentHost.js:260-264</span>
+<pre><code><span class="cm">// src/composable/agentHost.js:310-315</span>
 onBeforeUnmount(() =&gt; {
   <span class="cm">// 宿主没了但 loop 还在 await 确认门 → 那个工具调用永远悬着，这一轮的会话也再</span>
   <span class="cm">// 不会保存。必须显式放行（否），让 loop 拿 error 观察值收尾。</span>
   <span class="kw">if</span> (agent.pendingConfirm) agent.pendingConfirm.<span class="fn">resolve</span>(<span class="kw">false</span>);
 });</code></pre>
-<blockquote class="warn"><strong>已知缺口</strong>：编辑器侧栏的确认卡挂在 <code>v-else-if="state.sidebarPanel === 'agent'"</code> 分支内（[id].vue:27-53）。用户在等待确认时切走侧栏，卡片被隐藏但 promise 仍挂着。已登记为 T-02。</blockquote>
+<blockquote class="note"><strong>T-02 已修复（2026-10-05）</strong>：上面第 3 行原先是本文档标的一个「已知缺口」（确认卡挂在 <code>v-else-if="state.sidebarPanel === 'agent'"</code> 分支里，切走即隐藏但 promise 仍挂着）。修法没有在 <code>toggleAgentPanel</code>、<code>initEditBlock</code> 各补一句，而是把拒绝点挂在<strong>卡片自己所在的组件</strong>上 —— <code>AgentPanel.vue</code> 卸载前发 <code>confirm-answer(false)</code>，走宿主的 <code>answerConfirm</code>（内部判空，重复发也安全）。<strong>一处钩子覆盖全部隐藏路径</strong>，以后再新增一处 <code>v-if</code> 也不会漏；回归由 <code>confirm.test.js</code> 的源码接线守卫钉住（本仓无组件测试基建，见 T-26）。</blockquote>
 
 <h3>用户实际看到的确认卡</h3>
-<p>卡片目前只有：标题「需要你确认」、一句固定 hint「这一步会在你选中的页面上执行代码。放行前请先看一眼。」、一个 <code>&lt;pre&gt;</code> 代码框、「不允许」/「允许执行」两个按钮。<strong>代码框恒为空</strong> — 原因见第 16 节 T-27。</p>
-<p>卡片以 <code>absolute inset-x-3 bottom-3</code> 浮在面板底部（Agent.vue:23），正好盖住输入框与发送按钮。</p>
+<p>载荷是结构化的（<code>src/agent/confirm.js</code>），卡片按 <code>kind</code> 取标题、hint 与 <code>&lt;pre&gt;</code> 里的事实：<code>code</code>（代码全文 + 行数）、<code>selector</code>（选择器）、<code>url</code>、<code>canvas</code>（节点 id + 变更字段）。<code>&lt;pre&gt;</code> 带 <code>v-if</code>，detail 为空就不渲染空框（T-27 修，原先恒为空 —— 宿主读的 <code>req.code</code> 根本不存在）；按钮是<strong>「取消 / 执行」</strong>，hint 也改成对所有 write 工具都成立的通用表述（原先写死「执行代码」，对 <code>open_url</code>/<code>add_block</code> 是错的）。只有 <code>test_js</code>（<code>canRemember</code>）才出现「本会话允许试跑代码」复选框。</p>
+<p>卡片渲染在 <strong><code>AgentPanel.vue:87-94</code> 的文档流内、输入框上方</strong>，不再是 <code>absolute</code> 浮层 —— 输入区永远可达（T-06 修）。</p>
 
 <h2 id="tabs"><span class="n">08</span>目标页定位：pin / origin / 指纹<span class="anchor">#tabs</span></h2>
 
@@ -1168,6 +1170,9 @@ canvas: {
 <tr><td><code>agent:highlight</code></td><td>扩展页 → background</td><td><code>browser.runtime.sendMessage</code></td><td><span class="path">src/background/index.js:721</span></td></tr>
 </table>
 
+<p><strong>每条通道的发送侧都有硬超时，且外层必须大于内层</strong>（否则正常回程会被误杀）：页内求值 <strong>10s</strong> → <code>runInPage</code> 的 <code>executeScript</code> <strong>15s</strong>（<code>AGENT_PAGE_TIMEOUT_MS</code>，<code>src/background/index.js:556</code>）与 <code>tabs.sendMessage</code> <strong>15s</strong>（<code>TAB_CHANNEL_TIMEOUT_MS</code>）→ 发送侧 <code>toBackground</code> 整个 round trip <strong>20s</strong>（<code>BACKGROUND_CHANNEL_TIMEOUT_MS</code>，<code>src/agent/index.js:181</code>）。超时一律<strong>不 reject</strong>，而是回 <code>{ok:false, error}</code> 的人话观察值。</p>
+<p>发送侧那层是 <strong>T-39（2026-10-05）</strong>加的：前面几层的兜底都在 background / content 里，<strong>回程丢失</strong>（SW 被浏览器回收、响应回不到发送方）时它们一个都救不了 —— <code>browser.runtime.sendMessage</code> 的 promise 永不 settle，真机日志里只留下一条 <code>channel.send</code> 之后既无 reply 也无 fail，整轮 agent 就挂死在那里。20s 之后发送方自己兜底，并把「这一步是否已执行<strong>无法确认</strong>」如实告诉模型，让它先 <code>read_page</code> 看现状再决定，而不是原地重调（<code>channel.reply</code>/<code>channel.fail</code> 附耗时 <code>ms</code>，超时单独打 <code>channel.timeout</code> 便于事后定位）。</p>
+
 <h3>读页：为什么必须走 tabs.sendMessage</h3>
 <p><code>read_page</code> 走 <code>browser.tabs.sendMessage(tabId, {type:'agent:read-page', ...})</code>，content 侧用 <code>switch (data.type)</code> 分发，<strong>整包透传</strong> detail/maxChars/op/keyword/limit。落到 <code>handlerAgentReadPage.js</code> 的零注册入口（文件名 → 去 handler 前缀 → toCamelCase → agentReadPage）。</p>
 <p>content 侧实现有 1360 行，但结构很清晰：</p>
@@ -1306,10 +1311,10 @@ canvas: {
 
 <h2 id="defects"><span class="n">16</span>已确认缺陷<span class="anchor">#defects</span></h2>
 
-<blockquote class="danger"><strong>以下两条是本次梳理中新发现的，已按 AGENTS.md「发现即登记」写入 docs/backlog.md（T-27 / T-28），未做任何修复</strong> — 需要你审核后才开工。</blockquote>
+<blockquote class="note"><strong>以下两条是本次梳理中新发现、按 AGENTS.md「发现即登记」写入 docs/backlog.md 的（T-27 / T-28）。两条都已获批并于 2026-10-04 修复</strong>，结论与实测记在 backlog 的「已清」区。下面的原始现象与证据原样保留 —— 它们解释了这两条为什么各自成为单点失效。</blockquote>
 
 <div class="bad">
-  <h4>T-27 — 确认卡的代码框永远是空的</h4>
+  <h4>T-27 — 确认卡的代码框永远是空的（已修）</h4>
   <p><code>AgentConfirmCard.vue</code> 只接收一个 <code>code</code> prop，而 runtime 存进 <code>pendingConfirm</code> 的 <code>code</code> 取自 <code>req.code</code>。但 <code>loop.js</code> 的 <code>requestConfirmation({ ...call })</code> 里 <code>call</code> 只有 <code>{step, name, toolCallId, args}</code> —<strong>根本没有 code 字段</strong>，于是 <code>(req &amp;&amp; req.code) || ''</code> 永远落到空串。</p>
   <p><strong>影响</strong>：所有 write 类工具（<code>test_js</code> / <code>highlight_selector</code> / <code>open_url</code> / <code>add_block</code> / <code>update_block</code>）的确认卡都是「一句 hint + 一个空白框」。用户看不到要跑什么代码、要往画布放什么块。ADR 0002 声称的收益（「用户点允许恰好回答了『你说的是这个吗』」）<strong>直接落空</strong>，确认门形同虚设。</p>
   <p><strong>连带问题</strong>：卡片 hint 写死为「这一步会在你选中的页面上执行代码」，而 <code>open_url</code> / <code>add_block</code> 并不执行代码。</p>
@@ -1317,7 +1322,7 @@ canvas: {
 </div>
 
 <div class="bad">
-  <h4>T-28 — 三个页面工具的 background 路由完全打不通（已实测复现）</h4>
+  <h4>T-28 — 三个页面工具的 background 路由完全打不通（已实测复现，已修）</h4>
   <p>agent 侧发的是裸 <code>browser.runtime.sendMessage({type:'agent:run-js', tabId, code})</code>；background 侧注册的是 <code>message.on('agent:run-js', ...)</code> 挂在 <code>MessageListener('background')</code> 上，而 listener <strong>只按 message.name 查表</strong>。agent 的载荷没有 name 字段。</p>
 <pre><code><span class="cm">// src/utils/message.js:52-56</span>
 <span class="kw">const</span> listener = <span class="kw">this</span>.listeners[message.name];   <span class="cm">// message.name === undefined → undefined</span>

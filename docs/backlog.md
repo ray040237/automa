@@ -52,6 +52,7 @@
 证据：**代码位置，推断，未实测渲染效果** —— `AgentTranscript.vue:156-157`（ERROR → notice）、`:61-66`（notice 唯一样式 `bg-amber-500/10`）、`:153-155`（system-notice 同通道）；`AgentToolStep.vue:55-59` 反而有红/绿/琥珀三态徽标。
 影响：所有失败路径（网络、鉴权、限流、config）在视觉上等同于「一句善意提醒」，用户可能反复重发而不察觉 key 失效；错误与警告混色也让「预检提示」这类 advisory 信息被当成故障。
 建议：错误单独一类（红底 + `riErrorWarningLine` 图标 + `errorKind` 文案），notice 保持琥珀；错误条尾部加「重试」（复用同一 draft 或直接重发上一条用户消息）与「复制错误详情」。纯展示层改动，不动 `events.js`。
+状态：待审核
 
 ### T-07 — 工具卡把 `<untrusted_*>` 包装标签原样摊给用户看
 
@@ -62,6 +63,7 @@
 证据：**代码位置，推断，未实测** —— `AgentToolStep.vue:25-27`（直接渲染 observation）、`src/agent/loop.js:81-97`（resultEvent 一律走 `wrapObservation`）、`src/agent/events.js:55-88`（标签与截断注记在此处拼上）。
 影响：首次展开工具结果的用户会以为是乱码或漏洞；「页面正文」与「工具自述」在视觉上没有分界，读长观察值很费劲。
 建议：**只在展示层剥离**外层 `untrusted_*` 标签再渲染（按 `UNTRUSTED_WRAPPER_TAGS` 白名单匹配，保留截断注记并改成人话），`events.js` 的包装逻辑一行不动 —— 模型侧必须继续看到标签。
+状态：待审核
 
 ### T-08 — 目标页条缺 favicon、pin/自动态与失效态
 
@@ -72,6 +74,7 @@
 证据：**代码位置，推断，未实测** —— `AgentPanel.vue:4-22`（无 favicon/无状态位）、`src/agent/index.js:250-286`（preStepNotice 只产出模型侧 notice，不回 UI）、`:231-239`（只有 `focus_tab` 会发 `agent:target-tab`）；`grep onRemoved src/` 仅命中 `workflowEngine` 与 `service/browser-api`，agent 侧无监听。
 影响：这是面板上最关键的一行信息（用户必须知道模型在看哪个页），失效不提示会让整轮结论基于错误前提，且用户无从发现。
 建议：① 加 favicon（`chrome://favicon` / 扩展内等价取法）与「固定 / 自动」小徽标；② 每步预检发现 tab 已关或 origin 漂移时，同步把状态写进头部（红/琥珀态 + 「重新选择」按钮），事件流里那条 notice 保留给模型；③ 变更处发一个宿主级回调而非新增事件种类，避免污染事件历史。
+状态：待审核
 
 ### T-09 — 一轮对话缺运行时可见性：步数、模型名、轮次分隔、token 位置
 
@@ -82,6 +85,7 @@
 证据：**代码位置，推断，未实测** —— `AgentTranscript.vue:189-192`（start/done/target-tab 一律丢弃）、`src/agent/loop.js:30`（`MAX_STEPS = 12`）、`:282`（步循环）、`:428-435`（done 事件带 `aborted`/`usage`）、`AgentPanel.vue:46-54`（`text-[10px]` usage）、`:162`（config 仅取 apiKey）。
 影响：卡在工具循环里的那一轮，用户只看到工具卡不停翻，没有任何「还剩多少余量」的信号；换模型/换 provider 后也无从确认当前答案来自哪个模型。
 建议：`agent:start` 渲染成一条轮次分隔线（含时间戳需给事件补字段，或用会话侧时间）；工具卡区域加「第 n/12 步」进度；头部或会话条显示 `config.model`；usage 提到会话条 tooltip 之外，再加一条上下文水位（usage.input / contextWindow）。
+状态：待审核
 
 ### T-10 — 空态只有一句话，缺示例问法与「本宿主开放哪些工具」的说明
 
@@ -92,6 +96,7 @@
 证据：**代码位置，推断，未实测** —— `AgentTranscript.vue:8-13`、`Agent.vue:46`、`workflows/[id].vue` 侧栏宿主（canvas 组开放）、`CONTEXT.md`「工具组」「宿主」条。
 影响：首次进入的用户不知道能问什么，也不知道能力边界；在独立页让助手改画布只会得到工具不存在的失败回执。
 建议：空态放 3~4 个可点击示例（点击即填入输入框，不自动发送），下面加一行工具组徽标（读页面 / 变量与块 / 标签页 / 画布）。文案按宿主分别给，`AgentPanel` 增加一个 `capabilities` prop 或由宿主传入。
+状态：待审核
 
 ### T-11 — busy 期间按钮静默禁用；中止后没有任何回执
 
@@ -102,6 +107,7 @@
 证据：**代码位置，推断，未实测** —— `AgentPanel.vue:33,58,67`（disabled 无 title）、`agentHost.js:156-172`（result 只读 `sessionId`/`usage`）、`src/agent/loop.js:428-435`（doneEv 携带 `aborted`）、`AgentTranscript.vue:189-192`（done 不渲染）。
 影响：中止是高频动作，缺少回执时用户无法区分「已停住」与「还在收尾」，容易连点；会话切换被拦时也没有任何解释。
 建议：给禁用态补 `title`/tooltip（「生成中不可切换会话」）；`send()` 收尾时若 `result.aborted`，往事件里插一条 system-notice（与 B7 的「上一轮被中断」提示同一条通道，届时合并做）。
+状态：待审核
 
 ### T-12 — 输入框固定三行、无长度上限，插话入队后输入区无就地反馈
 
@@ -112,6 +118,7 @@
 证据：**代码位置，推断，未实测** —— `AgentPanel.vue:91-97`、`UiTextarea.vue:48-64`（`calcHeight()` 定义在 `:48-52`，`:64` 调用被注释）、`agentHost.js:141-150`（入队后 push notice + 清空 draft）。
 影响：长指令的编辑体验差；插话是否送达不直观（尤其队列要等下一步才执行，等待期输入区一片空白）。
 建议：开启 autoresize（设 `max-h` 滚动兜底，注意别撑破 320px 侧栏）；busy 态在输入框上方留一条常驻「已入队 N 条插话，下一步执行前送达」，比一次性 notice 更可靠。
+状态：待审核
 
 ### T-13 — 事件流缺 aria-live/role，状态只靠颜色区分
 
@@ -122,6 +129,7 @@
 证据：**代码位置（grep `aria-|role=` 在 agent 组件目录仅命中 `AgentMarkdown.vue:9-10` 的 heading），推断，未实测**。
 影响：可访问性欠账；状态色单一通道也影响普通用户在暗色模式下的辨识。
 建议：容器加 `role="log" aria-live="polite" aria-relevant="additions"`，折叠按钮补 `aria-expanded`，状态徽标加图标（已有 `riCheckLine`/`riCloseLine` 可复用）。纯属性改动，零逻辑风险。
+状态：待审核
 
 ### T-14 — 流式输出时对整段文本逐 delta 重解析，长回答可能卡顿
 
@@ -132,6 +140,7 @@
 证据：**推断，未实测** —— `AgentMarkdown.vue:97`、`AgentTranscript.vue:131-138`（appendDelta 就地改 `last.raw`，触发对应组件重算）。本项目没有该路径的性能测量数据，先量再改。
 影响：长回答 + 长会话时输入与滚动掉帧；具体阈值未知，可能只在 8K 以上的输出才显现。
 建议：先做一次实测（造 5K/10K 字符的桩事件流，用 performance 记录 delta 到渲染的耗时），确认瓶颈后再选方案：按块边界增量解析、或流式期间只渲染「最后一个块」而对已完成块做 memo。未实测前不改。
+状态：待审核
 
 ### T-15 — 会话选择器与标签页弹窗的信息密度问题
 
@@ -142,6 +151,7 @@
 证据：**代码位置，推断，未实测** —— `AgentPanel.vue:27-73`、`AgentTabPicker.vue:3`（`w-[32rem]`）、`:95-99`（`id === 1 ? 主窗口 : 窗口 {n}`）、`agentHost.js:78-80`（`listIndex` 未带时间展示字段的消费）。
 影响：会话多了以后找历史对话只能靠猜；标签页一多（几十个）没有搜索只能滚动翻；窗口编号是实现细节泄漏。
 建议：会话改 popover 列表（标题 + 相对时间 + 当前项勾选），行高让给事件流；弹窗宽度改 `min(32rem, 90vw)`，顶部加搜索框按 title/url 过滤，窗口分组改用「窗口 N · 主窗口 / n 个标签页」这类可读文案。
+状态：待审核
 
 ### T-16 — 只能复制代码块，复制不了整条回答
 
@@ -152,42 +162,7 @@
 证据：**代码位置，与方案对照，未实测** —— `AgentMarkdown.vue:24-28`（仅 `block.type === 'code'`）、tech-design `:728`。剪贴板失败路径已有兜底（`:111-122`）。
 影响：用户想把助手给出的 selector 列表/步骤说明整段搬走时，只能手动划选；320px 侧栏里划选长段落很痛苦。
 建议：每条 assistant 消息 hover 时出「复制」按钮（复用现有 `copy()` 与 1500ms 「已复制」反馈），长回答补一个滚动条以免按钮被顶出可视区。
-
-### T-28 — agent 发给 background 的三条消息带 `type`，路由按 `name` 查表，`test_js`/`query_elements`/`highlight_selector` 一律打不通
-
-类型：bug
-登记日期：2026-10-04
-来源：会话 2026-10-04 浏览器侧管道梳理，触发点 `src/agent/index.js:229`、`src/utils/message.js:52-56`、`src/background/index.js:603/656/721`
-现象：agent 侧 `toolCtx.sendMessage = (msg) => browser.runtime.sendMessage(msg)`（`src/agent/index.js:229`），工具发出去的载荷是 `{type:'agent:run-js'|'agent:query'|'agent:highlight', tabId, ...}`（`src/agent/tools/page-write.js:30/77`、`src/agent/tools/highlight.js:32`）。但background 侧是 `new MessageListener('background')` + `message.on('agent:run-js', ...)`（`src/background/index.js:61/603/656/721`），而 `MessageListener.listener` 只按 `message.name` 查表（`src/utils/message.js:52`），agent 的载荷根本没有 `name` 字段 —— 于是 `:56` 的 `message.name.split('--')` 抛 TypeError，被 `:74` 的 catch 包成 `Unhandled Background Error` reject。三个工具全部落进各自的 catch 分支，向模型返回「执行失败：Unhandled Background Error…」。
-证据：**实测（复刻 listener 逻辑）** —— 按 `src/utils/message.js:48-79` 逐行复刻 listener，用 `{type:'agent:run-js',tabId:1,code:'1+1'}`（listener 表已含 `background--agent:run-js`）喂进去，输出 `REJECTED: Unhandled Background Error: TypeError: Cannot read properties of undefined (reading 'split')`。代码位置：产出侧 `src/agent/index.js:229`，消费侧 `src/utils/message.js:52,56,74`。**真实浏览器端复现：未实测**（需装扩展 + 起模型）。方案文档 `docs/agent-assist-tech-design.md:580` 原本写的是 `MessageListener.sendMessage('agent:run-js', payload, 'background')`，实现时换成了裸 `browser.runtime.sendMessage`，两者不是同一个协议。`read_page` 不受影响 —— 它走 `browser.tabs.sendMessage` + `switch (data.type)`（`src/agent/index.js:129-136` → `src/content/index.js:323`），是另一条通道。
-影响：三个走 background 的页面工具（`test_js` 写类、`query_elements` 读类、`highlight_selector` 写类）在真实浏览器里全部不可用，模型每次只拿到一条 TypeError 文本，且错误文案完全指不到真因。`src/agent/tools/page-write.test.js` 用注入的假 `sendMessage` 只断言了载荷形状（`:93`/`:41`），这条断链不会被现有测试发现 —— 与 `openai-compat.js:96-104` 记的「测试夹具照消费方写」是同一类陷阱。
-建议：① 最小改动 —— `toolCtx.sendMessage` 改用 `MessageListener('background').sendMessage(name, payload)`（`src/utils/message.js:88-90`），工具侧改成 `sendMessage('agent:run-js', {...})` 传两个参数；代价约 10 行，且天然避开 Firefox 需 `JSON.stringify` 的分支。② 或在 background 侧 listener 前加一层把 `{type}` 映射成 `name` 的兜底；代价一处全局改动，影响面比 ① 大。③ 两者都要补一条覆盖真实路由的断言（现在只测了载荷形状）。
-结论：采纳 ① 的变体 —— 翻译收敛在装配层一个导出函数 `toBackground({type, ...payload})`（`src/agent/index.js`），内部走 `utils/message` 的 `sendMessage(type, payload, 'background')`（连 Firefox 的 stringify 分支一并覆盖）；三个工具的调用点不动，仍发 `{type, ...}`。补契约测试：`assembly.test.js` 新增 2 条，用 polyfill 桩把 `runtime.sendMessage` 接到**真实** `MessageListener('background')` 上，断言三条载荷原样路由到 handler、返回值原路带回。红证已实测：把 `toBackground` 换回裸 `runtime.sendMessage`，新路径按预期炸出与用户报错一字不差的 `Unhandled Background Error: …(reading 'split')` 且 handler 不被调用。`npm test` 282 pass / 0 fail（原 280），eslint 通过，`npm run build` 成功。工具侧仍发 `{type}` 是刻意的：工具层保持纯函数、不认识 wire 协议，翻译点唯一化在装配层。
-状态：已清（2026-10-04 完成）
-
-### T-29 — `agentEvalInPage` 丢掉了文档承诺的求值包装，`test_js` 任何返回值的代码必炸
-
-类型：bug
-登记日期：2026-10-04
-来源：会话 2026-10-04 用户报「确认权限后卡死」，触发点 `src/background/index.js:538-550`（构建产物 `build/background.bundle.js` 里的 `le`）
-现象：`agentEvalInPage` 写的是 `const fn = new Function('return (' + src + ')')` 然后 `fn()()` —— `new Function('return (1+1)')` 得到的 fn，调用一次就**直接返回值 2**，`fn()()` 是把 2 当函数再调一次，必抛 TypeError。工具文档（`page-write.js:144`）承诺「会被包成 `(function(){ return (…) })() 执行`」，实现把这个包装弄丢了。后果：任何返回普通值的代码都炸（只有返回函数/IIFE 的代码侥幸能跑），模型收到报错后重试 `test_js`，每次重试 write 类都再过一次确认门、再弹一次确认卡，`MAX_STEPS=12` 内反复弹 —— 用户看到的就是「点确认后卡死/无限弹确认」。
-证据：**实测（真 Chromium 加载 build/ 扩展，探针 `.agent-test/iso-probe.mjs`）** —— 走完整 wire（扩展页发 `background--agent:run-js` → background → `executeScript` MAIN world）发 `1+1`，返回 `{"error":"代码执行出错：n(...) is not a function","ok":false}`；把压缩产物里的 `le` 原样提取到干净页面单跑、以及手工未压缩同构函数注入，均复现同一错误 —— 与压缩无关，是逻辑本身错了。wire 链路本身正常（错误能 settle、能返回），所以这是 T-28 修好通道后暴露的下一层 bug。
-影响：`test_js` 对模型完全不可用（凡有返回值的调用必失败），且失败形态诱发确认卡反复弹，体验为「卡死」。`query_elements` / `highlight_selector` 不走这个函数，不受影响。
-建议：补上包装 —— `new Function('return (function(){ return (' + src + ') })')`，保持 `fn()()` 调用形状不变（`fn()` 返回包装函数，`fn()()` 才是求值），一行改动，Promise/超时语义不动。同时把这个函数从 `background/index.js` 抽成纯模块（`npm test` 的 glob 只覆盖 `src/agent/**`）补单测：表达式值、Promise、undefined、SyntaxError 四条。代价约 30 分钟。
-结论：按建议落地 —— 抽成纯模块 `src/agent/agentEvalInPage.js`（导出 `agentEvalInPage` + `raceTimeout`，头注写死「必须自包含」的序列化约束），`background/index.js` 改为导入，本地定义删除；包装按建议补回，`fn()()` 形状不变。单测 10 条钉住：表达式值、对象 JSON、Promise 求值、IIFE、undefined、函数退回 String()、对象方法属性被 stringify 丢掉（已知行为钉住）、裸语句 SyntaxError、运行期异常归一。真机验收（探针 6 条全过）：`1+1` → `ok:true "2"`（328ms）、`document.title`、对象字面量 JSON、坏 tabId 立即报错。`npm test` 308 pass / 0 fail，eslint 干净，`npm run build` 成功且产物里包装形态正确。用户贴的错误 `代码执行出错：n(...) is not a function` 与登记的现象一字不差，即本轮修的对象。
-状态：已清（2026-10-04 完成）
-
-### T-30 — 工具执行 await 无超时无中止路径，页面同步阻塞代码把 agent 永久卡死
-
-类型：bug
-登记日期：2026-10-04
-来源：会话 2026-10-04 同上排查，触发点 `src/background/index.js:579-592`（`runInPage` 无超时）、`src/agent/loop.js:467`（`await executeCall` 无守卫）
-现象：`test_js` 允许模型跑任意代码；表达式形式的同步死循环（如 `(()=>{for(;;);})()`）把目标页主线程永久占死，`executeScript` 的 promise 永不 settle，background 通道随之永不响应。`loop.js:467` 的 `await executeCall(...)` 没有超时或中止守卫 —— `abort()` 只 abort LLM 的 fetch signal，对卡在工具执行上的循环无效，整轮 send 永远回不来，agent.busy 永真，唯一出路是重开页面。`agentEvalInPage` 里的 10s `Promise.race` 救不了这种场景：那个 setTimeout 也运行在已被占死的页面主线程上，根本没机会触发。
-证据：**实测（真 Chromium 加载 build/ 扩展，探针 `.agent-test/iso-probe.mjs`）** —— 发 `(()=>{for(;;);})()`，15s 硬超时后仍是 `{"__hung":true}`；对照组「不存在的 tabId」立即返回错误。通道与错误路径都正常，唯独页面同步阻塞 = 永久挂起。
-影响：模型只要生成一段同步阻塞代码且被 `test_js` 执行，agent 整轮永久卡死，停止按钮救不回。概率低但一旦发生必现、必死。
-建议：background 侧 `runInPage` 包一层硬超时（如 15s `Promise.race`，超时返回 `{ok:false,error:'页面执行超时…'}`）让 loop 能继续收尾；loop 侧 `executeCall` 是否也要兜底可再议（有 background 超时后必要性下降）。代价约 15 分钟 + 1 条单测。
-结论：按建议落地 —— `runInPage` 的 `executeScript` 套 `raceTimeout`（新抽的纯 helper，`agentEvalInPage.js` 导出），硬超时 `AGENT_PAGE_TIMEOUT_MS = 15s`，超时返回 error 形状（附「别再在这页上执行代码」的指引，模型可据此收手）而不是 reject；迟到 reject 由 helper 内部吞掉（有单测钉住不炸 unhandledrejection）。`agent:query` / `agent:highlight` 同走 `runInPage`，一并获得兜底。真机验收：`(()=>{for(;;);})()` 从「15s 仍挂死」变为「15.0s 返回『页面执行超时（15s）』error」，页内 10s 超时（页面还活着时）不受影响，坏 tabId 立即报错。loop 侧未加守卫：background 超时已兜住永不 settle 的来源，`executeCall` 自身逻辑（纯 JS）没有已知的挂起点，不加多余一层。
-状态：已清（2026-10-04 完成）
+状态：待审核
 
 ### T-31 — `npm run lint` 因存量 `src/lib/dayjs.js` 恒红，提交前检查形同虚设
 
@@ -198,30 +173,7 @@
 证据：**实测** —— `npm run lint` 输出 `1 problem (1 error, 10 warnings)`；`npx eslint src/lib/dayjs.js` 单跑同样报该条；`git diff --stat src/lib/dayjs.js` **为空**（文件与 HEAD 一致，非本次改动引入，也不是谁的在途改动）。这条存量在 T-26 的结论里被记过一次（当时是 2 error / 10 warning），但一直没登记成条目。
 影响：`npm run lint` 永远 exit 1，人和 CI 都没法拿它当门禁；lint-staged 只对 staged 文件跑 `eslint --fix`，所以日常提交暂不被卡 —— 一旦有人把门禁改成全量检查，会立刻被这条存量卡住。
 建议：`npx eslint --fix src/lib/dayjs.js`，约 1 行改动、1 分钟即可转绿。**另 10 个 warning（`no-console` 等，散布在 `[id].vue`、`App.vue` 等处）建议单独处理**，别和这条混在一起，否则改动面失控。
-
-### T-32 — `get_block_schema` 是从未接线的空壳，永远返回「可用块（一个都没有）」，模型陷入 read_page ↔ get_block_schema 循环
-
-类型：bug
-登记日期：2026-10-04
-来源：会话 2026-10-04 用户报「agent 不跑 test_js 且陷入循环」并贴出对话，触发点 `src/agent/index.js:192`、`src/agent/tools/page.js:268-281`、`src/composable/agentHost.js:240-252`
-现象：工具 `get_block_schema` 的执行走 `ctx.getBlockSchema(name)`，而 `createAgentRuntime` 的默认实现是 `async () => null`（`index.js:192`），且**全仓没有任何宿主传入真实现**（`agentHost.js` 的 createAgentRuntime 调用只传了 getConfig/targetTab/enabledGroups/sessionStore/getWorkflowId/canvas/onSessionsChanged/requestConfirmation）。于是任何查询都命中「块不存在」分支，兜底的 `getBlockSchema('*')` 也返回 null → 可用块列表渲染成「（一个都没有）」。与 prompt 事实表同时 saying「本版共有 61 个块」（`prompt.js:192`，countBlocks 走真实目录）直接矛盾。用户贴的对话里模型查 `javascript-code`（真实目录里存在、`data.code` 字段齐全），得到「没有名为 javascript-code 的块。可用块：（一个都没有）」，随后在 read_page ↔ get_block_schema 之间震荡直到 MAX_STEPS 烧完；它始终没调 test_js，因为它的计划走的是工作流块路线（画布上已有 trigger/javascript-code/active-tab），而那条路被空 schema 工具堵死。
-证据：**实测（代码 + 用户贴的对话双证）** —— ① `grep -rn getBlockSchema src` 仅命中 `index.js`（默认 null 桩 + 透传）和 `page.js`（工具），无任何宿主接线；② 真目录实测：`tasks` 共 61 块、`javascript-code` 存在，条目含 `name/description/category/data{code,...}` —— 工具需要的数据全都有，只是没接；③ 用户贴的 `get_block_schema` 返回原文「可用块（add_block 用第一个）：（一个都没有）」与桩行为逐字吻合。对照：同为块目录消费方的 `add_block` 用的是宿主传入的 `ctx.blocks`（`canvas.js:50`），有真数据 —— 说明目录通道本来就有，唯独 schema 工具漏接。
-影响：所有块相关计划（add_block 前查字段、查可用块名）全部死路；模型在矛盾信息下反复重试直至 12 步烧完，用户看到「陷入循环、什么都没干成」。`test_js`/`read_page` 等非块工具不受影响，但模型的注意力被吸进死胡同后也不会去用。
-建议：在装配层给 `getBlockSchema` 一个真默认实现（`index.js` 已导入 `tasks` 目录，无需宿主配合）：`'*'` 返回 `[{id, name}]` 全量列表；按 id 或 name 查找返回 `{id, name, description, category, data: Object.keys 风格的字段清单, refDataKeys}`，形状与 `page.js:286-299` 的渲染约定对齐。约 40 行 + `assembly.test.js` 补两条断言（查 `javascript-code` 能拿到 data 字段；`'*'` 返回 61 条）。另建议给「目录为空」加一条防御性断言：若 `getBlockSchema('*')` 返回空数组而 countBlocks>0，说明接线又断了，直接在观察值里说人话。代价约 30 分钟。
-结论：按建议落地 —— 装配层新增导出 `lookupBlockSchema(name)`（`src/agent/index.js`，用已导入的 `tasks` 目录：`'*'` 全量 `[{id,name}]`、按 id/块名双认、返回 `{id,name,description,category,data}`），`createAgentRuntime` 的默认从 `async()=>null` 换成它，两个宿主零改动即接线。防御断言落在工具层（`page.js`）：① 形状守卫 —— schema 必须是非数组对象且带 id，否则按查不到处理（写测试时实测踩到：桩回空数组时 `[]` 是 truthy，会走「查到了」分支渲染出 `## undefined`）；② 目录为空 ≠ 没有匹配块 —— 观察值直说「get_block_schema 没接上线，停止重试本工具」。测试 7 条：按 id / 按块名 / `'*'` 镜像目录（条数 === `Object.keys(tasks).length`）/ 查不到 null / 空数组防御 / null 桩走旧分支 / 真实现端到端（`## JavaScript code` + 字段含 code）。`npm test` 314 pass / 0 fail，eslint 干净，`npm run build` 成功。
-状态：已清（2026-10-04 完成）
-
-### T-33 — `readPageFromTab` / 指纹 probe 的 `tabs.sendMessage` 无超时，页面被注入代码占死后 agent 永久挂起
-
-类型：bug
-登记日期：2026-10-04
-来源：会话 2026-10-04 用户报「同意运行代码后卡住」+ 会话 dump（`Downloads/agent-sessions.json`）分析，触发点 `src/agent/index.js:185`（readPageFromTab）、`:380`（probe）
-现象：`test_js` 在目标页注入代码后，若该代码把页面主线程占死（死循环、alert 等），executeScript 通道有 T-30 的 15s 硬超时兜底，但**同一渲染进程的 content script 也会被占死**——之后任何 `browser.tabs.sendMessage`（read_page 工具、每步指纹 probe）的 promise 永不 settle：消息发给了一个无法响应的 renderer，没有浏览器级超时。`readPageFromTab` 的 try/catch 接不住「挂起」只接得住「抛错」，probe 同理。整轮 send 挂死在 step 开头或工具执行处，abort 也救不了（abort 只作用于 fetch signal）。
-证据：**实测（真 Chromium + build/ 扩展，探针 `.agent-test/t33-probe.mjs`，2026-10-04 复现全链路）** —— ① 健康页发 `agent:read-page` 消息：立即返回（138 字节）；② 走 background `agent:run-js` 注入 `(()=>{for(;;);})()`：15.0s 后返回「页面执行超时（15s）」（T-30 兜底生效）；③ **同一被占死的页面再发 `agent:read-page`：15s 硬超时后仍是 `{"__hung":true}`** —— tabs.sendMessage 永不 settle，与用户「同意执行注入代码后整个助手页面所有交互失效、控制台无报错」的复现逐环吻合（无限 await 不抛错，控制台自然干净）。用户盲批的注入代码（UI 构建脚本）无需逐字核对：任何把页面主线程占死的形态（死循环/alert/同步重排）都进入这条链。
-影响：模型注入一段带死循环/alert 的代码后，agent 当轮永久卡死、停止按钮无效、刷新丢整轮——用户已两次撞上「同意后卡住」。
-建议：复用 `raceTimeout`（`agentEvalInPage.js` 已导出）：`readPageFromTab` 的 `tabs.sendMessage` 与 probe 各包 10-15s 超时，超时返回「页面无响应（可能被之前注入的代码占死），请换页或让用户刷新该页」的人话观察值。约 15 行 + 1 条单测。
-结论：按建议落地 —— `readPageFromTab` 的 `tabs.sendMessage` 套 `raceTimeout`（`TAB_CHANNEL_TIMEOUT_MS = 15s`，params 可传 `timeoutMs` 覆盖供测试），超时返回「页面无响应（N s 无应答）……请停止对本页的读页和执行操作，让用户手动刷新或关闭该页，或用 focus_tab 换一个标签页」；指纹 probe 走同一函数自动获得兜底，超时返回字符串时 probe 拿不到 fingerprint → 不产生假通知（已核对 `index.js` probe 分支）。单测 2 条（桩永不 settle → 人话；健康通道照常）。`npm test` 328 pass / 0 fail，eslint 干净，`npm run build` 成功且产物含超时文案。局限如实记：单测覆盖的是装配层函数，真机端到端由 t33-probe 的第 3 步场景对应（raw 通道仍会挂，修复在调用点包裹），用户真机复验才算最终闭环。
-状态：已清（2026-10-04 完成）
+状态：待审核
 
 ### T-34 — 会话只在收尾落盘，转中卡死/刷新即整轮丢失，卡住的轮次无法事后诊断
 
@@ -245,41 +197,38 @@
 建议：与 B1 合并修：title 回写改为「闭包捕获发起时的 sessionId + 只 patch title 字段（读改写仅 title 键）」，回写前校验 `currentSessionId === 捕获的 id`，不等则放弃。约 20 行。
 状态：待审核
 
-### T-36 — write 工具参数校验失败只回「××不能为空」，不回显实际收到的键，模型连错 6 次无法自纠
-
-类型：改进
-登记日期：2026-10-04
-来源：同上 dump 分析（`94cd04e9` 第二轮：`update_block` 连续 6 次「nodeId 不能为空」错误，中间夹一次 list_canvas 也没能纠对），触发点 `src/agent/tools/canvas.js:44-49` 及 update_block 同形分支
-现象：`add_block`/`update_block` 对缺失参数只返回「blockId 不能为空。」/「nodeId 不能为空。」。模型混淆两个工具的参数名（add 用 `blockId`、update 用 `nodeId`）时，错误信息不含「你实际发了什么」，模型只能瞎猜着重试——dump 里一轮连错 5 次 + 上轮 1 次，每次都烧一步配额与一次（update_block 的）确认弹窗。
-证据：**实测（dump）** —— `94cd04e9` 工具错误事件 7 条：add_block 1 次 + update_block 6 次，错误文案逐条相同；工具参数本身不在持久化事件里（见 T-34），「发了错键名」是据错误形态与模型思考上下文的高置信推断。
-影响：写路径的可用性被模型的小错放大成多轮失败，且每次失败都可能再弹一次确认卡打扰用户。
-建议：参数校验失败时回显收到的顶层键名与值摘要（如「nodeId 不能为空。收到参数: {blockId: "pg8rzgv", data: {...}} —— update_block 用 nodeId，add_block 才用 blockId」）。`canvas.js` 两处分支 + 单测。约 20 分钟。
-结论：按建议落地 —— `canvas.js` 新增 `missingParamError(missing, params, hint)`：回显收到参数的 JSON（**长字符串值截断到 60 字符**，整段错误不会被大 data 撑爆），并按工具点名破 blockId/nodeId 分工（add_block：「update_block 才用 nodeId」；update_block：「add_block 才用 blockId」）。新增 `canvas.test.js` 4 条（双向回显 + 长值截断 + 空参数占位）。`npm test` 338 pass / 0 fail，eslint 干净，`npm run build` 成功且产物含「收到参数」。效果：模型混用参数名时一次自纠，不再连错烧步数与确认弹窗。
-状态：已清（2026-10-04 完成）
-
-### T-37 — `elideStaleObservations` 保留条件过宽：页面快照只要后面跟了任何别的工具就被压缩，模型被迫反复 read_page
+### T-40 — `agent:error` 事件有两种互不兼容的形状，promptFacts 降级的详情在 UI 上被吞掉
 
 类型：bug
-登记日期：2026-10-04
-来源：会话 2026-10-04 用户报「对话反复调用 read_page」并贴出对话，触发点 `src/agent/window.js:101-120`
-现象：`elideStaleObservations` 的保留条件是「属于**最后一组工具消息**」（从尾部往前数连续的 role:'tool'），而不是「是**最后一次页面快照**」。只要模型在 read_page 之后调了任何非页面工具（get_variables、list_canvas、query_elements…），先前的页面快照就被换成 `STALE_MARKER`（「此前的页面快照已被压缩…」）——哪怕页面根本没变、这是当前唯一一份页面知识。模型的思考内容不进 wire（`wire.test.js`「思考内容不进 wire」），所以被压缩后它**真的**失去页面结构：用户贴的对话里，step 1 的思考还复述着「书本列表在 ol.row…」（当时快照还在 wire 里），step 2 的思考就变成「我需要先看看当前页面的结构」→ 重读；重读之后再调任何工具，新快照又被压缩 → 再读。10-03 dump 里 `47de996f` 会话「read → query → read → query → read×3」五连同页读取、今天多轮会话的 2-4 连读，都是这台机器压出来的。
-证据：**代码逐行核对 + 用户对话逐步对账** —— ① `window.js:102-110`：`lastToolGroupStart` 从尾部收集**连续** tool 消息，`:114` 只豁免 `i >= lastToolGroupStart`；② 用户贴的对话时序：read_page(obs A) → get_variables/list_canvas → 此时 obs A 不在最后一组 → 被压缩 → 下一步模型思考原话「我需要先看看当前页面的结构」（它自己的上下文里已经没有页面了）；③ `window.test.js:70-89` 只覆盖了「旧快照后面还有**新页面快照**」的正确剔除场景，「快照后面跟非页面工具」这一致病场景没有任何用例；④ 第二次 read_page 观察值（detail="addresses"，默认档）与第一次参数相同——重读不是换档位，是上下文里真的没了。
-影响：凡模型在 read_page 后调任何一个别的工具，页面知识就从上下文里蒸发，触发反复 read_page——烧步数、烧 token、弹无关的确认门，且观察值越大（content/full 档）压缩损失越重。
-建议：`elideStaleObservations` 改为保留**最后一条页面快照**（从尾往前找第一条 `<untrusted_page_content` 开头的 tool 消息），只压缩比它更旧的页面快照；非页面工具不再参与「新旧」判定。约 10 行；`window.test.js` 现有两条（新快照替换旧快照、非页面工具不剔）语义不变，**新增**一条「快照后面跟 get_variables/list_canvas → 快照必须保留」。代价约 30 分钟。
-结论：按建议落地 —— `window.js` 的判定从「最后一组工具消息」改为「最后一条页面快照」（从尾往前找第一条页面 content 的 tool 消息，`i === lastPageSnapshot` 豁免），头注写明判定依据（有没有更新的页面快照 ≠ 后面有没有别的工具）。测试 3 条：致病场景（快照后跟非页面工具 → 必须保留且不带 elided）、多条快照只留最后一条、原有两条（新快照替换旧快照 / 非页面工具不剔）语义不变仍绿。loop.test.js 的接线用例（两次 read_page，有更新快照）不受影响仍绿。`npm test` 330 pass / 0 fail（原 328），eslint 干净，`npm run build` 成功。模型侧收益：read_page 之后调别的工具不再失忆，反复 read_page 的结构性根因消除；同页重读只剩模型自身冗余一种来源（可用 [agent] 日志的 tool.call 参数摘要区分）。
-状态：已清（2026-10-04 完成）
+登记日期：2026-10-05
+来源：会话 2026-10-05 `src/agent` 架构评审，触发点 `src/agent/loop.js:318-322`（手动 emit）与 `src/agent/loop.js:81-88`（`toAgentEvent` 产出）的形状不一致；唯一消费点 `src/components/newtab/workflow/agent/AgentTranscript.vue:157`
+现象：`toAgentEvent` 产出的 error 事件字段是 `{ status, message, errorKind, httpStatus }`；但「提示词事实表构建失败」那条降级路径手工 emit 的是 `{ kind, error: '...' }`，**字段名是 `error` 不是 `message`**。UI 侧只有一处读 `ev.message || t('workflow.agent.error')`，于是这条路径的用户可见内容被静默换成兜底文案——用户看到的是「错误」两个字，看不到「事实表构建失败，本次按空表继续」这个唯一能说明为什么本轮能力退化的信息。
+证据：**静态代码确认（两个产出点字段名不同 + UI 只有一个读取点），未跑 UI 实测** —— `loop.js:321` 写 `error:`、`loop.js:84` 写 `message:`；`grep -rn "agent:error|\.errorKind|ev.message" src/components src/composable/agentHost.js` 命中仅 `AgentTranscript.vue:157`（读 message）与 `agentHost.js:254`（写 message）。
+影响：① 用户侧：模型权限/领域知识表退化的原因不可见，症状表现为「助手突然变笨」且无任何提示；② 维护侧：`AGENT_EVENTS` 是 loop 与 UI 之间唯一的 seam（`CONTEXT.md` 明文），但它的形状没有任何一方守卫——两个产出方可以各写一套字段名，编译期与测试期都不拦。与 T-04（错误渲染样式）相邻但不同：T-04 是样式，本条是载荷丢失。
+建议：① 抽一处 `emitError()` 工厂，所有 error 事件只能从它出，形状只有一份（约 30 分钟）；② 补一条「事件契约测试」——遍历 `AGENT_EVENTS` 全部 key，断言每个 key 至少有一个产出点，防止再出现僵尸常量；③ 顺手把 `agentHost.js:254` 裸写的 `'agent:error'` 换回 `AGENT_EVENTS.ERROR`。建议接 T-04 一起做。
+状态：待审核
 
-### T-38 — `test_js` 只接受表达式形式，模型写语句形式必吃 SyntaxError，「时好时坏」
+### T-41 — `AGENT_EVENTS` 里 CONFIRM / PROPOSAL 是零产出零消费的残留常量
 
 类型：改进
-登记日期：2026-10-04
-来源：会话 2026-10-04 用户报「部分工具运行不稳定，有时候好有时候不好」并贴出对话（test_js 先报 `Unexpected token 'const'`、重试即成功），触发点 `src/agent/agentEvalInPage.js:31`
-现象：`agentEvalInPage` 把代码包成 `(function(){ return (src) })` 求值——**只接受表达式**。模型抓数据时最自然的写法是语句形式（`const items = ...; const list = []; items.forEach(...); list`），以 `const` 开头的代码在表达式包装下必吃 `SyntaxError: Unexpected token 'const'`。重试时模型碰巧包成了 IIFE 才成功——所以「有时候好有时候不好」：不是随机，是**取决于模型这一次有没有记得写 IIFE**，而错误信息 `代码执行出错：Unexpected token 'const'` 完全没提示「该包成 IIFE」，模型要靠运气猜对。update_block 的「nodeId 不能为空」反复失败是同一类病（错误不指路），已在 T-36 登记。
-证据：**代码逐行核对 + 用户对话对账** —— ① `agentEvalInPage.js:31` 包装形态如上；② 用户对话：第一次 test_js 报 `Unexpected token 'const'`（语句形式），第二次成功（返回书本数组，IIFE 形式）；③ `agentEvalInPage.test.js` 现有用例「裸语句是 SyntaxError」把该行为钉成了预期。
-影响：抓数据的常见写法（语句形式）首试必败，浪费一步 + 一张失败卡片；错误文案不可行动，自纠靠运气。
-建议：双形式求值——① 先按现行表达式包装编译；② 若抛 **SyntaxError**（编译期错误，代码尚未执行，回退无双跑副作用风险），改用语句形式 `new Function('return (async function(){\n' + src + '\n})')` 重编译执行（async 包装顺带支持顶层 await；值取 `return` 所得）；③ 语句形式跑完返回 undefined 时，在返回值里附一句指引（「代码已执行完毕但没有返回值——要拿数据请在末尾加 return，或包成 IIFE」）；④ 两种形式都 SyntaxError 才报错，文案说明已尝试两种形式。**严禁**在运行期错误（非 SyntaxError）时回退——那会双跑副作用。同步改 `agentEvalInPage.test.js`：「裸语句 SyntaxError」用例的输入换成两种形式都非法的（如 `const const`），新增语句形式成功 / 顶层 await / undefined 指引三条。代价约 40 分钟。
-结论：按建议落地 —— `agentEvalInPage.js` 编译链改为「表达式优先，SyntaxError 才回退语句形式（async 包装，支持顶层 await）」，双形式都炸才报「表达式与语句两种形式都无法解析」；语句形式跑完无返回值时返回值附「加 return 或包 IIFE」指引（表达式形式的 undefined 保持干净字面量）；运行期错误不回退的红线写进了头注与实现（编译 catch 与执行 catch 分离）。测试：`agentEvalInPage.test.js` 原「裸语句 SyntaxError」用例换成双形式都非法的输入（`const const const`——原输入 `while(true){}` 在语句形式下能编译会真跑出 10s 超时），新增语句成功 / 顶层 await / undefined 指引 / 表达式 undefined 不带指引，共 16 条全绿。`npm test` 338 pass / 0 fail，eslint 干净，`npm run build` 成功且产物含双形式编译链。效果：语句形式首试即成，`Unexpected token 'const'` 一类失败消失。
-状态：已清（2026-10-04 完成）
+登记日期：2026-10-05
+来源：会话 2026-10-05 `src/agent` 架构评审，触发点 `src/agent/events.js:19-20`；`START` 亦只有一个产出方且 UI 不消费（`src/agent/loop.js:337`，测试断言在 `loop.test.js:150`）
+现象：`AGENT_EVENTS.CONFIRM` 与 `AGENT_EVENTS.PROPOSAL` 在**全仓没有任何产出方，也没有任何消费方**——它们是已废弃的 transcript 时代的展示角色残留（`CONTEXT.md` 已把 transcript 一词废弃，这类残留最应该跟着清干净）。事件常量表是 loop↔UI 契约的唯一声明，读者看到这两个 key 会以为存在一个尚未接线的 seam，实际确认流程是走 `deps.requestConfirmation` 直接回调宿主、不经过事件流。
+证据：**静态确认** —— `grep -rn "AGENT_EVENTS.CONFIRM|AGENT_EVENTS.PROPOSAL|AGENT_EVENTS.START|'agent:start'" src` 命中项仅 `events.js:13`（定义）、`loop.js:337`（唯一产出）、`loop.test.js:150`（唯一断言），CONFIRM/PROPOSAL 零命中。
+影响：纯认知成本——每次读事件表要多扫两个不存在的概念；将来有人真的想加 CONFIRM 事件时，会发现这个名字已经被占但语义不清。无运行时危害。
+建议：删掉 CONFIRM/PROPOSAL（含 `AgentTranscript.vue:190` 注释里对它们的提及），保留 START（有产出方、被测试钉住）。配合 T-40 建议② 的「事件契约测试」一起做，能永久防止这类残留再回流。代价约 10 分钟。
+状态：待审核
+
+### T-40 — agent-architecture.html 的代码快照与行号仍停在 T-29/T-30 之前，与页脚「行号均为实测引用」的承诺不符
+
+类型：bug（文档与代码不一致）
+登记日期：2026-10-05
+来源：会话 2026-10-05 更新该文档（T-02/T-39 的结论要写进去）时逐块核对源码发现，触发点 `docs/agent-architecture.html` §13「写类工具的 MAIN world 执行」的两个代码块。
+现象：§13 里 `runInPage` 标着 `// src/background/index.js:579-592` 且是裸 `try/catch`；`agentEvalInPage` 标着 `// src/background/index.js:538-555 —— test_js 的核心`，代码是 `new Function('return (' + src + ')')` + `fn()()` —— 正是 T-29 判死的那个必炸形状。
+证据：**实测** —— `grep -n "function runInPage|function agentEvalInPage|raceTimeout" src/background/index.js` 输出：`12: import { agentEvalInPage, raceTimeout } from '@/agent/agentEvalInPage'`、`528: const AGENT_PAGE_TIMEOUT_MS = 15000`、`544: async function runInPage(...)`、`556: return raceTimeout(exec, AGENT_PAGE_TIMEOUT_MS, {`。即 `runInPage` 行号与实现都已变（T-30 套了超时），`agentEvalInPage` **根本不在这个文件里**（T-29 抽成了 `src/agent/agentEvalInPage.js`，且 T-38 改成双形式求值）。另有行号未复核：§13 通道表的处理端（`background/index.js:603/656/721`）、§06 流程分解（`loop.js:158-211` 等）。**文档页脚自称「代码行号与函数签名均为实测引用」，现状与这句不符。**
+影响：这份 117KB 的 html 是本仓的架构入口（AGENTS.md 与 CONTEXT.md 都指向它）。照着它读代码的人（或 agent）会去找一个不存在的函数位置，或把已修掉的 `fn()()` 当成现状 —— 与「把有实测依据的偏离纠正回旧方案」同类的风险，方向相反。
+建议：**只复核不重写** —— 按 §13 → §06 → §08 顺序逐个代码块对源码核行号与函数体，更新后在页脚加一行「最后核对于 YYYY-MM-DD」。整篇重写风险大于收益（文档 117KB，且大部分段落仍准确）。本条已在同一轮更新过 §07（确认门快照、四条路径表、T-02/T-27 状态）与 §13（超时分层说明），**剩下的代码快照未动，等审核**。代价约 1 小时。
+状态：待审核
 
 ## 已批准（待排期）
 
@@ -503,6 +452,102 @@
 结论：新建纯函数模块 `src/agent/confirm.js` 承载载荷整形 —— `buildConfirmation(req, {targetTitle})` 按 `name` 分五类（`test_js`→code 全文 + `countLines` 行数、`highlight_selector`→selector、`open_url`→url、`add_block`/`update_block`→blockId/nodeId + 变更字段的 JSON 摘要、未知写工具→参数原样摊开），只读 `args`、顶层字段一律忽略；未知/缺 `args`/循环引用都有兜底，不抛。`src/agent/confirm.test.js` 14 条用例钉住（含三条关键回归：**顶层旧 `code` 不许覆盖 `args.code`**、`args` 缺失给空串而非 `undefined`、`data` 带循环引用不炸）。`agentHost.js` 删除 `req.code` 分支改调 `buildConfirmation`；`AgentConfirmCard.vue` 改收结构化 `confirm`，按 `kind` 切标题与 hint，`<pre>` 绑 `confirm.detail` 并加 `v-if`；`workflow.agent.confirm` 下新增 12 个 key（en + zh 同步）。
 **原建议中「改 `loop.js` 传显式载荷」未采纳** —— 重新读过 `loop.js:441-465`，`call.args` 在 `executeCall` 之前已赋值，`requestConfirmation({ ...call })` 展开时 `args` 已在载荷里，缺的只是宿主侧的读取；改 loop 反而多一处无关改动。改由 `loop.test.js` 的「写类工具必须经过确认」补一条 `assert.deepEqual(asked[0].args, …)`，把载荷形状钉死在最靠近产出处。
 实测：`npm test` 296 pass / 0 fail（原 282，新增 14 条全在 `confirm.test.js`）、`npm run check:i18n` 通过（zh-TW 对新增 12 key 缺译，advisory，与该区其余 agent key 同状态）、`npm run lint` 存量 1 error / 10 warning、`npm run build` exit=0。**未在真机复现原 bug**（需装扩展 + 起模型）—— 修复正确性由新增回归测试与代码路径证明，原「空框」现象本身仍是推断。
+状态：已清（2026-10-04 完成）
+
+### T-28 — agent 发给 background 的三条消息带 `type`，路由按 `name` 查表，`test_js`/`query_elements`/`highlight_selector` 一律打不通
+
+类型：bug
+登记日期：2026-10-04
+来源：会话 2026-10-04 浏览器侧管道梳理，触发点 `src/agent/index.js:229`、`src/utils/message.js:52-56`、`src/background/index.js:603/656/721`
+现象：agent 侧 `toolCtx.sendMessage = (msg) => browser.runtime.sendMessage(msg)`（`src/agent/index.js:229`），工具发出去的载荷是 `{type:'agent:run-js'|'agent:query'|'agent:highlight', tabId, ...}`（`src/agent/tools/page-write.js:30/77`、`src/agent/tools/highlight.js:32`）。但background 侧是 `new MessageListener('background')` + `message.on('agent:run-js', ...)`（`src/background/index.js:61/603/656/721`），而 `MessageListener.listener` 只按 `message.name` 查表（`src/utils/message.js:52`），agent 的载荷根本没有 `name` 字段 —— 于是 `:56` 的 `message.name.split('--')` 抛 TypeError，被 `:74` 的 catch 包成 `Unhandled Background Error` reject。三个工具全部落进各自的 catch 分支，向模型返回「执行失败：Unhandled Background Error…」。
+证据：**实测（复刻 listener 逻辑）** —— 按 `src/utils/message.js:48-79` 逐行复刻 listener，用 `{type:'agent:run-js',tabId:1,code:'1+1'}`（listener 表已含 `background--agent:run-js`）喂进去，输出 `REJECTED: Unhandled Background Error: TypeError: Cannot read properties of undefined (reading 'split')`。代码位置：产出侧 `src/agent/index.js:229`，消费侧 `src/utils/message.js:52,56,74`。**真实浏览器端复现：未实测**（需装扩展 + 起模型）。方案文档 `docs/agent-assist-tech-design.md:580` 原本写的是 `MessageListener.sendMessage('agent:run-js', payload, 'background')`，实现时换成了裸 `browser.runtime.sendMessage`，两者不是同一个协议。`read_page` 不受影响 —— 它走 `browser.tabs.sendMessage` + `switch (data.type)`（`src/agent/index.js:129-136` → `src/content/index.js:323`），是另一条通道。
+影响：三个走 background 的页面工具（`test_js` 写类、`query_elements` 读类、`highlight_selector` 写类）在真实浏览器里全部不可用，模型每次只拿到一条 TypeError 文本，且错误文案完全指不到真因。`src/agent/tools/page-write.test.js` 用注入的假 `sendMessage` 只断言了载荷形状（`:93`/`:41`），这条断链不会被现有测试发现 —— 与 `openai-compat.js:96-104` 记的「测试夹具照消费方写」是同一类陷阱。
+建议：① 最小改动 —— `toolCtx.sendMessage` 改用 `MessageListener('background').sendMessage(name, payload)`（`src/utils/message.js:88-90`），工具侧改成 `sendMessage('agent:run-js', {...})` 传两个参数；代价约 10 行，且天然避开 Firefox 需 `JSON.stringify` 的分支。② 或在 background 侧 listener 前加一层把 `{type}` 映射成 `name` 的兜底；代价一处全局改动，影响面比 ① 大。③ 两者都要补一条覆盖真实路由的断言（现在只测了载荷形状）。
+结论：采纳 ① 的变体 —— 翻译收敛在装配层一个导出函数 `toBackground({type, ...payload})`（`src/agent/index.js`），内部走 `utils/message` 的 `sendMessage(type, payload, 'background')`（连 Firefox 的 stringify 分支一并覆盖）；三个工具的调用点不动，仍发 `{type, ...}`。补契约测试：`assembly.test.js` 新增 2 条，用 polyfill 桩把 `runtime.sendMessage` 接到**真实** `MessageListener('background')` 上，断言三条载荷原样路由到 handler、返回值原路带回。红证已实测：把 `toBackground` 换回裸 `runtime.sendMessage`，新路径按预期炸出与用户报错一字不差的 `Unhandled Background Error: …(reading 'split')` 且 handler 不被调用。`npm test` 282 pass / 0 fail（原 280），eslint 通过，`npm run build` 成功。工具侧仍发 `{type}` 是刻意的：工具层保持纯函数、不认识 wire 协议，翻译点唯一化在装配层。
+状态：已清（2026-10-04 完成）
+
+### T-29 — `agentEvalInPage` 丢掉了文档承诺的求值包装，`test_js` 任何返回值的代码必炸
+
+类型：bug
+登记日期：2026-10-04
+来源：会话 2026-10-04 用户报「确认权限后卡死」，触发点 `src/background/index.js:538-550`（构建产物 `build/background.bundle.js` 里的 `le`）
+现象：`agentEvalInPage` 写的是 `const fn = new Function('return (' + src + ')')` 然后 `fn()()` —— `new Function('return (1+1)')` 得到的 fn，调用一次就**直接返回值 2**，`fn()()` 是把 2 当函数再调一次，必抛 TypeError。工具文档（`page-write.js:144`）承诺「会被包成 `(function(){ return (…) })() 执行`」，实现把这个包装弄丢了。后果：任何返回普通值的代码都炸（只有返回函数/IIFE 的代码侥幸能跑），模型收到报错后重试 `test_js`，每次重试 write 类都再过一次确认门、再弹一次确认卡，`MAX_STEPS=12` 内反复弹 —— 用户看到的就是「点确认后卡死/无限弹确认」。
+证据：**实测（真 Chromium 加载 build/ 扩展，探针 `.agent-test/iso-probe.mjs`）** —— 走完整 wire（扩展页发 `background--agent:run-js` → background → `executeScript` MAIN world）发 `1+1`，返回 `{"error":"代码执行出错：n(...) is not a function","ok":false}`；把压缩产物里的 `le` 原样提取到干净页面单跑、以及手工未压缩同构函数注入，均复现同一错误 —— 与压缩无关，是逻辑本身错了。wire 链路本身正常（错误能 settle、能返回），所以这是 T-28 修好通道后暴露的下一层 bug。
+影响：`test_js` 对模型完全不可用（凡有返回值的调用必失败），且失败形态诱发确认卡反复弹，体验为「卡死」。`query_elements` / `highlight_selector` 不走这个函数，不受影响。
+建议：补上包装 —— `new Function('return (function(){ return (' + src + ') })')`，保持 `fn()()` 调用形状不变（`fn()` 返回包装函数，`fn()()` 才是求值），一行改动，Promise/超时语义不动。同时把这个函数从 `background/index.js` 抽成纯模块（`npm test` 的 glob 只覆盖 `src/agent/**`）补单测：表达式值、Promise、undefined、SyntaxError 四条。代价约 30 分钟。
+结论：按建议落地 —— 抽成纯模块 `src/agent/agentEvalInPage.js`（导出 `agentEvalInPage` + `raceTimeout`，头注写死「必须自包含」的序列化约束），`background/index.js` 改为导入，本地定义删除；包装按建议补回，`fn()()` 形状不变。单测 10 条钉住：表达式值、对象 JSON、Promise 求值、IIFE、undefined、函数退回 String()、对象方法属性被 stringify 丢掉（已知行为钉住）、裸语句 SyntaxError、运行期异常归一。真机验收（探针 6 条全过）：`1+1` → `ok:true "2"`（328ms）、`document.title`、对象字面量 JSON、坏 tabId 立即报错。`npm test` 308 pass / 0 fail，eslint 干净，`npm run build` 成功且产物里包装形态正确。用户贴的错误 `代码执行出错：n(...) is not a function` 与登记的现象一字不差，即本轮修的对象。
+状态：已清（2026-10-04 完成）
+
+### T-30 — 工具执行 await 无超时无中止路径，页面同步阻塞代码把 agent 永久卡死
+
+类型：bug
+登记日期：2026-10-04
+来源：会话 2026-10-04 同上排查，触发点 `src/background/index.js:579-592`（`runInPage` 无超时）、`src/agent/loop.js:467`（`await executeCall` 无守卫）
+现象：`test_js` 允许模型跑任意代码；表达式形式的同步死循环（如 `(()=>{for(;;);})()`）把目标页主线程永久占死，`executeScript` 的 promise 永不 settle，background 通道随之永不响应。`loop.js:467` 的 `await executeCall(...)` 没有超时或中止守卫 —— `abort()` 只 abort LLM 的 fetch signal，对卡在工具执行上的循环无效，整轮 send 永远回不来，agent.busy 永真，唯一出路是重开页面。`agentEvalInPage` 里的 10s `Promise.race` 救不了这种场景：那个 setTimeout 也运行在已被占死的页面主线程上，根本没机会触发。
+证据：**实测（真 Chromium 加载 build/ 扩展，探针 `.agent-test/iso-probe.mjs`）** —— 发 `(()=>{for(;;);})()`，15s 硬超时后仍是 `{"__hung":true}`；对照组「不存在的 tabId」立即返回错误。通道与错误路径都正常，唯独页面同步阻塞 = 永久挂起。
+影响：模型只要生成一段同步阻塞代码且被 `test_js` 执行，agent 整轮永久卡死，停止按钮救不回。概率低但一旦发生必现、必死。
+建议：background 侧 `runInPage` 包一层硬超时（如 15s `Promise.race`，超时返回 `{ok:false,error:'页面执行超时…'}`）让 loop 能继续收尾；loop 侧 `executeCall` 是否也要兜底可再议（有 background 超时后必要性下降）。代价约 15 分钟 + 1 条单测。
+结论：按建议落地 —— `runInPage` 的 `executeScript` 套 `raceTimeout`（新抽的纯 helper，`agentEvalInPage.js` 导出），硬超时 `AGENT_PAGE_TIMEOUT_MS = 15s`，超时返回 error 形状（附「别再在这页上执行代码」的指引，模型可据此收手）而不是 reject；迟到 reject 由 helper 内部吞掉（有单测钉住不炸 unhandledrejection）。`agent:query` / `agent:highlight` 同走 `runInPage`，一并获得兜底。真机验收：`(()=>{for(;;);})()` 从「15s 仍挂死」变为「15.0s 返回『页面执行超时（15s）』error」，页内 10s 超时（页面还活着时）不受影响，坏 tabId 立即报错。loop 侧未加守卫：background 超时已兜住永不 settle 的来源，`executeCall` 自身逻辑（纯 JS）没有已知的挂起点，不加多余一层。
+状态：已清（2026-10-04 完成）
+
+### T-32 — `get_block_schema` 是从未接线的空壳，永远返回「可用块（一个都没有）」，模型陷入 read_page ↔ get_block_schema 循环
+
+类型：bug
+登记日期：2026-10-04
+来源：会话 2026-10-04 用户报「agent 不跑 test_js 且陷入循环」并贴出对话，触发点 `src/agent/index.js:192`、`src/agent/tools/page.js:268-281`、`src/composable/agentHost.js:240-252`
+现象：工具 `get_block_schema` 的执行走 `ctx.getBlockSchema(name)`，而 `createAgentRuntime` 的默认实现是 `async () => null`（`index.js:192`），且**全仓没有任何宿主传入真实现**（`agentHost.js` 的 createAgentRuntime 调用只传了 getConfig/targetTab/enabledGroups/sessionStore/getWorkflowId/canvas/onSessionsChanged/requestConfirmation）。于是任何查询都命中「块不存在」分支，兜底的 `getBlockSchema('*')` 也返回 null → 可用块列表渲染成「（一个都没有）」。与 prompt 事实表同时 saying「本版共有 61 个块」（`prompt.js:192`，countBlocks 走真实目录）直接矛盾。用户贴的对话里模型查 `javascript-code`（真实目录里存在、`data.code` 字段齐全），得到「没有名为 javascript-code 的块。可用块：（一个都没有）」，随后在 read_page ↔ get_block_schema 之间震荡直到 MAX_STEPS 烧完；它始终没调 test_js，因为它的计划走的是工作流块路线（画布上已有 trigger/javascript-code/active-tab），而那条路被空 schema 工具堵死。
+证据：**实测（代码 + 用户贴的对话双证）** —— ① `grep -rn getBlockSchema src` 仅命中 `index.js`（默认 null 桩 + 透传）和 `page.js`（工具），无任何宿主接线；② 真目录实测：`tasks` 共 61 块、`javascript-code` 存在，条目含 `name/description/category/data{code,...}` —— 工具需要的数据全都有，只是没接；③ 用户贴的 `get_block_schema` 返回原文「可用块（add_block 用第一个）：（一个都没有）」与桩行为逐字吻合。对照：同为块目录消费方的 `add_block` 用的是宿主传入的 `ctx.blocks`（`canvas.js:50`），有真数据 —— 说明目录通道本来就有，唯独 schema 工具漏接。
+影响：所有块相关计划（add_block 前查字段、查可用块名）全部死路；模型在矛盾信息下反复重试直至 12 步烧完，用户看到「陷入循环、什么都没干成」。`test_js`/`read_page` 等非块工具不受影响，但模型的注意力被吸进死胡同后也不会去用。
+建议：在装配层给 `getBlockSchema` 一个真默认实现（`index.js` 已导入 `tasks` 目录，无需宿主配合）：`'*'` 返回 `[{id, name}]` 全量列表；按 id 或 name 查找返回 `{id, name, description, category, data: Object.keys 风格的字段清单, refDataKeys}`，形状与 `page.js:286-299` 的渲染约定对齐。约 40 行 + `assembly.test.js` 补两条断言（查 `javascript-code` 能拿到 data 字段；`'*'` 返回 61 条）。另建议给「目录为空」加一条防御性断言：若 `getBlockSchema('*')` 返回空数组而 countBlocks>0，说明接线又断了，直接在观察值里说人话。代价约 30 分钟。
+结论：按建议落地 —— 装配层新增导出 `lookupBlockSchema(name)`（`src/agent/index.js`，用已导入的 `tasks` 目录：`'*'` 全量 `[{id,name}]`、按 id/块名双认、返回 `{id,name,description,category,data}`），`createAgentRuntime` 的默认从 `async()=>null` 换成它，两个宿主零改动即接线。防御断言落在工具层（`page.js`）：① 形状守卫 —— schema 必须是非数组对象且带 id，否则按查不到处理（写测试时实测踩到：桩回空数组时 `[]` 是 truthy，会走「查到了」分支渲染出 `## undefined`）；② 目录为空 ≠ 没有匹配块 —— 观察值直说「get_block_schema 没接上线，停止重试本工具」。测试 7 条：按 id / 按块名 / `'*'` 镜像目录（条数 === `Object.keys(tasks).length`）/ 查不到 null / 空数组防御 / null 桩走旧分支 / 真实现端到端（`## JavaScript code` + 字段含 code）。`npm test` 314 pass / 0 fail，eslint 干净，`npm run build` 成功。
+状态：已清（2026-10-04 完成）
+
+### T-33 — `readPageFromTab` / 指纹 probe 的 `tabs.sendMessage` 无超时，页面被注入代码占死后 agent 永久挂起
+
+类型：bug
+登记日期：2026-10-04
+来源：会话 2026-10-04 用户报「同意运行代码后卡住」+ 会话 dump（`Downloads/agent-sessions.json`）分析，触发点 `src/agent/index.js:185`（readPageFromTab）、`:380`（probe）
+现象：`test_js` 在目标页注入代码后，若该代码把页面主线程占死（死循环、alert 等），executeScript 通道有 T-30 的 15s 硬超时兜底，但**同一渲染进程的 content script 也会被占死**——之后任何 `browser.tabs.sendMessage`（read_page 工具、每步指纹 probe）的 promise 永不 settle：消息发给了一个无法响应的 renderer，没有浏览器级超时。`readPageFromTab` 的 try/catch 接不住「挂起」只接得住「抛错」，probe 同理。整轮 send 挂死在 step 开头或工具执行处，abort 也救不了（abort 只作用于 fetch signal）。
+证据：**实测（真 Chromium + build/ 扩展，探针 `.agent-test/t33-probe.mjs`，2026-10-04 复现全链路）** —— ① 健康页发 `agent:read-page` 消息：立即返回（138 字节）；② 走 background `agent:run-js` 注入 `(()=>{for(;;);})()`：15.0s 后返回「页面执行超时（15s）」（T-30 兜底生效）；③ **同一被占死的页面再发 `agent:read-page`：15s 硬超时后仍是 `{"__hung":true}`** —— tabs.sendMessage 永不 settle，与用户「同意执行注入代码后整个助手页面所有交互失效、控制台无报错」的复现逐环吻合（无限 await 不抛错，控制台自然干净）。用户盲批的注入代码（UI 构建脚本）无需逐字核对：任何把页面主线程占死的形态（死循环/alert/同步重排）都进入这条链。
+影响：模型注入一段带死循环/alert 的代码后，agent 当轮永久卡死、停止按钮无效、刷新丢整轮——用户已两次撞上「同意后卡住」。
+建议：复用 `raceTimeout`（`agentEvalInPage.js` 已导出）：`readPageFromTab` 的 `tabs.sendMessage` 与 probe 各包 10-15s 超时，超时返回「页面无响应（可能被之前注入的代码占死），请换页或让用户刷新该页」的人话观察值。约 15 行 + 1 条单测。
+结论：按建议落地 —— `readPageFromTab` 的 `tabs.sendMessage` 套 `raceTimeout`（`TAB_CHANNEL_TIMEOUT_MS = 15s`，params 可传 `timeoutMs` 覆盖供测试），超时返回「页面无响应（N s 无应答）……请停止对本页的读页和执行操作，让用户手动刷新或关闭该页，或用 focus_tab 换一个标签页」；指纹 probe 走同一函数自动获得兜底，超时返回字符串时 probe 拿不到 fingerprint → 不产生假通知（已核对 `index.js` probe 分支）。单测 2 条（桩永不 settle → 人话；健康通道照常）。`npm test` 328 pass / 0 fail，eslint 干净，`npm run build` 成功且产物含超时文案。局限如实记：单测覆盖的是装配层函数，真机端到端由 t33-probe 的第 3 步场景对应（raw 通道仍会挂，修复在调用点包裹），用户真机复验才算最终闭环。
+状态：已清（2026-10-04 完成）
+
+### T-36 — write 工具参数校验失败只回「××不能为空」，不回显实际收到的键，模型连错 6 次无法自纠
+
+类型：改进
+登记日期：2026-10-04
+来源：同上 dump 分析（`94cd04e9` 第二轮：`update_block` 连续 6 次「nodeId 不能为空」错误，中间夹一次 list_canvas 也没能纠对），触发点 `src/agent/tools/canvas.js:44-49` 及 update_block 同形分支
+现象：`add_block`/`update_block` 对缺失参数只返回「blockId 不能为空。」/「nodeId 不能为空。」。模型混淆两个工具的参数名（add 用 `blockId`、update 用 `nodeId`）时，错误信息不含「你实际发了什么」，模型只能瞎猜着重试——dump 里一轮连错 5 次 + 上轮 1 次，每次都烧一步配额与一次（update_block 的）确认弹窗。
+证据：**实测（dump）** —— `94cd04e9` 工具错误事件 7 条：add_block 1 次 + update_block 6 次，错误文案逐条相同；工具参数本身不在持久化事件里（见 T-34），「发了错键名」是据错误形态与模型思考上下文的高置信推断。
+影响：写路径的可用性被模型的小错放大成多轮失败，且每次失败都可能再弹一次确认卡打扰用户。
+建议：参数校验失败时回显收到的顶层键名与值摘要（如「nodeId 不能为空。收到参数: {blockId: "pg8rzgv", data: {...}} —— update_block 用 nodeId，add_block 才用 blockId」）。`canvas.js` 两处分支 + 单测。约 20 分钟。
+结论：按建议落地 —— `canvas.js` 新增 `missingParamError(missing, params, hint)`：回显收到参数的 JSON（**长字符串值截断到 60 字符**，整段错误不会被大 data 撑爆），并按工具点名破 blockId/nodeId 分工（add_block：「update_block 才用 nodeId」；update_block：「add_block 才用 blockId」）。新增 `canvas.test.js` 4 条（双向回显 + 长值截断 + 空参数占位）。`npm test` 338 pass / 0 fail，eslint 干净，`npm run build` 成功且产物含「收到参数」。效果：模型混用参数名时一次自纠，不再连错烧步数与确认弹窗。
+状态：已清（2026-10-04 完成）
+
+### T-37 — `elideStaleObservations` 保留条件过宽：页面快照只要后面跟了任何别的工具就被压缩，模型被迫反复 read_page
+
+类型：bug
+登记日期：2026-10-04
+来源：会话 2026-10-04 用户报「对话反复调用 read_page」并贴出对话，触发点 `src/agent/window.js:101-120`
+现象：`elideStaleObservations` 的保留条件是「属于**最后一组工具消息**」（从尾部往前数连续的 role:'tool'），而不是「是**最后一次页面快照**」。只要模型在 read_page 之后调了任何非页面工具（get_variables、list_canvas、query_elements…），先前的页面快照就被换成 `STALE_MARKER`（「此前的页面快照已被压缩…」）——哪怕页面根本没变、这是当前唯一一份页面知识。模型的思考内容不进 wire（`wire.test.js`「思考内容不进 wire」），所以被压缩后它**真的**失去页面结构：用户贴的对话里，step 1 的思考还复述着「书本列表在 ol.row…」（当时快照还在 wire 里），step 2 的思考就变成「我需要先看看当前页面的结构」→ 重读；重读之后再调任何工具，新快照又被压缩 → 再读。10-03 dump 里 `47de996f` 会话「read → query → read → query → read×3」五连同页读取、今天多轮会话的 2-4 连读，都是这台机器压出来的。
+证据：**代码逐行核对 + 用户对话逐步对账** —— ① `window.js:102-110`：`lastToolGroupStart` 从尾部收集**连续** tool 消息，`:114` 只豁免 `i >= lastToolGroupStart`；② 用户贴的对话时序：read_page(obs A) → get_variables/list_canvas → 此时 obs A 不在最后一组 → 被压缩 → 下一步模型思考原话「我需要先看看当前页面的结构」（它自己的上下文里已经没有页面了）；③ `window.test.js:70-89` 只覆盖了「旧快照后面还有**新页面快照**」的正确剔除场景，「快照后面跟非页面工具」这一致病场景没有任何用例；④ 第二次 read_page 观察值（detail="addresses"，默认档）与第一次参数相同——重读不是换档位，是上下文里真的没了。
+影响：凡模型在 read_page 后调任何一个别的工具，页面知识就从上下文里蒸发，触发反复 read_page——烧步数、烧 token、弹无关的确认门，且观察值越大（content/full 档）压缩损失越重。
+建议：`elideStaleObservations` 改为保留**最后一条页面快照**（从尾往前找第一条 `<untrusted_page_content` 开头的 tool 消息），只压缩比它更旧的页面快照；非页面工具不再参与「新旧」判定。约 10 行；`window.test.js` 现有两条（新快照替换旧快照、非页面工具不剔）语义不变，**新增**一条「快照后面跟 get_variables/list_canvas → 快照必须保留」。代价约 30 分钟。
+结论：按建议落地 —— `window.js` 的判定从「最后一组工具消息」改为「最后一条页面快照」（从尾往前找第一条页面 content 的 tool 消息，`i === lastPageSnapshot` 豁免），头注写明判定依据（有没有更新的页面快照 ≠ 后面有没有别的工具）。测试 3 条：致病场景（快照后跟非页面工具 → 必须保留且不带 elided）、多条快照只留最后一条、原有两条（新快照替换旧快照 / 非页面工具不剔）语义不变仍绿。loop.test.js 的接线用例（两次 read_page，有更新快照）不受影响仍绿。`npm test` 330 pass / 0 fail（原 328），eslint 干净，`npm run build` 成功。模型侧收益：read_page 之后调别的工具不再失忆，反复 read_page 的结构性根因消除；同页重读只剩模型自身冗余一种来源（可用 [agent] 日志的 tool.call 参数摘要区分）。
+状态：已清（2026-10-04 完成）
+
+### T-38 — `test_js` 只接受表达式形式，模型写语句形式必吃 SyntaxError，「时好时坏」
+
+类型：改进
+登记日期：2026-10-04
+来源：会话 2026-10-04 用户报「部分工具运行不稳定，有时候好有时候不好」并贴出对话（test_js 先报 `Unexpected token 'const'`、重试即成功），触发点 `src/agent/agentEvalInPage.js:31`
+现象：`agentEvalInPage` 把代码包成 `(function(){ return (src) })` 求值——**只接受表达式**。模型抓数据时最自然的写法是语句形式（`const items = ...; const list = []; items.forEach(...); list`），以 `const` 开头的代码在表达式包装下必吃 `SyntaxError: Unexpected token 'const'`。重试时模型碰巧包成了 IIFE 才成功——所以「有时候好有时候不好」：不是随机，是**取决于模型这一次有没有记得写 IIFE**，而错误信息 `代码执行出错：Unexpected token 'const'` 完全没提示「该包成 IIFE」，模型要靠运气猜对。update_block 的「nodeId 不能为空」反复失败是同一类病（错误不指路），已在 T-36 登记。
+证据：**代码逐行核对 + 用户对话对账** —— ① `agentEvalInPage.js:31` 包装形态如上；② 用户对话：第一次 test_js 报 `Unexpected token 'const'`（语句形式），第二次成功（返回书本数组，IIFE 形式）；③ `agentEvalInPage.test.js` 现有用例「裸语句是 SyntaxError」把该行为钉成了预期。
+影响：抓数据的常见写法（语句形式）首试必败，浪费一步 + 一张失败卡片；错误文案不可行动，自纠靠运气。
+建议：双形式求值——① 先按现行表达式包装编译；② 若抛 **SyntaxError**（编译期错误，代码尚未执行，回退无双跑副作用风险），改用语句形式 `new Function('return (async function(){\n' + src + '\n})')` 重编译执行（async 包装顺带支持顶层 await；值取 `return` 所得）；③ 语句形式跑完返回 undefined 时，在返回值里附一句指引（「代码已执行完毕但没有返回值——要拿数据请在末尾加 return，或包成 IIFE」）；④ 两种形式都 SyntaxError 才报错，文案说明已尝试两种形式。**严禁**在运行期错误（非 SyntaxError）时回退——那会双跑副作用。同步改 `agentEvalInPage.test.js`：「裸语句 SyntaxError」用例的输入换成两种形式都非法的（如 `const const`），新增语句形式成功 / 顶层 await / undefined 指引三条。代价约 40 分钟。
+结论：按建议落地 —— `agentEvalInPage.js` 编译链改为「表达式优先，SyntaxError 才回退语句形式（async 包装，支持顶层 await）」，双形式都炸才报「表达式与语句两种形式都无法解析」；语句形式跑完无返回值时返回值附「加 return 或包 IIFE」指引（表达式形式的 undefined 保持干净字面量）；运行期错误不回退的红线写进了头注与实现（编译 catch 与执行 catch 分离）。测试：`agentEvalInPage.test.js` 原「裸语句 SyntaxError」用例换成双形式都非法的输入（`const const const`——原输入 `while(true){}` 在语句形式下能编译会真跑出 10s 超时），新增语句成功 / 顶层 await / undefined 指引 / 表达式 undefined 不带指引，共 16 条全绿。`npm test` 338 pass / 0 fail，eslint 干净，`npm run build` 成功且产物含双形式编译链。效果：语句形式首试即成，`Unexpected token 'const'` 一类失败消失。
 状态：已清（2026-10-04 完成）
 
 ### T-02 — 确认门在面板被切走后不 resolve，那一轮 loop 永久挂起
