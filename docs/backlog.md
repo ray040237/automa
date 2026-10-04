@@ -208,17 +208,6 @@
 建议：把「观察值形态」提升成跟着事件走的一等字段（工具定义上声明一次，或在 `tools/index.js` 做一处 `group → observationKind` 映射作为唯一真源），`loop` 挂到 `TOOL_RESULT` 上、`wire` 写进消息 meta 而不混进 content、`elideStaleObservations` 按 meta 判定。`untrusted_*` 标签仍是安全边界，继续按 `untrusted.js` 登记 —— 两件事职责不同，不要合并。必须同批定下旧会话记录的 fallback 规则（按 `name` 判定或一律当 value），不能「跑不出来再说」。
 状态：待审核
 
-### T-45 — `findTool` / `requiresConfirmation` / `collectPromptFacts` 的工具表参数默认回落到全量 TOOLS
-
-类型：改进
-登记日期：2026-10-05
-来源：会话 2026-10-05 架构评审候选 5，触发点 `src/agent/tools/index.js:152`
-现象：三个函数的工具表参数都写成默认参数，回落到模块级全量 `TOOLS`。而生产路径永远传的是按 `enabledGroups` 过滤后的子集 —— ADR-0001 明确要求独立助手页绝不能让模型知道画布工具存在。于是「忘了传参」的失败模式是：系统提示里悄悄多出 `add_block / update_block / list_canvas`，模型在独立助手页调用后拿回一句「没有这个工具」，不抛错、不报警。
-证据：**实测** —— 默认参数确认存在于 `tools/index.js:152 findTool(name, tools = TOOLS)`、`:166 requiresConfirmation(name, tools = TOOLS)`、`index.js:119 collectPromptFacts(tools = TOOLS)`。**今天生产链路无人踩坑**：`index.js:622` 构造 `activeTools`，`:645`、`:646` 与 `loop.js:199` 都显式传入。属留给未来第二个消费者的坑，不是现行 bug。
-影响：一旦新增第二个消费者漏传参数，独立助手页会静默暴露画布工具、违反 ADR-0001，症状是模型「莫名调用不存在的工具」，排查成本高。另注：**`index.test.js:83-85/102-103/308/319` 六处测试依赖这个默认值**（故意不传参），改必填时这 6 处要一并改成显式传全量表，否则直接红。
-建议：把默认参数改成必填（缺参即 throw），或在 `createAgentRuntime` 里一次性绑定。代价约 10 行，**搭 T-43 的车一起做最划算**，不建议单独立项。
-状态：待审核
-
 ### T-46 — `buildWireMessages → elide → budget` 的顺序知识留在调用方
 
 类型：改进
@@ -228,6 +217,16 @@
 证据：**静态** —— `loop.js:406-411` 的注释与嵌套调用确认；三个诊断数字（`estimated` / `threshold` / `dropped`）目前只进 `log('budget')`，测试断言不到。**性能理由已被实测否掉**（该实测为评审文档所载，本轮未复跑）：合成 12 步 × 8K 快照跑完整管线 20 次取平均，单次 0.10–0.13 ms，`estimateTokens` 单次 0.036 ms，且 elide 先出手把估算压到 8.9K、远低于 25.6K 阈值，压根进不了 while 循环。
 影响：真实危害小，纯接口洁癖。
 建议：若将来要动，只动接口 —— 一个 `buildModelView({history, system, contextWindow})` 返回 `{messages, diagnostics}`，顺序收进实现、诊断数字变成可断言的返回值。**本轮不建议排期**，登记备查。
+状态：待审核
+### T-48 — LLM 标题在下一轮落盘时被冲回消息前缀，标题回写的成果撑不过第二轮
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 修 T-35/B1 时读 `src/agent/sessions.js` 的 `save()` 发现，触发点 `src/agent/sessions.js` save 的 `title: session.title || titleFromEvents(session.events)`，与 `src/agent/index.js` 第二轮 `save`（不传 `title` 字段）。
+现象：标题回写（`patchTitle`）把 LLM 标题写进记录之后，**任何一次后续轮次的 `save()` 都会把它冲掉** —— 轮次 save 不带 `title`，`save()` 落盘时走 `titleFromEvents` 兜底取首条用户消息前缀，于是标题变回该前缀。
+证据：**实测（取证脚本）** —— `.scratch/title-wipe.test.mjs`：首轮 save → 带 `title` 的 save → 按第二轮的形状 save（不带 title、events 变 4 条），断言标题仍为 LLM 标题 → **`pass 0 / fail 1`**，`AssertionError：实际 = "帮我抓列表"`。即 LLM 标题只在下一轮落盘前有效。
+影响：`generateTitleAsync` 的可见成果基本被抵消 —— 发第二轮后会话标题（面板下拉 / 标题区）会变回消息前缀；不丢数据（索引与本体一致），但功能等于半失效。
+建议：`save()` 的 title 兜底改为「传入的 title → 已存记录的 title → titleFromEvents」三级，记录的 title 只增不覆盖；仍走已串行化的写链，别引入新的读改写窗口。**未修，等审核批准。**
 状态：待审核
 
 ## 已批准（待排期）
@@ -631,6 +630,18 @@
 影响：T-33 / T-39 / B1 / T-34 / T-35 这一串真机 bug 的老家都在这一层，再改动概率与改动难度同时最高，却零断言守护。
 建议：分三步，**建议顺序 ② → ① → ③**。② `turnRecord.js`（usage 累加 / 剪 THINKING / 单一 save 对象）—— T-34、T-35、B1 三条已登记 bug 全落在同一段 save 代码上，先抽出记录构造可让它们共用一个入口（注意 T-35 与 B1 已要求「闭包捕获 sessionId + 只 patch title」，抽出来正好一次做对）；① `targetState.js`（pin / focusedTabId，三条 advisory 文案变纯函数返回值）；③ `createToolContext()` 固定形状，`tabs.js:78` 随之简化。三步均为「搬出去 + 补断言」，不改落盘格式、不碰任何 ADR。
 状态：已清（2026-10-05）——② turnRecord.js（usage 累加 / 剪 THINKING / 单一 save 对象）已落，npm test 354 pass；① targetState.js（三条 advisory 文案变纯函数返回值 + 首捕 pin/去重追加）已落，npm test 359 pass；③ 不再做整体工厂化：`createAgentRuntime` 里的 toolCtx 仍内联，但它唯一的双形态接口 `ctx.pins` 已钉成只收 getter（tabs.js:78 兼容分支删掉、传错形状直接 error 观察值），tabs.test.js 夹具本就按 getter 传，未做 `createToolContext()` 工厂——当前 getter 惰性语义（deps.editor ref、targetTab 快照）与闭包生命周期强耦合，抽工厂搬的是语义不是代码，收益留证待收益出现再做。
+
+### T-45 — `findTool` / `requiresConfirmation` / `collectPromptFacts` 的工具表参数默认回落到全量 TOOLS
+
+类型：改进
+登记日期：2026-10-05
+来源：会话 2026-10-05 架构评审候选 5，触发点 `src/agent/tools/index.js:152`
+现象：三个函数的工具表参数都写成默认参数，回落到模块级全量 `TOOLS`。而生产路径永远传的是按 `enabledGroups` 过滤后的子集 —— ADR-0001 明确要求独立助手页绝不能让模型知道画布工具存在。于是「忘了传参」的失败模式是：系统提示里悄悄多出 `add_block / update_block / list_canvas`，模型在独立助手页调用后拿回一句「没有这个工具」，不抛错、不报警。
+证据：**实测** —— 默认参数确认存在于 `tools/index.js:152 findTool(name, tools = TOOLS)`、`:166 requiresConfirmation(name, tools = TOOLS)`、`index.js:119 collectPromptFacts(tools = TOOLS)`。**今天生产链路无人踩坑**：`index.js:622` 构造 `activeTools`，`:645`、`:646` 与 `loop.js:199` 都显式传入。属留给未来第二个消费者的坑，不是现行 bug。
+影响：一旦新增第二个消费者漏传参数，独立助手页会静默暴露画布工具、违反 ADR-0001，症状是模型「莫名调用不存在的工具」，排查成本高。另注：**`index.test.js:83-85/102-103/308/319` 六处测试依赖这个默认值**（故意不传参），改必填时这 6 处要一并改成显式传全量表，否则直接红。
+建议：把默认参数改成必填（缺参即 throw），或在 `createAgentRuntime` 里一次性绑定。代价约 10 行，**搭 T-43 的车一起做最划算**，不建议单独立项。
+结论：按建议落地 —— 三处默认参数全部删除：`findTool`/`requiresConfirmation`（tools/index.js）与 `collectPromptFacts`（index.js）现在缺参或非数组直接 throw；6+1 处测试调用点显式传 TOOLS；assembly.test.js 的两个内层 TOOLS 重复导入并入顶层。`npm test` 359 pass / 0 fail，相关文件 eslint 0 error。
+状态：已清（2026-10-05 完成）
 
 ### B 区已清
 

@@ -80,9 +80,9 @@ test('TOOL_CLASSES 只有 read / write —— 新增分类必须显式讨论', (
 });
 
 test('未知工具一律要确认（fail-closed）', () => {
-  assert.equal(requiresConfirmation('read_page'), false);
-  assert.equal(requiresConfirmation('totally_unknown'), true);
-  assert.equal(requiresConfirmation(undefined), true);
+  assert.equal(requiresConfirmation('read_page', TOOLS), false);
+  assert.equal(requiresConfirmation('totally_unknown', TOOLS), true);
+  assert.equal(requiresConfirmation(undefined, TOOLS), true);
 });
 
 test('转 wire 定义时只暴露 OpenAI 认识的字段', () => {
@@ -99,8 +99,8 @@ test('转 wire 定义时只暴露 OpenAI 认识的字段', () => {
 });
 
 test('findTool 找不到返回 null 而不是抛错', () => {
-  assert.equal(findTool('read_page'), readPage);
-  assert.equal(findTool('nope'), null);
+  assert.equal(findTool('read_page', TOOLS), readPage);
+  assert.equal(findTool('nope', TOOLS), null);
 });
 
 /* ---------------- execute 行为 ---------------- */
@@ -305,7 +305,7 @@ test('每个能改动页面的工具都必须自己声明成 write', () => {
     assert.ok(t, name + ' 应存在');
     assert.equal(t.class, 'write', name + ' 必须是 write');
     assert.equal(
-      requiresConfirmation(t.name),
+      requiresConfirmation(t.name, TOOLS),
       true,
       name + ' 必须需要用户确认'
     );
@@ -316,5 +316,5 @@ test('query_elements 不被当成写操作：它只查询，不改页面', () =>
   const t = TOOLS.find((x) => x.name === 'query_elements');
 
   assert.equal(t.class, 'read');
-  assert.equal(requiresConfirmation(t.name), false);
+  assert.equal(requiresConfirmation(t.name, TOOLS), false);
 });

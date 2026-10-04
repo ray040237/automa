@@ -127,10 +127,16 @@ export const PHANTOM_AUTOMA_FUNCS = ['automaExecWorkflow'];
  * 组装喂给提示词的领域知识表。全部动态取自项目常量，不硬编码拷贝 ——
  * 块增删或改名时这里自动跟上。
  *
- * @param {Array<Object>=} tools
+ * @param {Array<Object>} tools 必填（T-45）——旧的默认回落全量 TOOLS 会让
+ *   「忘了传参」表现为系统提示里悄悄多出画布工具（违反 ADR-0001），现在缺参直接抛。
  * @returns {Object}
  */
-export function collectPromptFacts(tools = TOOLS) {
+export function collectPromptFacts(tools) {
+  if (!Array.isArray(tools)) {
+    throw new Error(
+      'collectPromptFacts: tools 参数必填（传按 enabledGroups 过滤后的子集）'
+    );
+  }
   // 真正的计算在 facts.js：它没有浏览器依赖，所以能被测试直接跑到。
   // 这里只负责把浏览器侧的数据递进去 —— 别再内联一份，否则改一处会漏一处。
   return buildFacts({

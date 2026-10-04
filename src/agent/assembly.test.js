@@ -8,6 +8,7 @@ installGlobals();
 // shared.js 用了构建期全局，必须在动态 import 之前注入。
 // 真实 tasks 是这轮要验的对象，所以这里加载的是真的，不是桩。
 await import('../utils/shared');
+const { TOOLS } = await import('./tools');
 
 const {
   collectPromptFacts,
@@ -44,21 +45,21 @@ function deps(over = {}) {
 describe('collectPromptFacts —— 装配层这一段的回归', () => {
   test('用真实 tasks 不抛，且块数是对的', () => {
     // 用户报的崩溃就在这里：tasks 是对象，裸 .reduce 直接 TypeError。
-    const f = collectPromptFacts();
+    const f = collectPromptFacts(TOOLS);
 
     assert.equal(typeof f.blockCount, 'number');
     assert.ok(f.blockCount > 50, `块数应远大于 0，实际 ${f.blockCount}`);
   });
 
   test('剔掉运行时没注入的 automaExecWorkflow', () => {
-    const f = collectPromptFacts();
+    const f = collectPromptFacts(TOOLS);
 
     assert.ok(!f.automaFuncs.includes('automaExecWorkflow'));
     assert.ok(f.automaFuncs.length > 0);
   });
 
   test('工具表完整带上来了', () => {
-    const names = collectPromptFacts().tools.map((t) => t.name);
+    const names = collectPromptFacts(TOOLS).tools.map((t) => t.name);
 
     assert.ok(names.includes('read_page'));
     assert.ok(names.includes('add_block'));
@@ -441,7 +442,6 @@ describe('lookupBlockSchema —— 块目录查询（T-32）', () => {
   });
 
   test('工具层防御：目录为空 = 接线断了，必须说破而不是「一个都没有」', async () => {
-    const { TOOLS } = await import('./tools');
     const tool = TOOLS.find((t) => t.name === 'get_block_schema');
 
     assert.ok(tool, 'TOOLS 里必须有 get_block_schema');
@@ -467,7 +467,6 @@ describe('lookupBlockSchema —— 块目录查询（T-32）', () => {
   });
 
   test('工具走真实现端到端：javascript-code 返回字段清单', async () => {
-    const { TOOLS } = await import('./tools');
     const tool = TOOLS.find((t) => t.name === 'get_block_schema');
 
     const out = await tool.execute(

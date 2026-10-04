@@ -149,7 +149,12 @@ export function toWireTools(tools) {
  * @param {Array<Object>} tools
  * @returns {Object|null}
  */
-export function findTool(name, tools = TOOLS) {
+export function findTool(name, tools) {
+  if (!Array.isArray(tools)) {
+    throw new Error(
+      'findTool: tools 参数必填（T-45）——默认回落全量 TOOLS 会泄露画布工具'
+    );
+  }
   return tools.find((t) => t.name === name) || null;
 }
 
@@ -163,7 +168,10 @@ export function findTool(name, tools = TOOLS) {
  * @param {Array<Object>} tools
  * @returns {boolean}
  */
-export function requiresConfirmation(name, tools = TOOLS) {
+export function requiresConfirmation(name, tools) {
+  if (!Array.isArray(tools)) {
+    throw new Error('requiresConfirmation: tools 参数必填（T-45）');
+  }
   const tool = findTool(name, tools);
   return !tool || tool.class !== 'read';
 }
