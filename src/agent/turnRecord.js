@@ -45,6 +45,64 @@ export function accumulateUsage(usageBefore, resultUsage) {
 }
 
 /**
+ * 转中检查点落盘（T-34）。
+ *
+ * 背景：会话原本只在 send 收尾落一次盘——转中刷新/卡死即丢整轮对话，
+ * 「卡住」类问题事后拿不到现场。解法：每步事件入史后调 schedule()，
+ * debounce 合并成至多每 delayMs 一次的 save；进程崩前还能从环形日志导出
+ * 最后一份在途快照。
+ *
+ * 不变量：
+ *  - 转中 save 失败只 logWarn，绝不打断轮（catch 吞 + 如实打点）；
+ *  - cancel() 丢弃未 flush 的调度——收尾 save 与它竞态时，晚到的旧快照
+ *    不能覆盖刚写完的最终记录；
+ *  - timer 用 unref，进程不被它吊活。
+ *
+ * @param {{buildRecord: () => Object, save: (rec: Object) => Promise<*>,
+ *   delayMs?: number, logWarn?: (err: *) => void}} options
+ */
+export function createCheckpointSaver({
+  buildRecord,
+  save,
+  delayMs = 1000,
+  logWarn,
+} = {}) {
+  let timer = null;
+  let pending = false;
+
+  const flush = async () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (!pending) return;
+    pending = false;
+    try {
+      await save(buildRecord());
+    } catch (err) {
+      if (logWarn) logWarn(err);
+    }
+  };
+
+  const schedule = () => {
+    pending = true;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      flush();
+    }, delayMs);
+    if (timer && typeof timer.unref === 'function') timer.unref();
+  };
+
+  const cancel = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    pending = false;
+  };
+
+  return { schedule, flush, cancel };
+}
+
+/**
  * 构造单一份会话 save 对象。键集合在这里钉死：
  * id / workflowId / status / createdAt / lastAccessedAt / events / pins /
  * focusedTabId / usage。title 不在这里给——新会话由 sessionStore.save 用

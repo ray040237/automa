@@ -36,6 +36,7 @@ import { createSessionId, createSessionStore } from './sessions';
 import {
   accumulateUsage,
   buildTurnRecord,
+  createCheckpointSaver,
   pruneEphemeralEvents,
 } from './turnRecord';
 import {
@@ -608,6 +609,12 @@ export function createAgentRuntime(deps) {
       usageBefore = (rec && rec.usage) || usageBefore;
     }
 
+    // T-34：检查点落盘要求会话有 id。首轮在这给它（原来第一次 send 成功后才
+    // 创建）——中途被卡死/刷新的轮次就能留下在途快照供事后诊断。
+    if (sessionStore && !currentSessionId) {
+      currentSessionId = createSessionId();
+    }
+
     // pin 的首轮自动捕获（id<0 是浏览器会话恢复/分离页的假 tab，不能当 pin）
     const initial = initialPinsFromTab(pins, targetTab, originOf);
     if (initial) {
@@ -658,6 +665,39 @@ export function createAgentRuntime(deps) {
 
     activeAgent = agent;
 
+    // T-34：转中检查点。每步事件入史后 debounce 一次落盘； usage 只记到上一轮
+    // （本轮在途 usage 要等收尾才有），最终收尾 save 会整份覆盖它——形状一致。
+    const checkpoints = createCheckpointSaver({
+      buildRecord: () =>
+        buildTurnRecord({
+          id: currentSessionId,
+          workflowId: getWorkflowId(),
+          createdAt,
+          events: pruneEphemeralEvents(agent.getHistory()),
+          pins,
+          focusedTabId,
+          usage: usageBefore,
+        }),
+      save: (rec) =>
+        sessionStore ? sessionStore.save(rec) : Promise.resolve(null),
+      logWarn: (err) =>
+        agentLog.warn('checkpoint.save.fail', {
+          message: err && err.message ? err.message : String(err),
+        }),
+    });
+
+    const onEventWithCheckpoint = (ev) => {
+      if (onEvent) onEvent(ev);
+      if (
+        ev &&
+        (ev.kind === AGENT_EVENTS.TOOL_RESULT ||
+          ev.kind === AGENT_EVENTS.USER_MESSAGE ||
+          ev.kind === AGENT_EVENTS.DONE)
+      ) {
+        checkpoints.schedule();
+      }
+    };
+
     try {
       agentLog('turn.start', {
         sessionId: currentSessionId,
@@ -667,9 +707,12 @@ export function createAgentRuntime(deps) {
         userText,
         targetTab,
         workflowContext,
-        onEvent,
+        onEvent: onEventWithCheckpoint,
         initialHistory,
       });
+
+      // 先取消在途检查点，再写最终记录——迟到的旧快照不能覆盖最终态。
+      checkpoints.cancel();
 
       // 收尾后把完整历史写回存储（getHistory 是唯一权威来源）。
       // 形状只在 turnRecord.js 构造一次——转中落盘（T-34）也从它出。
@@ -678,7 +721,6 @@ export function createAgentRuntime(deps) {
 
       if (sessionStore) {
         const isFirstTurn = !createdAt;
-        if (!currentSessionId) currentSessionId = createSessionId();
         await sessionStore.save(
           buildTurnRecord({
             id: currentSessionId,
@@ -733,6 +775,7 @@ export function createAgentRuntime(deps) {
 
       return { ...result, sessionId: currentSessionId, usage };
     } finally {
+      checkpoints.cancel();
       activeAgent = null;
       currentOnEvent = null;
       [...tabLocks.entries()].forEach(([tabId, owner]) => {

@@ -42,6 +42,29 @@ function deps(over = {}) {
   };
 }
 
+describe('T-34 转中检查点落盘', () => {
+  test('send 有在途检查点，且收尾前取消在途调度', () => {
+    const src = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+
+    assert.ok(
+      src.includes('createCheckpointSaver('),
+      'index.js 必须接 createCheckpointSaver（turnRecord.js）'
+    );
+    assert.ok(
+      src.includes('checkpoints.schedule();'),
+      '事件入史后要调度检查点'
+    );
+
+    const cancelAt = src.indexOf('checkpoints.cancel();');
+    const finalSaveAt = src.indexOf('await sessionStore.save(');
+    assert.ok(cancelAt > 0, '收尾前必须 cancel 在途调度');
+    assert.ok(
+      finalSaveAt > cancelAt,
+      '迟到的旧检查点不能覆盖最终记录——cancel 必须先于最终 save'
+    );
+  });
+});
+
 describe('collectPromptFacts —— 装配层这一段的回归', () => {
   test('用真实 tasks 不抛，且块数是对的', () => {
     // 用户报的崩溃就在这里：tasks 是对象，裸 .reduce 直接 TypeError。

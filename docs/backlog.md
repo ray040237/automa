@@ -175,17 +175,6 @@
 建议：`npx eslint --fix src/lib/dayjs.js`，约 1 行改动、1 分钟即可转绿。**另 10 个 warning（`no-console` 等，散布在 `[id].vue`、`App.vue` 等处）建议单独处理**，别和这条混在一起，否则改动面失控。
 状态：待审核
 
-### T-34 — 会话只在收尾落盘，转中卡死/刷新即整轮丢失，卡住的轮次无法事后诊断
-
-类型：bug
-登记日期：2026-10-04
-来源：同上 dump 分析，触发点 `src/agent/index.js:546-559`（save 仅在 send 收尾）、`sessionStore.save` 全仓仅两处调用（`:549`/`:567`）
-现象：`sessionStore.save` 只在 `send` 正常返回后执行（含 abort 收尾）。转中（步骤之间）没有任何检查点——用户在转中刷新页面、或转中永久挂起后被迫刷新，**该轮所有事件（含工具参数与观察值）全部丢失**。dump 实证：三个会话只有 turn-start 的 3 个事件（start/user-message/target-tab）后再无下文；用户报「同意后卡住」的那一轮在 dump 里完全缺席——不是没发生，是没落盘。这也让「卡住」类问题事后无法诊断：现象发生了，数据没了。
-证据：**实测（dump 分析）** —— `agent_session_1d1c9a1e` 与 `agent_session_null`（12:50）各只有 3 个事件；`594b95db`（12:07）在 test_js 报错 + read_page 后戛然而止；对照 `94cd04e9`（12:52）428 个事件完整（两轮都走完了收尾 save）。save 调用点 grep 全仓仅 `index.js:549/567` 两处，均在 send 返回后。
-影响：① 用户损失：卡死/误刷新即丢整轮对话与工具结果；② 诊断损失：所有「卡住」类问题都拿不到现场，只能靠用户肉眼转述。
-建议：`record()`（loop 的入史口）改为节流落盘——每步结束（tool-result 入史后）调一次 `saveSession`，或至少 debounce 1s；转中 save 失败不影响轮（catch 吞掉但 console.warn）。注意与 B1（标题回写覆盖事件）一起修：B1 的「整记录覆盖」风险在增加落盘频率后会更容易触发，两处应同批处理（patch 单字段或带事件数校验）。约 1-2 小时。
-状态：待审核
-
 ### T-47 — agent-architecture.html 的代码快照与行号仍停在 T-29/T-30 之前，与页脚「行号均为实测引用」的承诺不符
 
 类型：bug（文档与代码不一致）
@@ -641,6 +630,18 @@
 影响：一旦新增第二个消费者漏传参数，独立助手页会静默暴露画布工具、违反 ADR-0001，症状是模型「莫名调用不存在的工具」，排查成本高。另注：**`index.test.js:83-85/102-103/308/319` 六处测试依赖这个默认值**（故意不传参），改必填时这 6 处要一并改成显式传全量表，否则直接红。
 建议：把默认参数改成必填（缺参即 throw），或在 `createAgentRuntime` 里一次性绑定。代价约 10 行，**搭 T-43 的车一起做最划算**，不建议单独立项。
 结论：按建议落地 —— 三处默认参数全部删除：`findTool`/`requiresConfirmation`（tools/index.js）与 `collectPromptFacts`（index.js）现在缺参或非数组直接 throw；6+1 处测试调用点显式传 TOOLS；assembly.test.js 的两个内层 TOOLS 重复导入并入顶层。`npm test` 359 pass / 0 fail，相关文件 eslint 0 error。
+状态：已清（2026-10-05 完成）
+
+### T-34 — 会话只在收尾落盘，转中卡死/刷新即整轮丢失，卡住的轮次无法事后诊断
+
+类型：bug
+登记日期：2026-10-04
+来源：同上 dump 分析，触发点 `src/agent/index.js:546-559`（save 仅在 send 收尾）、`sessionStore.save` 全仓仅两处调用（`:549`/`:567`）
+现象：`sessionStore.save` 只在 `send` 正常返回后执行（含 abort 收尾）。转中（步骤之间）没有任何检查点——用户在转中刷新页面、或转中永久挂起后被迫刷新，**该轮所有事件（含工具参数与观察值）全部丢失**。dump 实证：三个会话只有 turn-start 的 3 个事件（start/user-message/target-tab）后再无下文；用户报「同意后卡住」的那一轮在 dump 里完全缺席——不是没发生，是没落盘。这也让「卡住」类问题事后无法诊断：现象发生了，数据没了。
+证据：**实测（dump 分析）** —— `agent_session_1d1c9a1e` 与 `agent_session_null`（12:50）各只有 3 个事件；`594b95db`（12:07）在 test_js 报错 + read_page 后戛然而止；对照 `94cd04e9`（12:52）428 个事件完整（两轮都走完了收尾 save）。save 调用点 grep 全仓仅 `index.js:549/567` 两处，均在 send 返回后。
+影响：① 用户损失：卡死/误刷新即丢整轮对话与工具结果；② 诊断损失：所有「卡住」类问题都拿不到现场，只能靠用户肉眼转述。
+建议：`record()`（loop 的入史口）改为节流落盘——每步结束（tool-result 入史后）调一次 `saveSession`，或至少 debounce 1s；转中 save 失败不影响轮（catch 吞掉但 console.warn）。注意与 B1（标题回写覆盖事件）一起修：B1 的「整记录覆盖」风险在增加落盘频率后会更容易触发，两处应同批处理（patch 单字段或带事件数校验）。约 1-2 小时。
+结论：按建议落地 —— index.js 的 send 接上 createCheckpointSaver（turnRecord.js）：USER_MESSAGE / TOOL_RESULT / DONE 入史后 debounce(1s) 落一次；转中 save 失败走 agentLog.warn(checkpoint.save.fail) 不打断轮；收尾前 checkpoints.cancel() 再写最终记录（迟到的旧快照不能覆盖最终态），finally 兜底再取消一次。首轮 send 起 currentSessionId 即创建——卡死轮留下的在途 events 现在能落盘供诊断（usage 字段在途记上一轮，收尾整份覆盖，形状一致）。turnRecord.test.js 新增 3 条（debounce 合并 / flush / cancel / save 失败只 warn），assembly.test.js 新增源码接线守卫（cancel 必须先于最终 save）。`npm test` 363 pass / 0 fail，相关文件 eslint 0 error。
 状态：已清（2026-10-05 完成）
 
 ### B 区已清

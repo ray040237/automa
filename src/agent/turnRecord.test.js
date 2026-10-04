@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   accumulateUsage,
   buildTurnRecord,
+  createCheckpointSaver,
   pruneEphemeralEvents,
 } from './turnRecord';
 import { AGENT_EVENTS } from './events';
@@ -51,6 +52,66 @@ test('accumulateUsage：正常累加，usage 缺席按 0 计', () => {
     input: 1,
     output: 2,
   });
+});
+
+test('createCheckpointSaver：schedule 合并多次调用为一次 save', async () => {
+  let saves = 0;
+  const saver = createCheckpointSaver({
+    buildRecord: () => ({ events: [] }),
+    save: async () => {
+      saves += 1;
+    },
+    delayMs: 20,
+  });
+
+  saver.schedule();
+  saver.schedule();
+  saver.schedule();
+  await new Promise((r) => {
+    setTimeout(r, 80);
+  });
+  assert.equal(saves, 1, 'debounce 应合并成一次');
+});
+
+test('createCheckpointSaver：flush 立即落一次，cancel 丢弃未 flush 的', async () => {
+  let saves = 0;
+  const saver = createCheckpointSaver({
+    buildRecord: () => ({}),
+    save: async () => {
+      saves += 1;
+    },
+    delayMs: 50,
+  });
+
+  saver.schedule();
+  await saver.flush();
+  assert.equal(saves, 1);
+
+  saver.schedule();
+  saver.cancel();
+  await new Promise((r) => {
+    setTimeout(r, 120);
+  });
+  assert.equal(saves, 1, 'cancel 后不应再有在途 save');
+});
+
+test('createCheckpointSaver：save 失败只 logWarn 不抛', async () => {
+  const warns = [];
+  const saver = createCheckpointSaver({
+    buildRecord: () => ({}),
+    save: async () => {
+      throw new Error('磁盘满');
+    },
+    delayMs: 10,
+    logWarn: (err) => warns.push(err),
+  });
+
+  saver.schedule();
+  await new Promise((r) => {
+    setTimeout(r, 60);
+  });
+  assert.equal(warns.length, 1);
+  assert.equal(warns[0].message, '磁盘满');
 });
 
 test('buildTurnRecord：键集合单一定义，缺省值正确', () => {
