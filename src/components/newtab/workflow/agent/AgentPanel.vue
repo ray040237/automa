@@ -135,7 +135,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { sessionOptionLabel } from '@/agent/sessions';
 import AgentTranscript from './AgentTranscript.vue';
@@ -174,6 +174,23 @@ const pickerVisible = ref(false);
 // 只有存在 apiKey 才算配好了。没配就发消息，用户只会收到一句「请先配置」，
 // 看起来像功能坏了 —— 所以入口要显眼，发送按钮直接禁用。
 const configured = computed(() => Boolean(props.config && props.config.apiKey));
+
+/**
+ * 面板被卸载前，先把挂着的确认门拒掉（backlog T-02）。
+ *
+ * 确认卡就渲染在这个组件里，而编辑器侧栏有三处 v-if 会把面板连同卡片一起
+ * 卸载：切走助手面板（`sidebarPanel` 换成 details）、打开某个块的编辑卡
+ * （`editState.editing` 优先级更高）、收起整个侧栏（`showSidebar`）。loop
+ * 那侧正 await 着确认门的 promise —— 宿主 useAgentHost 的 onBeforeUnmount
+ * 只在整个页面卸载时才触发，兜不住这种「面板被藏起来」：不在这儿发否，
+ * 那一轮永不收尾、不落盘，用户看到的就是「助手卡死了」。
+ *
+ * 发出去的 false 走宿主的 answerConfirm（内部判空，重复发也安全），
+ * loop 拿到「用户拒绝」的 error 观察值照常收尾。
+ */
+onBeforeUnmount(() => {
+  if (props.pendingConfirm) emit('confirm-answer', false);
+});
 
 // 设置放在项目的设置页里，不在面板上就地改：
 // 一个 API Key 是全局的，不属于某一个工作流。

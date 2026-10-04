@@ -108,6 +108,10 @@ export async function agentEvalInPage(src) {
  * 底下的 promise 超时后仍可能 reject，这里挂一个空 catch 免得炸
  * unhandledrejection。
  *
+ * 谁先 settle 都要把定时器撤掉：`Promise.race` 不会替你取消它。漏掉的
+ * 代价是实测过的 —— 一个 20s 定时器让 node 进程多活 20009ms（T-39 的
+ * `toBackground` 每次工具调用都要过这里，页面/SW 里同理白攒定时器）。
+ *
  * @template T
  * @param {Promise<T>} promise
  * @param {number} ms
@@ -115,11 +119,12 @@ export async function agentEvalInPage(src) {
  * @returns {Promise<T>}
  */
 export function raceTimeout(promise, ms, timeoutValue) {
-  const timer = new Promise((resolve) => {
-    setTimeout(() => resolve(timeoutValue), ms);
+  let timer = null;
+  const fallback = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(timeoutValue), ms);
   });
 
   promise.catch(() => {});
 
-  return Promise.race([promise, timer]);
+  return Promise.race([promise, fallback]).finally(() => clearTimeout(timer));
 }

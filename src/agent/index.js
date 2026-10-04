@@ -169,6 +169,18 @@ export async function lookupBlockSchema(name) {
 }
 
 /**
+ * runtime 通道（background）的发送侧硬超时。
+ *
+ * background 自己有 15s 的页内执行兜底（T-30），但那层在 background **内部**：
+ * 若 SW 被回收 / 消息回程丢了，发送方的 promise 永不 settle，没有任何一层
+ * 能救 —— 用户真机日志里 `channel.send` 之后既无 `channel.reply` 也无
+ * `channel.fail`，整轮 agent 就挂死在那里（T-39；本机 t40-probe 三层全通，
+ * 差异只剩真机的回程）。这里是最后一层，必须大于 background 的 15s，
+ * 正常回程一定先到。
+ */
+export const BACKGROUND_CHANNEL_TIMEOUT_MS = 20000;
+
+/**
  * 工具 → background 的唯一通道。
  *
  * 工具侧约定发 `{type, ...params}`，background 侧的 MessageListener 只认
@@ -176,17 +188,55 @@ export async function lookupBlockSchema(name) {
  * 导出是为了让测试能拿真实 MessageListener 验路由（backlog T-28：协议对不上时
  * 报的是一句指不到真因的 Unhandled Background Error，只能靠契约测试钉住）。
  *
+ * 整个 round trip 套了硬超时（T-39）：超时不 reject 而是回 `{ok:false, error}`
+ * 的观察值形状，工具照常把它喂回模型 —— 通道慢/断不再等于「这轮卡死」。
+ * 真正的 send 失败（如端口不存在）仍照旧 reject 走 channel.fail。
+ *
  * @param {{type: string} & Object} msg
+ * @param {{timeoutMs?: number}=} options timeoutMs 供测试缩短（默认 20s）
  * @returns {Promise<Object>}
  */
-export function toBackground({ type, ...payload }) {
+export function toBackground(msg, options = {}) {
+  const { type, ...payload } = msg || {};
+  const timeoutMs = options.timeoutMs || BACKGROUND_CHANNEL_TIMEOUT_MS;
+  const startedAt = Date.now();
+
   agentLog('channel.send', { type });
-  return backgroundSend(type, payload, 'background').then(
+
+  const roundTrip = raceTimeout(
+    backgroundSend(type, payload, 'background'),
+    timeoutMs,
+    {
+      ok: false,
+      __timeout: true,
+      // 模型需要知道「到底执没执行」——如实说不确定，并给下一步动作，
+      // 否则它会原地重复同一调用（T-33 的教训）。
+      error:
+        `background 通道无响应（${Math.round(
+          timeoutMs / 1000
+        )}s 无应答）：这一步是否已执行无法确认` +
+        '（background 可能被浏览器回收了）。请先用 read_page 看一眼当前' +
+        '页面状态再决定要不要重试，不要直接重复同一调用。',
+    }
+  );
+
+  return roundTrip.then(
     (res) => {
+      const ms = Date.now() - startedAt;
+
+      if (res && res.__timeout) {
+        agentLog.error('channel.timeout', { type, ms, timeoutMs });
+
+        const rest = { ...res };
+        delete rest.__timeout; // 内部标记不进观察值
+        return rest;
+      }
+
       agentLog('channel.reply', {
         type,
         ok: Boolean(res && res.ok),
         error: res && res.error,
+        ms,
       });
       return res;
     },
@@ -194,6 +244,7 @@ export function toBackground({ type, ...payload }) {
       agentLog.error('channel.fail', {
         type,
         message: err && err.message ? err.message : String(err),
+        ms: Date.now() - startedAt,
       });
       throw err;
     }

@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   buildConfirmation,
@@ -9,6 +12,8 @@ import {
   normalizeAnswer,
   shouldSkipConfirmation,
 } from './confirm';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /* ---------------- 展示载荷 ---------------- */
 
@@ -196,4 +201,34 @@ test('normalizeAnswer：对象与布尔两种载荷都能吃', () => {
     approved: false,
     remember: false,
   });
+});
+
+/* ---------------- 接线守卫 ---------------- */
+
+/**
+ * T-02：确认卡渲染在 AgentPanel 里，编辑器侧栏的三处 v-if（切走助手面板 /
+ * 打开某个块的编辑卡 / 收起整个侧栏）会把面板连同卡片一起卸载，而宿主
+ * useAgentHost 的 onBeforeUnmount 只兜「整页卸载」—— 面板被藏起来时没人
+ * resolve，loop 永远 await，表现与「助手卡死」无异。
+ *
+ * 本仓没有组件测试基建（T-26），所以退而钉住源码接线：卸载钩子在、钩子里
+ * 判了挂起的确认门、发的是否。少任何一环这条 bug 就回来了。
+ */
+test('T-02 接线守卫：AgentPanel 卸载前必须拒掉挂起的确认门', () => {
+  const src = readFileSync(
+    join(ROOT, 'src/components/newtab/workflow/agent/AgentPanel.vue'),
+    'utf8'
+  );
+
+  // 用调用形状定位，避免命中上面注释里提到的同名宿主钩子
+  const hookAt = src.indexOf('onBeforeUnmount(() => {');
+  assert.ok(hookAt > 0, 'AgentPanel 必须有 onBeforeUnmount 钩子');
+
+  const block = src.slice(hookAt, hookAt + 300);
+  assert.match(block, /props\.pendingConfirm/, '钩子必须先判有没有挂起的确认');
+  assert.match(
+    block,
+    /emit\('confirm-answer', false\)/,
+    '必须发否 —— 宿主的 answerConfirm 会 resolve，loop 才能收尾'
+  );
 });

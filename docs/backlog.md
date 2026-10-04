@@ -32,17 +32,6 @@
 建议：① `countBlocks` 改为数块本身（`Object.keys(catalog).length`），代价约 10 分钟；② 必须同步改断言 —— `facts.test.js:33`（`{a: null, b: {name:'x'}} → 1`）与 `:63/:81` 的 fixture 期望是按旧公式写的，新语义下应为 2，漏改会直接红。改完把 `:113-118` 换成 `=== 61` 的语义断言。
 状态：待审核
 
-### T-02 — 确认门在面板被切走后不 resolve，那一轮 loop 永久挂起
-
-类型：bug
-登记日期：2026-10-04
-来源：会话 2026-10-04 架构评审，触发点 `src/newtab/pages/workflows/[id].vue:1166-1185`、卡片位置 `[id].vue:26-53`
-现象：write 工具等待用户确认时，`agent-confirm-card` 挂在 `v-else-if="state.sidebarPanel === 'agent'"` 分支内；`toggleAgentPanel()` 把 `sidebarPanel` 切到 `details`（无 busy 守卫，也不调 `pendingConfirm.resolve`），或点某个块弹出 `workflow-edit-block`（`v-if="editState.editing"` 优先级更高）时，确认卡被隐藏，但 promise 仍挂着 —— loop 侧永远 await。
-证据：**代码位置，推断，未实测复现** —— `agentHost.js:65-75`（promise 只存 `pendingConfirm`）、`:86-92`（仅切会话时拒绝）、`:231-235`（仅 `onBeforeUnmount` 拒绝，而宿主页没有卸载）。`CONTEXT.md:80` 的不变量只写了「切会话/卸载前先 resolve」，没覆盖「面板被藏起来」。
-影响：用户在等待确认时切走侧栏或去改别的块 → agent 保持 busy、那一轮不收尾、会话不落盘；用户切回后卡片还在，点一次才恢复。最坏表现像「助手卡死了」。
-建议：① `toggleAgentPanel` 与打开块编辑时走 `guardAgentSwitch()` 同款拒绝，代价极小；② 或把确认卡提到宿主根节点（不随 `sidebarPanel` 卸载），代价是卡片要自己处理遮挡；③ 或 busy + 挂确认时禁止切走（体验差，不推荐）。
-状态：待审核
-
 ### T-03 — handlerAiWorkflow 未 await setVariable，rethrow 还丢掉 error.data/ctxData
 
 类型：bug
@@ -292,17 +281,6 @@
 结论：按建议落地 —— `agentEvalInPage.js` 编译链改为「表达式优先，SyntaxError 才回退语句形式（async 包装，支持顶层 await）」，双形式都炸才报「表达式与语句两种形式都无法解析」；语句形式跑完无返回值时返回值附「加 return 或包 IIFE」指引（表达式形式的 undefined 保持干净字面量）；运行期错误不回退的红线写进了头注与实现（编译 catch 与执行 catch 分离）。测试：`agentEvalInPage.test.js` 原「裸语句 SyntaxError」用例换成双形式都非法的输入（`const const const`——原输入 `while(true){}` 在语句形式下能编译会真跑出 10s 超时），新增语句成功 / 顶层 await / undefined 指引 / 表达式 undefined 不带指引，共 16 条全绿。`npm test` 338 pass / 0 fail，eslint 干净，`npm run build` 成功且产物含双形式编译链。效果：语句形式首试即成，`Unexpected token 'const'` 一类失败消失。
 状态：已清（2026-10-04 完成）
 
-### T-39 — runtime 通道发送侧无兜底：background 响应丢失时 agent 轮次永久挂起（真机复现）
-
-类型：bug
-登记日期：2026-10-05
-来源：会话 2026-10-05 用户贴出 `[agent]` 日志复现「test_js 同意后卡住」，触发点 `src/agent/index.js` 的 `toBackground`
-现象：用户日志显示 `tool.call test_js → confirm.ask → confirm.answer(approved) → channel.send(agent:run-js)` 之后**既无 channel.reply 也无 channel.fail**——`browser.runtime.sendMessage` 的 promise 永不 settle。关键矛盾：该次注入的代码无死循环（query 20 本书 + JSON.stringify，毫秒级），background 侧 T-30 的 15s 兜底理应在 15s 给出响应；响应未到达说明 **background SW → 发送方的回程在用户真实 Chrome 里丢了**（SW 被回收 / 消息通道层面的浏览器行为），T-30 的兜底在 background 内部，救不了回程。
-证据：**实测（探针 `.agent-test/t40-probe.mjs`，真 Chromium + 当前 build）** —— 用用户原始代码三层全部通过：热状态 140ms、连发 24ms、SW 空闲 35s 后冷启动 11ms，返回正确书本 JSON。即代码与本机传输路径均健康；差异只剩用户真实 Chrome（版本/环境）与被截断的代码（`+57` 字符未见，若含 alert() 会占死页面，但即便如此 15s 响应也应送达——t33-probe 已实测占死页时 15s 超时正常返回）。用户侧 `channel.send` 无 reply 无 fail 与「SW/传输丢响应」唯一吻合。
-影响：与 T-33 同型的永久卡死，但发生在 runtime 通道——T-30/T-33 的兜底都盖不到回程丢失这一层。用户已再次撞上。
-建议：发送侧兜底——`toBackground` 整个 round trip 套 `raceTimeout`（20s，大于 background 侧 15s，超时返回 `{ok:false, error:'background 通道无响应…'}` 人话观察值）；`channel.reply/fail` 日志附耗时 ms 便于定位。无论 SW/传输发生什么，agent 轮次都不会再挂死。约 15 行 + 1 条单测。
-状态：待审核
-
 ## 已批准（待排期）
 
 （暂无）
@@ -526,6 +504,35 @@
 **原建议中「改 `loop.js` 传显式载荷」未采纳** —— 重新读过 `loop.js:441-465`，`call.args` 在 `executeCall` 之前已赋值，`requestConfirmation({ ...call })` 展开时 `args` 已在载荷里，缺的只是宿主侧的读取；改 loop 反而多一处无关改动。改由 `loop.test.js` 的「写类工具必须经过确认」补一条 `assert.deepEqual(asked[0].args, …)`，把载荷形状钉死在最靠近产出处。
 实测：`npm test` 296 pass / 0 fail（原 282，新增 14 条全在 `confirm.test.js`）、`npm run check:i18n` 通过（zh-TW 对新增 12 key 缺译，advisory，与该区其余 agent key 同状态）、`npm run lint` 存量 1 error / 10 warning、`npm run build` exit=0。**未在真机复现原 bug**（需装扩展 + 起模型）—— 修复正确性由新增回归测试与代码路径证明，原「空框」现象本身仍是推断。
 状态：已清（2026-10-04 完成）
+
+### T-02 — 确认门在面板被切走后不 resolve，那一轮 loop 永久挂起
+
+类型：bug
+登记日期：2026-10-04
+来源：会话 2026-10-04 架构评审，触发点 `src/newtab/pages/workflows/[id].vue:1166-1185`、卡片位置 `[id].vue:26-53`
+现象：write 工具等待用户确认时，`agent-confirm-card` 挂在 `v-else-if="state.sidebarPanel === 'agent'"` 分支内；`toggleAgentPanel()` 把 `sidebarPanel` 切到 `details`（无 busy 守卫，也不调 `pendingConfirm.resolve`），或点某个块弹出 `workflow-edit-block`（`v-if="editState.editing"` 优先级更高）时，确认卡被隐藏，但 promise 仍挂着 —— loop 侧永远 await。
+证据：**代码位置，推断，未实测复现** —— `agentHost.js:65-75`（promise 只存 `pendingConfirm`）、`:86-92`（仅切会话时拒绝）、`:231-235`（仅 `onBeforeUnmount` 拒绝，而宿主页没有卸载）。`CONTEXT.md:80` 的不变量只写了「切会话/卸载前先 resolve」，没覆盖「面板被藏起来」。
+影响：用户在等待确认时切走侧栏或去改别的块 → agent 保持 busy、那一轮不收尾、会话不落盘；用户切回后卡片还在，点一次才恢复。最坏表现像「助手卡死了」。
+建议：① `toggleAgentPanel` 与打开块编辑时走 `guardAgentSwitch()` 同款拒绝，代价极小；② 或把确认卡提到宿主根节点（不随 `sidebarPanel` 卸载），代价是卡片要自己处理遮挡；③ 或 busy + 挂确认时禁止切走（体验差，不推荐）。
+结论：采纳①的思路，但拒绝点挂在**卡片自己所在的组件**上，而不是散在三个调用点 —— `AgentPanel.vue` 新增 `onBeforeUnmount(() => { if (props.pendingConfirm) emit('confirm-answer', false) })`，走宿主已有的 `answerConfirm`（内部判空，`normalizeAnswer` 认布尔，重复发也安全）。一处钩子覆盖三处卸载路径：切走助手面板、打开块的编辑卡、收起整个侧栏 —— 三者在 `[id].vue` 里都是 `v-if`/`v-else-if` 真卸载（已逐处核对模板，无 `v-show` 隐藏分支），在 `toggleAgentPanel`/`initEditBlock` 各补一句的写法以后新增一处隐藏路径就漏一处。②（卡片搬家到宿主根节点）与③（busy 时禁止切走）都未采纳。loop 拿到「用户拒绝」的 error 观察值照常收尾，busy 与会话状态不受影响。
+测试：本仓无组件测试基建（见 T-26），退而在 `confirm.test.js` 加一条**源码接线守卫**：断言 `AgentPanel.vue` 里存在 `onBeforeUnmount(() => {`、钩子内判 `props.pendingConfirm`、发 `emit('confirm-answer', false)`。红证已实测：把 emit 改成 `true` 后该条 `fail 1`，还原后全绿。`npm test` 343 pass / 0 fail（原 338），eslint 通过，`npm run check:i18n` 通过，`npm run build` 成功且产物含 `confirm-answer` 接线。
+**局限如实记**：「三处 `v-if` 会真卸载」依据 Vue 语义与模板结构逐处核对，**未在真机点开验证**（需装扩展 + 配 key）—— 即「面板被藏起来后那一轮恢复收尾」这个现象本身仍是推断。
+状态：已清（2026-10-05 完成）
+
+### T-39 — runtime 通道发送侧无兜底：background 响应丢失时 agent 轮次永久挂起（真机复现）
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 用户贴出 `[agent]` 日志复现「test_js 同意后卡住」，触发点 `src/agent/index.js` 的 `toBackground`
+现象：用户日志显示 `tool.call test_js → confirm.ask → confirm.answer(approved) → channel.send(agent:run-js)` 之后**既无 channel.reply 也无 channel.fail**——`browser.runtime.sendMessage` 的 promise 永不 settle。关键矛盾：该次注入的代码无死循环（query 20 本书 + JSON.stringify，毫秒级），background 侧 T-30 的 15s 兜底理应在 15s 给出响应；响应未到达说明 **background SW → 发送方的回程在用户真实 Chrome 里丢了**（SW 被回收 / 消息通道层面的浏览器行为），T-30 的兜底在 background 内部，救不了回程。
+证据：**实测（探针 `.agent-test/t40-probe.mjs`，真 Chromium + 当前 build）** —— 用用户原始代码三层全部通过：热状态 140ms、连发 24ms、SW 空闲 35s 后冷启动 11ms，返回正确书本 JSON。即代码与本机传输路径均健康；差异只剩用户真实 Chrome（版本/环境）与被截断的代码（`+57` 字符未见，若含 alert() 会占死页面，但即便如此 15s 响应也应送达——t33-probe 已实测占死页时 15s 超时正常返回）。用户侧 `channel.send` 无 reply 无 fail 与「SW/传输丢响应」唯一吻合。
+影响：与 T-33 同型的永久卡死，但发生在 runtime 通道——T-30/T-33 的兜底都盖不到回程丢失这一层。用户已再次撞上。
+建议：发送侧兜底——`toBackground` 整个 round trip 套 `raceTimeout`（20s，大于 background 侧 15s，超时返回 `{ok:false, error:'background 通道无响应…'}` 人话观察值）；`channel.reply/fail` 日志附耗时 ms 便于定位。无论 SW/传输发生什么，agent 轮次都不会再挂死。约 15 行 + 1 条单测。
+结论：按建议落地 —— `toBackground` 整个 round trip 套 `raceTimeout`（`BACKGROUND_CHANNEL_TIMEOUT_MS = 20s` > background 侧 15s，`options.timeoutMs` 供测试缩短），超时不 reject 而是回 `{ok:false, error}` 观察值形状；文案如实写「这一步是否已执行无法确认」并让模型先 `read_page` 看现状再决定，不许原地重复同一调用（T-33 的教训）。内部标记 `__timeout` 返回前剥掉，不进观察值。send **真**失败仍照旧 reject 走 `channel.fail` —— 超时兜底不吞真错误，有断言钉住。打点：`channel.reply`/`channel.fail` 都附耗时 `ms`，超时单独打 `channel.timeout`（带 `ms` + `timeoutMs`）。
+**连带修掉一个实测到的泄漏**：`raceTimeout` 原来不清 `setTimeout` —— `Promise.race` 不会取消它，实测 `node -e` 一个 20s 定时器让进程多活 **20009ms**；T-39 之后每次工具调用都会走它，不修就是每次漏一个。改成谁先 settle 谁 `clearTimeout`（`.finally`），先完成的一侧由单测钉住（只盯自己注册的那个 60s 定时器，避免误伤别的来源的 timer）。
+测试：`assembly.test.js` 新增 3 条（background 永不回应 → 人话 error 且 `__timeout` 不泄漏；超时与正常回程两条日志都带 `ms` 且健康回程不误判超时；send 真失败仍 reject）+ `agentEvalInPage.test.js` 新增 1 条（timer 必须被清）。`npm test` 343 pass / 0 fail（原 338），**耗时 10.2s 与改动前 10.4s 持平**（泄漏已修的旁证，否则会多吊 20s），eslint 通过，`npm run check:i18n` 通过，`npm run build` 成功且产物含超时文案与 `channel.timeout` 打点。
+**局限如实记**：回程丢失的**根因**（SW 回收 / 浏览器行为）未复现也未消除 —— 本条修的是「无论回程发生什么都不再挂死」，`t40-probe.mjs` 在本机依旧全通（复现不了用户真机环境），最终闭环仍需用户真机复验。
+状态：已清（2026-10-05 完成）
 
 ### B 区已清
 

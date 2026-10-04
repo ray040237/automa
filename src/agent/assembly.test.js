@@ -303,6 +303,103 @@ describe('toBackground —— 到 background 的路由契约', () => {
 });
 
 /**
+ * 发送侧硬超时（backlog T-39）。
+ *
+ * background 内部有 15s 页内执行兜底（T-30）、tabs 通道有 15s（T-33），
+ * 但那两层都在**别的进程/通道**里：回程丢了（SW 被回收 / 浏览器把响应
+ * 弄丢）时发送方的 promise 永不 settle，用户真机日志里 `channel.send`
+ * 之后既无 reply 也无 fail，整轮 agent 挂死。这里钉的是最后一层：
+ * 无论回程发生什么，`toBackground` 都必须 settle。
+ */
+describe('toBackground —— 发送侧硬超时（T-39）', () => {
+  test('background 永不回应时回人话 error，整轮不再挂死', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    const original = stub.default.runtime.sendMessage;
+    stub.default.runtime.sendMessage = () => new Promise(() => {});
+
+    try {
+      const res = await toBackground(
+        { type: 'agent:run-js', tabId: 7, code: '1+1' },
+        { timeoutMs: 20 }
+      );
+
+      assert.equal(res.ok, false, '超时必须回 ok:false 的观察值形状');
+      assert.match(res.error, /background 通道无响应/);
+      assert.match(
+        res.error,
+        /无法确认/,
+        '必须说清执没执行是未知的，否则模型会原地重复同一调用'
+      );
+      assert.equal('__timeout' in res, false, '内部标记不许泄进观察值');
+    } finally {
+      stub.default.runtime.sendMessage = original;
+    }
+  });
+
+  test('超时打 channel.timeout（带耗时），正常回程的 reply 也带耗时', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    const original = stub.default.runtime.sendMessage;
+
+    try {
+      // 超时路径
+      const markTimeout = agentLog.ring.length;
+      stub.default.runtime.sendMessage = () => new Promise(() => {});
+      await toBackground({ type: 'agent:run-js', tabId: 7 }, { timeoutMs: 20 });
+
+      const timeoutLogs = agentLog.ring
+        .slice(markTimeout)
+        .filter((e) => e.event === 'channel.timeout');
+      assert.equal(timeoutLogs.length, 1, '超时必须留下 channel.timeout 打点');
+      assert.equal(typeof timeoutLogs[0].data.ms, 'number', '耗时是定位的关键');
+      assert.equal(timeoutLogs[0].data.timeoutMs, 20);
+
+      // 健康路径：reply 也带耗时，且不能被误判成超时
+      const markReply = agentLog.ring.length;
+      stub.default.runtime.sendMessage = async () => ({
+        ok: true,
+        value: '"1"',
+      });
+      const res = await toBackground(
+        { type: 'agent:run-js', tabId: 7, code: '1' },
+        { timeoutMs: 500 }
+      );
+
+      const replyLogs = agentLog.ring
+        .slice(markReply)
+        .filter((e) => e.event === 'channel.reply');
+      assert.deepEqual(res, { ok: true, value: '"1"' });
+      assert.equal(replyLogs.length, 1);
+      assert.equal(typeof replyLogs[0].data.ms, 'number');
+      assert.equal(
+        agentLog.ring
+          .slice(markReply)
+          .filter((e) => e.event === 'channel.timeout').length,
+        0,
+        '健康回程不许打超时点'
+      );
+    } finally {
+      stub.default.runtime.sendMessage = original;
+    }
+  });
+
+  test('send 真失败仍照旧 reject —— 超时兜底不能吞掉真错误', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    const original = stub.default.runtime.sendMessage;
+    stub.default.runtime.sendMessage = async () => {
+      throw new Error('boom');
+    };
+
+    try {
+      await assert.rejects(() =>
+        toBackground({ type: 'agent:run-js', tabId: 7 }, { timeoutMs: 500 })
+      );
+    } finally {
+      stub.default.runtime.sendMessage = original;
+    }
+  });
+});
+
+/**
  * get_block_schema 的真实现（backlog T-32）：此前 runtime 默认 `async () => null`
  * 且无宿主接线，任何查询都回「可用块（一个都没有）」，与事实表「61 个块」矛盾，
  * 模型陷进 read_page ↔ get_block_schema 死循环。这里直接对真目录断言。

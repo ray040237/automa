@@ -141,4 +141,37 @@ describe('raceTimeout —— 永不 settle 的 promise 的硬超时兜底（back
 
     assert.equal(unhandled, null, '迟到的 reject 必须被内部吞掉');
   });
+
+  test('先 settle 的一侧必须 clearTimeout —— 悬空定时器会吊住进程/页面', async () => {
+    const created = [];
+    const cleared = [];
+    const origSet = globalThis.setTimeout;
+    const origClear = globalThis.clearTimeout;
+
+    // 只盯我们自己那个 60s 定时器，别的来源的 timer 原样放行，免得误伤
+    globalThis.setTimeout = (fn, ms, ...rest) => {
+      const handle = origSet(fn, ms, ...rest);
+      if (ms === 60000) created.push(handle);
+      return handle;
+    };
+    globalThis.clearTimeout = (handle) => {
+      if (created.includes(handle)) cleared.push(handle);
+      return origClear(handle);
+    };
+
+    try {
+      const out = await raceTimeout(Promise.resolve('fast'), 60000, 'timeout');
+
+      assert.equal(out, 'fast');
+      assert.equal(created.length, 1, 'raceTimeout 注册过超时定时器');
+      assert.equal(
+        cleared.length,
+        1,
+        '先完成时必须撤掉定时器 —— 实测不撤的话进程被吊满 60s'
+      );
+    } finally {
+      globalThis.setTimeout = origSet;
+      globalThis.clearTimeout = origClear;
+    }
+  });
 });
