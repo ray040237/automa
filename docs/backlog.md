@@ -185,17 +185,6 @@
 影响：真实危害小，纯接口洁癖。
 建议：若将来要动，只动接口 —— 一个 `buildModelView({history, system, contextWindow})` 返回 `{messages, diagnostics}`，顺序收进实现、诊断数字变成可断言的返回值。**本轮不建议排期**，登记备查。
 状态：待审核
-### T-48 — LLM 标题在下一轮落盘时被冲回消息前缀，标题回写的成果撑不过第二轮
-
-类型：bug
-登记日期：2026-10-05
-来源：会话 2026-10-05 修 T-35/B1 时读 `src/agent/sessions.js` 的 `save()` 发现，触发点 `src/agent/sessions.js` save 的 `title: session.title || titleFromEvents(session.events)`，与 `src/agent/index.js` 第二轮 `save`（不传 `title` 字段）。
-现象：标题回写（`patchTitle`）把 LLM 标题写进记录之后，**任何一次后续轮次的 `save()` 都会把它冲掉** —— 轮次 save 不带 `title`，`save()` 落盘时走 `titleFromEvents` 兜底取首条用户消息前缀，于是标题变回该前缀。
-证据：**实测（取证脚本）** —— `.scratch/title-wipe.test.mjs`：首轮 save → 带 `title` 的 save → 按第二轮的形状 save（不带 title、events 变 4 条），断言标题仍为 LLM 标题 → **`pass 0 / fail 1`**，`AssertionError：实际 = "帮我抓列表"`。即 LLM 标题只在下一轮落盘前有效。
-影响：`generateTitleAsync` 的可见成果基本被抵消 —— 发第二轮后会话标题（面板下拉 / 标题区）会变回消息前缀；不丢数据（索引与本体一致），但功能等于半失效。
-建议：`save()` 的 title 兜底改为「传入的 title → 已存记录的 title → titleFromEvents」三级，记录的 title 只增不覆盖；仍走已串行化的写链，别引入新的读改写窗口。**未修，等审核批准。**
-状态：待审核
-
 ## 已批准（待排期）
 
 （暂无）
@@ -644,6 +633,18 @@
 影响：新增一类「也该被陈旧压缩」的观察值要同时改 4~5 处（group→wrap 映射、wrap 白名单、`window.js` 前缀嗅探、`untrusted.js` 标签登记、`prompt.js` 措辞），漏改任何一处不报错、只静默失效。**排期注意：本条与 T-34 / T-35 / B1 争同一批文件**（都要改会话记录的写入路径），评审未注意这层耦合，排在它们之后做更省事。
 建议：把「观察值形态」提升成跟着事件走的一等字段（工具定义上声明一次，或在 `tools/index.js` 做一处 `group → observationKind` 映射作为唯一真源），`loop` 挂到 `TOOL_RESULT` 上、`wire` 写进消息 meta 而不混进 content、`elideStaleObservations` 按 meta 判定。`untrusted_*` 标签仍是安全边界，继续按 `untrusted.js` 登记 —— 两件事职责不同，不要合并。必须同批定下旧会话记录的 fallback 规则（按 `name` 判定或一律当 value），不能「跑不出来再说」。
 状态：待审核
+
+### T-48 — LLM 标题在下一轮落盘时被冲回消息前缀，标题回写的成果撑不过第二轮
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 修 T-35/B1 时读 `src/agent/sessions.js` 的 `save()` 发现，触发点 `src/agent/sessions.js` save 的 `title: session.title || titleFromEvents(session.events)`，与 `src/agent/index.js` 第二轮 `save`（不传 `title` 字段）。
+现象：标题回写（`patchTitle`）把 LLM 标题写进记录之后，**任何一次后续轮次的 `save()` 都会把它冲掉** —— 轮次 save 不带 `title`，`save()` 落盘时走 `titleFromEvents` 兜底取首条用户消息前缀，于是标题变回该前缀。
+证据：**实测（取证脚本）** —— `.scratch/title-wipe.test.mjs`：首轮 save → 带 `title` 的 save → 按第二轮的形状 save（不带 title、events 变 4 条），断言标题仍为 LLM 标题 → **`pass 0 / fail 1`**，`AssertionError：实际 = "帮我抓列表"`。即 LLM 标题只在下一轮落盘前有效。
+影响：`generateTitleAsync` 的可见成果基本被抵消 —— 发第二轮后会话标题（面板下拉 / 标题区）会变回消息前缀；不丢数据（索引与本体一致），但功能等于半失效。
+建议：`save()` 的 title 兜底改为「传入的 title → 已存记录的 title → titleFromEvents」三级，记录的 title 只增不覆盖；仍走已串行化的写链，别引入新的读改写窗口。**未修，等审核批准。**
+结论：按建议落地 —— `sessions.js` 的 `save()` title 兜底升级为三级：`session.title` → 已存记录的 title → `titleFromEvents`。读改写走已有串行队列（T-35/B1 的 writeTail），不引入新窗口。sessions.test.js 新增回归：patchTitle 后第二轮不带 title 的 save，标题与索引均保持 LLM 标题（索引同步是 `indexEntryFromSession` 直接吃 clean，跟着走）。`npm test` 364 pass / 0 fail，sessions 两文件 eslint 0 error。
+状态：已清（2026-10-05 完成）
 
 ### B 区已清
 

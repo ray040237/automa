@@ -233,6 +233,42 @@ test('remove 同时清掉索引与本体', async () => {
 
 /* ---------------- 标题回写通道 patchTitle（backlog T-35 + B1） ---------------- */
 
+test('T-48：第二轮 save（不带 title）不能冲掉 patchTitle 的 LLM 标题', async () => {
+  const io = memoryIO();
+  const store = createSessionStore(io);
+
+  await store.save({
+    id: 's1',
+    workflowId: 'wf1',
+    status: 'active',
+    createdAt: 1,
+    lastAccessedAt: 10,
+    events: [userMsg('帮我抓列表'), delta('好')],
+  });
+
+  await store.patchTitle('s1', 'LLM 生成的标题');
+
+  // 第二轮收尾：index.js 的 save 不带 title 字段
+  await store.save({
+    id: 's1',
+    workflowId: 'wf1',
+    status: 'active',
+    createdAt: 1,
+    lastAccessedAt: 30,
+    events: [
+      userMsg('帮我抓列表'),
+      delta('好'),
+      userMsg('第二轮：再抓一页'),
+      delta('好'),
+    ],
+  });
+
+  const rec = await store.load('s1');
+  assert.equal(rec.title, 'LLM 生成的标题', 'LLM 标题只应被传入的 title 覆盖');
+  const idx = (await store.listIndex('wf1'))[0];
+  assert.equal(idx.title, 'LLM 生成的标题', '索引同步不被冲掉');
+});
+
 test('patchTitle 只改标题这一个字段，别的一律原样', async () => {
   const io = memoryIO();
   const store = createSessionStore(io);

@@ -184,10 +184,17 @@ export function createSessionStore(io) {
      */
     async save(session) {
       return serialized(async () => {
+        // T-48：title 三级兜底 —— 传入的 > 已存记录的 > titleFromEvents 首条前缀。
+        // 轮次 save 不带 title 字段（index.js 收尾走 buildTurnRecord，不设 title），
+        // 旧的两级兜底会把 patchTitle 回写的 LLM 标题冲回消息前缀。
+        const stored = await loadRec(session.id);
         const clean = {
           ...session,
           events: cropToTurns(session.events || []),
-          title: session.title || titleFromEvents(session.events),
+          title:
+            session.title ||
+            (stored && stored.title) ||
+            titleFromEvents(session.events),
           lastAccessedAt: session.lastAccessedAt || Date.now(),
         };
 
