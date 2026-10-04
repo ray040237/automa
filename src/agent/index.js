@@ -38,6 +38,15 @@ import {
   buildTurnRecord,
   pruneEphemeralEvents,
 } from './turnRecord';
+import {
+  fingerprintChangedNotice,
+  fingerprintKey,
+  initialPinsFromTab,
+  originDriftKey,
+  originDriftNotice,
+  tabClosedNotice,
+  upsertPin,
+} from './targetState';
 import { buildTitleMessages, cleanTitle } from './title';
 import { raceTimeout } from './agentEvalInPage';
 import { createAgentLog } from './log';
@@ -440,7 +449,7 @@ export function createAgentRuntime(deps) {
     createTab: (url) => browser.tabs.create({ url, active: false }),
     /** 追加 pin（按 tabId 去重）。 */
     addPin: async (pin) => {
-      if (!pins.some((p) => p.tabId === pin.tabId)) pins = [...pins, pin];
+      pins = upsertPin(pins, pin);
       focusedTabId = pin.tabId;
     },
   };
@@ -480,11 +489,7 @@ export function createAgentRuntime(deps) {
     try {
       tab = await browser.tabs.get(targetTab.id);
     } catch {
-      return (
-        '系统提示：目标页（id ' +
-        targetTab.id +
-        '）已经关闭。如需继续操作网页，请用 list_tabs 查看现有标签页并 focus_tab 切换，或用 open_url 打开新页面；也可以直接基于已有信息回答。'
-      );
+      return tabClosedNotice(targetTab.id);
     }
 
     setTargetTab(normalize(tab));
@@ -493,19 +498,16 @@ export function createAgentRuntime(deps) {
     const expected = pin ? pin.origin : '';
     const actual = originOf(tab.url);
 
-    if (expected && actual && expected !== actual) {
-      const key = 'origin:' + expected + '>' + actual;
+    const drift = originDriftNotice({
+      expected,
+      actual,
+      url: tab.url,
+    });
+    if (drift) {
+      const key = originDriftKey(expected, actual);
       if (key === lastNoticeKey) return null;
       lastNoticeKey = key;
-      return (
-        '系统提示：目标页从 ' +
-        expected +
-        ' 导航到了 ' +
-        actual +
-        '（当前 URL: ' +
-        tab.url +
-        '）。如果这不是你预期的跳转，此前基于旧页面做出的选择器/结论可能已失效，请重新 read_page 确认。'
-      );
+      return drift;
     }
 
     // 指纹比对（设计稿 §6.4）：advisory，runtime 不替模型决定读不读。
@@ -518,17 +520,16 @@ export function createAgentRuntime(deps) {
         const fp = res && typeof res === 'object' ? res.fingerprint : null;
 
         if (fp && fp !== lastRead.fingerprint) {
-          const key = 'fp:' + lastRead.fingerprint + '>' + fp;
-          if (key !== fpNoticeKey) {
-            fpNoticeKey = key;
-            return (
-              '系统提示：目标页内容已变化（指纹 ' +
-              lastRead.fingerprint +
-              ' → ' +
-              fp +
-              '）。此前基于该页得出的选择器/结论可能已失效，请重新 read_page 确认；' +
-              '如果页面没变，沿用上次结论即可，不要重复读页。'
-            );
+          const notice = fingerprintChangedNotice({
+            before: lastRead.fingerprint,
+            after: fp,
+          });
+          if (notice) {
+            const key = fingerprintKey(lastRead.fingerprint, fp);
+            if (key !== fpNoticeKey) {
+              fpNoticeKey = key;
+              return notice;
+            }
           }
         }
       }
@@ -601,20 +602,10 @@ export function createAgentRuntime(deps) {
       usageBefore = (rec && rec.usage) || usageBefore;
     }
 
-    // id<0 是浏览器会话恢复/分离页的假 tab，绝不能当 pin 身份
-    if (
-      pins.length === 0 &&
-      targetTab &&
-      typeof targetTab.id === 'number' &&
-      targetTab.id >= 0
-    ) {
-      pins = [
-        {
-          tabId: targetTab.id,
-          origin: originOf(targetTab.url),
-          title: targetTab.title,
-        },
-      ];
+    // pin 的首轮自动捕获（id<0 是浏览器会话恢复/分离页的假 tab，不能当 pin）
+    const initial = initialPinsFromTab(pins, targetTab, originOf);
+    if (initial) {
+      pins = initial;
       focusedTabId = targetTab.id;
     }
 
