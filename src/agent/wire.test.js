@@ -175,11 +175,10 @@ test('思考内容不进 wire', () => {
   assert.deepEqual(out, [{ role: 'assistant', content: '答案' }]);
 });
 
-test('展示事件（切页 / 确认 / 提案）不进 wire', () => {
+test('展示事件（切页 / 开轮）不进 wire', () => {
   const out = buildWireMessages([
     { kind: 'agent:target-tab', tab: { url: 'https://a.com' } },
-    { kind: 'agent:confirm', title: 'x' },
-    { kind: 'agent:proposal', payload: {} },
+    { kind: 'agent:start' },
     text('hi'),
     DONE,
   ]);

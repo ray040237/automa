@@ -187,7 +187,7 @@ function applyEvent(ev) {
       break;
     }
     default:
-      // start / done / confirm / proposal / target-tab 不产生对话内容
+      // start / done / target-tab 不产生对话内容
       break;
   }
 }

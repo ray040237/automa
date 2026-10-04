@@ -18,7 +18,9 @@ import { applyTokenBudget, elideStaleObservations } from './window';
 import { buildWireMessages } from './wire';
 import {
   AGENT_EVENTS,
+  ERROR_KIND,
   TOOL_STATUS,
+  errorEvent,
   toolError,
   wrapObservation,
 } from './events';
@@ -78,14 +80,12 @@ export function toAgentEvent(chunk) {
     case 'error':
       // chunk 自己就是错误载荷（见 openai-compat 的 errorChunk），
       // 别再去找 chunk.error —— 那个字段从来没被任何产出方写过。
-      return {
-        kind: AGENT_EVENTS.ERROR,
-        status: TOOL_STATUS.ERROR,
-        message: String(chunk.message || '未知错误'),
+      // 注意 chunk 上的字段叫 status，不是 httpStatus —— 映射在工厂里做（T-40）。
+      return errorEvent({
+        message: chunk.message || '未知错误',
         errorKind: chunk.kind,
-        ...(chunk.status !== undefined ? { httpStatus: chunk.status } : {}),
-        wrap: 'untrusted_tool_result',
-      };
+        httpStatus: chunk.status,
+      });
     default:
       return null;
   }
@@ -315,11 +315,13 @@ export function createAgent(deps) {
       } catch (err) {
         facts = {};
 
-        emit({
-          kind: AGENT_EVENTS.ERROR,
-          error:
-            '提示词事实表构建失败，本次按空表继续：' + toolError(err).message,
-        });
+        emit(
+          errorEvent({
+            message:
+              '提示词事实表构建失败，本次按空表继续：' + toolError(err).message,
+            errorKind: ERROR_KIND.INTERNAL,
+          })
+        );
       }
 
       const system = params.system || buildSystemPrompt(facts);
@@ -466,13 +468,16 @@ export function createAgent(deps) {
         }
 
         if (streamError) {
-          log.error('stream.error', {
-            kind: streamError.kind,
-            httpStatus: streamError.httpStatus,
-            message: streamError.message,
-          });
-          // 错误形状只在 toAgentEvent 定义一次，这里直接复用
+          // 错误形状只在 errorEvent 里定义一次，这里直接复用。
+          // 日志也从这个对象上取字段 —— 原先读的是 streamError.httpStatus，
+          // 而 errorChunk 产出的字段叫 status，所以那条日志的 httpStatus
+          // 一直是 undefined，真要排查 429/401 时恰恰看不到状态码（T-40）。
           const errEv = toAgentEvent(streamError);
+          log.error('stream.error', {
+            kind: errEv.errorKind,
+            httpStatus: errEv.httpStatus,
+            message: errEv.message,
+          });
           // 错误也要入史：否则会话重开后，用户看到助手话说一半就没了下文
           history.push(errEv);
           emit(errEv);

@@ -36,6 +36,7 @@ import {
   normalizeAnswer,
   shouldSkipConfirmation,
 } from '@/agent/confirm';
+import { ERROR_KIND, errorEvent } from '@/agent/events';
 
 /**
  * @param {Object} deps
@@ -250,13 +251,17 @@ export function useAgentHost(deps) {
         agent.usage = result.usage;
       }
     } catch (err) {
-      agent.events.push({
-        kind: 'agent:error',
-        message:
-          err && err.kind === 'config'
+      // 宿主侧兜的错也走同一份形状（T-40）：这里原先是裸写的
+      // { kind: 'agent:error', message }，绕过了 AGENT_EVENTS 常量表。
+      const isConfig = !!err && err.kind === 'config';
+      agent.events.push(
+        errorEvent({
+          message: isConfig
             ? t('workflow.agent.notConfigured')
             : (err && err.message) || String(err),
-      });
+          errorKind: isConfig ? ERROR_KIND.CONFIG : undefined,
+        })
+      );
     } finally {
       agent.busy = false;
       // 标题/时间在首轮 send 后才生成，刷新列表让切换器立即可见

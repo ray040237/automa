@@ -16,13 +16,19 @@ export const AGENT_EVENTS = {
   THINKING: 'agent:thinking',
   TOOL_CALL: 'agent:tool-call',
   TOOL_RESULT: 'agent:tool-result',
-  CONFIRM: 'agent:confirm',
-  PROPOSAL: 'agent:proposal',
   TARGET_TAB: 'agent:target-tab',
   SYSTEM_NOTICE: 'agent:system-notice',
   DONE: 'agent:done',
   ERROR: 'agent:error',
 };
+
+/**
+ * T-41：CONFIRM / PROPOSAL 已删。
+ *
+ * 它们全仓零产出零消费，是 transcript 时代的展示角色残留 —— 确认流程走
+ * deps.requestConfirmation 直接回调宿主，根本不经过事件流。留着会让读事件表的人
+ * 以为存在一个尚未接线的 seam。eventContract.test.js 现在会拦这类僵尸常量。
+ */
 
 /** 错误归类（技术方案 §5.4） */
 export const ERROR_KIND = {
@@ -31,6 +37,9 @@ export const ERROR_KIND = {
   PROVIDER: 'provider',
   TOOL: 'tool',
   NO_TARGET_TAB: 'no-target-tab',
+  // T-40：本地装配出错（提示词事实表构建失败一类）。原先没有这一档，
+  // 这类错误的 errorKind 只能空着，UI 侧分不清它和 provider 报错的区别。
+  INTERNAL: 'internal',
 };
 
 /** 工具执行状态 */
@@ -41,6 +50,33 @@ export const TOOL_STATUS = {
   ERROR: 'error',
   REJECTED: 'rejected',
 };
+
+/**
+ * 错误事件的唯一构造函数（T-40）。
+ *
+ * AGENT_EVENTS 是 loop 与 UI 之间唯一的 seam，CONTEXT.md 明文写着「两边互不认识」。
+ * 不认识的两边各写一套字段名，编译期不拦、测试期不拦、运行期静默丢信息 ——
+ * 实测踩过：loop 里一处写 \`error:\`、一处写 \`message:\`，而 UI 只读
+ * \`message\`，「事实表构建失败」的详情就永远显示不出来（只剩一句兜底文案）。
+ *
+ * 规则：**错误事件只能从这里出**。想加字段就改这里，然后让契约测试盯着。
+ *
+ * @param {{message?: *, errorKind?: string, httpStatus?: number}} input
+ * @returns {{kind: string, status: string, message: string,
+ *   errorKind?: string, httpStatus?: number}}
+ */
+export function errorEvent({ message, errorKind, httpStatus } = {}) {
+  const ev = {
+    kind: AGENT_EVENTS.ERROR,
+    status: TOOL_STATUS.ERROR,
+    message: String(message ?? '未知错误'),
+  };
+  // 两个字段都是可选的：归类不了的错误不硬凑，HTTP 状态没有就不带键 ——
+  // 带一个 httpStatus: undefined 的键会让下游的 JSON 序列化多出一个假字段。
+  if (errorKind) ev.errorKind = errorKind;
+  if (httpStatus !== undefined) ev.httpStatus = httpStatus;
+  return ev;
+}
 
 /**
  * 把工具执行结果包成可以喂给模型、且不可逃逸的观察值。

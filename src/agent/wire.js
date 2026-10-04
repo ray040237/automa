@@ -2,7 +2,7 @@
  * 把事件流折成真正发给模型的 wire 消息。
  *
  * 为什么不能直接用 transcript.js：那份是**给 UI 看的展示 transcript**，
- * 它的行是 agent-step / confirm / proposal 这种展示角色；toWireMessages 遇到
+ * 它的行是 agent-step / target-tab 这种展示角色；toWireMessages 遇到
  * 它们只会原样带过去，而 OpenAI 不认识 agent-step 这个 role。
  * 更要命的是 agent-step 一行里同时装着 call 和 result，拆不成 tool_calls + tool。
  *
@@ -122,7 +122,7 @@ export function buildWireMessages(events, options = {}) {
         break;
 
       default:
-        // target-tab / confirm / proposal / start 等展示事件不进 wire
+        // target-tab / start 等展示事件不进 wire
         break;
     }
   });

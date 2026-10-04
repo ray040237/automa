@@ -446,9 +446,16 @@ test('promptFacts 抛错时降级为空事实，不炸掉整轮对话', async ()
     .join('');
 
   assert.equal(got, 'ok', '降级后这一轮还是要能正常跑完');
+  const errorEv = events.find((e) => e.kind === 'agent:error');
+  assert.ok(errorEv, '应发出一条 agent:error');
   assert.ok(
-    events.some((e) => String(e.error || '').includes('事实表构建失败')),
+    String(errorEv.message || '').includes('事实表构建失败'),
     '但要如实告诉用户事实表坏了 —— 静默降级等于把问题藏起来'
+  );
+  assert.equal(
+    errorEv.errorKind,
+    'internal',
+    'T-40：形状必须是 errorEvent() 产出的那一份，errorKind 归入 internal'
   );
 });
 test('provider 报 429 时，用户看得到服务端说的限流（回归）', async () => {
