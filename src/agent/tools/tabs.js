@@ -61,7 +61,9 @@ export async function listTabs(ctx) {
  * 不然面对「页开着但没 pin」的场景模型只能 open_url 开重复页。
  *
  * @param {Object} ctx
- * @param {Array<{tabId: number, origin: string, title?: string}>} ctx.pins
+ * @param {() => Array<{tabId: number, origin: string, title?: string}>} ctx.pins
+ *   T-43 ③：固定契约——pins 永远是 getter，调用方每次调它取最新数组。
+ *   运行时（index.js toolCtx）与测试夹具都按这个形状传，不再兼容「直接传数组」。
  * @param {Function} ctx.addPin (pin) => Promise<void>
  * @param {Function} ctx.focusTab (tabId) => Promise<tab>
  */
@@ -75,7 +77,13 @@ export async function focusTab(ctx, params) {
     };
   }
 
-  const pins = (typeof ctx.pins === 'function' ? ctx.pins() : ctx.pins) || [];
+  if (typeof ctx.pins !== 'function') {
+    return {
+      status: 'error',
+      payload: 'ctx.pins 契约错误：必须是 () => pins 的 getter。',
+    };
+  }
+  const pins = ctx.pins() || [];
 
   try {
     // 不在 pin 里就先收进来 —— addPin 之后 focusTab 才有身份可比对

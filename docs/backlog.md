@@ -197,18 +197,6 @@
 建议：**只复核不重写** —— 按 §13 → §06 → §08 顺序逐个代码块对源码核行号与函数体，更新后在页脚加一行「最后核对于 YYYY-MM-DD」。整篇重写风险大于收益（文档 117KB，且大部分段落仍准确）。本条已在同一轮更新过 §07（确认门快照、四条路径表、T-02/T-27 状态）与 §13（超时分层说明），**剩下的代码快照未动，等审核**。代价约 1 小时。
 状态：待审核
 
-### T-43 — runtime 闭包三块状态机没有 seam、零断言覆盖
-
-类型：改进
-登记日期：2026-10-05
-来源：会话 2026-10-05 架构评审（`architecture-review-20261005-0141.html` 候选 1），触发点 `src/agent/index.js:359`（`createAgentRuntime`）
-现象：`src/agent` 的规矩是「只有 `index.js` 能碰浏览器 API，其余纯函数好让 `node --test` 直接覆盖」，但所有跨进程接线都倒进了这一个文件。`createAgentRuntime`（`:359` 至文件末 `:762`，约 404 行）持有 11 个可变状态，内部缠着三件事：目标页身份状态机（pin 写入 / `focus_tab` 切换 / origin 漂移判定 / 指纹比对，`:370-533`）、会话收尾（usage 累加 / 剪 THINKING / 两份 save 对象 / 标题 fire-and-forget，`:574` 起）、`toolCtx` 字面量拼装（`:391-463`）。
-证据：**实测** —— 状态声明逐个核对落在 `:370 targetTab`、`:376 pins`、`:377 focusedTabId`、`:379 lastNoticeKey`、`:382 lastRead`、`:384 fpNoticeKey`、`:386 fpCheckPending`、`:388 currentOnEvent`、`:536 activeAgent`、`:540 currentSessionId`、`:545 instructionQueue`，恰好 11 个。零覆盖同样实测：`Select-String src/agent/*.test.js 'preStepNotice'` 命中 4 处全在 `loop.test.js:729-765`，且 `:733` 自带注释「makeAgent 不支持 preStepNotice，这里直接手动建」—— 测的是传入的 fake，不是 runtime 里那份实现。`tabs.js:78` 写 `typeof ctx.pins === 'function' ? ctx.pins() : ctx.pins` 同时兼容两种形态，说明这个 interface 两边都没人拥有。
-**来源文档的数字偏大，须按实测取值**：该评审称 `index.js` 861 行 / `createAgentRuntime` 474 行 / `assembly.test.js` 631 行 / 全目录 43 文件 10,080 行（含 2,700 测试行）；实测为 **762 / 约 404 / 613 / 54 文件 9,234 行（含 4,783 测试行）**。它的行号引用逐条核对**全部准确**（`:370-389` `:391` `:471` `:552` `:574` `:119` `tabs.js:78` `window.js:114,125` `loop.js:153` `events.js:61` `tools/index.js:152,166` 均对上），膨胀的只是汇总统计——结论成立，规模比它说的小。
-影响：T-33 / T-39 / B1 / T-34 / T-35 这一串真机 bug 的老家都在这一层，再改动概率与改动难度同时最高，却零断言守护。
-建议：分三步，**建议顺序 ② → ① → ③**。② `turnRecord.js`（usage 累加 / 剪 THINKING / 单一 save 对象）—— T-34、T-35、B1 三条已登记 bug 全落在同一段 save 代码上，先抽出记录构造可让它们共用一个入口（注意 T-35 与 B1 已要求「闭包捕获 sessionId + 只 patch title」，抽出来正好一次做对）；① `targetState.js`（pin / focusedTabId，三条 advisory 文案变纯函数返回值）；③ `createToolContext()` 固定形状，`tabs.js:78` 随之简化。三步均为「搬出去 + 补断言」，不改落盘格式、不碰任何 ADR。
-状态：进行中（2026-10-05 第②步已落：turnRecord.js 抽出 usage 累加 / 剪 THINKING / 单一 save 对象，index.js 收尾改走 buildTurnRecord；第①步同日已落：targetState.js 抽出三条 advisory 的纯函数文案 + pin 的首轮捕获/去重追加，index.js preStepNotice 只剩 IO 与去重键存取与 5 条新测试；npm test 359 pass / 0 fail。第③ createToolContext 未做）
-
 ### T-44 — 「这条观察值是不是页面快照」有三处互不知情的判定，靠字符串对齐
 
 类型：改进
@@ -631,6 +619,18 @@
 建议：与 B1 合并修：title 回写改为「闭包捕获发起时的 sessionId + 只 patch title 字段（读改写仅 title 键）」，回写前校验 `currentSessionId === 捕获的 id`，不等则放弃。约 20 行。
 结论：按建议落地 —— `index.js` 首轮标题回写改为 `sessionStore.patchTitle(titleSessionId, title)`：发起时闭包捕获 sessionId，resolve 后 ID 失效（会话被删/切走）时 `patchTitle` 返回 null 直接放弃并记 `title.skip` 日志，不再可能落出 `agent_session_null`；`patchTitle` 只读改写 title 键、不动 events/pins/usage/lastAccessedAt。`sessions.js` 的 save/remove/patchTitle 统一走串行队列（writeTail），堵住 B1 的整记录覆盖竞态：晚到的 patch 只能改 title，不会回退第二轮已落盘的 events。测试：sessions.test.js 新增 3 条（patchTitle 只改 title、null/空 title/缺会话不落盘、索引同步只改 title）+ assembly.test.js 新增源码接线守卫（捕获 id、patchTitle、then 块内不出现 `id: currentSessionId` 与整记录 save）。`npm test` 350 pass / 0 fail，目标文件 eslint 0 error。
 状态：已清（2026-10-05 完成）
+
+### T-43 — runtime 闭包三块状态机没有 seam、零断言覆盖
+
+类型：改进
+登记日期：2026-10-05
+来源：会话 2026-10-05 架构评审（`architecture-review-20261005-0141.html` 候选 1），触发点 `src/agent/index.js:359`（`createAgentRuntime`）
+现象：`src/agent` 的规矩是「只有 `index.js` 能碰浏览器 API，其余纯函数好让 `node --test` 直接覆盖」，但所有跨进程接线都倒进了这一个文件。`createAgentRuntime`（`:359` 至文件末 `:762`，约 404 行）持有 11 个可变状态，内部缠着三件事：目标页身份状态机（pin 写入 / `focus_tab` 切换 / origin 漂移判定 / 指纹比对，`:370-533`）、会话收尾（usage 累加 / 剪 THINKING / 两份 save 对象 / 标题 fire-and-forget，`:574` 起）、`toolCtx` 字面量拼装（`:391-463`）。
+证据：**实测** —— 状态声明逐个核对落在 `:370 targetTab`、`:376 pins`、`:377 focusedTabId`、`:379 lastNoticeKey`、`:382 lastRead`、`:384 fpNoticeKey`、`:386 fpCheckPending`、`:388 currentOnEvent`、`:536 activeAgent`、`:540 currentSessionId`、`:545 instructionQueue`，恰好 11 个。零覆盖同样实测：`Select-String src/agent/*.test.js 'preStepNotice'` 命中 4 处全在 `loop.test.js:729-765`，且 `:733` 自带注释「makeAgent 不支持 preStepNotice，这里直接手动建」—— 测的是传入的 fake，不是 runtime 里那份实现。`tabs.js:78` 写 `typeof ctx.pins === 'function' ? ctx.pins() : ctx.pins` 同时兼容两种形态，说明这个 interface 两边都没人拥有。
+**来源文档的数字偏大，须按实测取值**：该评审称 `index.js` 861 行 / `createAgentRuntime` 474 行 / `assembly.test.js` 631 行 / 全目录 43 文件 10,080 行（含 2,700 测试行）；实测为 **762 / 约 404 / 613 / 54 文件 9,234 行（含 4,783 测试行）**。它的行号引用逐条核对**全部准确**（`:370-389` `:391` `:471` `:552` `:574` `:119` `tabs.js:78` `window.js:114,125` `loop.js:153` `events.js:61` `tools/index.js:152,166` 均对上），膨胀的只是汇总统计——结论成立，规模比它说的小。
+影响：T-33 / T-39 / B1 / T-34 / T-35 这一串真机 bug 的老家都在这一层，再改动概率与改动难度同时最高，却零断言守护。
+建议：分三步，**建议顺序 ② → ① → ③**。② `turnRecord.js`（usage 累加 / 剪 THINKING / 单一 save 对象）—— T-34、T-35、B1 三条已登记 bug 全落在同一段 save 代码上，先抽出记录构造可让它们共用一个入口（注意 T-35 与 B1 已要求「闭包捕获 sessionId + 只 patch title」，抽出来正好一次做对）；① `targetState.js`（pin / focusedTabId，三条 advisory 文案变纯函数返回值）；③ `createToolContext()` 固定形状，`tabs.js:78` 随之简化。三步均为「搬出去 + 补断言」，不改落盘格式、不碰任何 ADR。
+状态：已清（2026-10-05）——② turnRecord.js（usage 累加 / 剪 THINKING / 单一 save 对象）已落，npm test 354 pass；① targetState.js（三条 advisory 文案变纯函数返回值 + 首捕 pin/去重追加）已落，npm test 359 pass；③ 不再做整体工厂化：`createAgentRuntime` 里的 toolCtx 仍内联，但它唯一的双形态接口 `ctx.pins` 已钉成只收 getter（tabs.js:78 兼容分支删掉、传错形状直接 error 观察值），tabs.test.js 夹具本就按 getter 传，未做 `createToolContext()` 工厂——当前 getter 惰性语义（deps.editor ref、targetTab 快照）与闭包生命周期强耦合，抽工厂搬的是语义不是代码，收益留证待收益出现再做。
 
 ### B 区已清
 
