@@ -701,23 +701,30 @@ export function createAgentRuntime(deps) {
 
         // LLM 标题：只在首轮结束后生成一次，失败静默回退到消息前缀。
         // fire-and-forget，不拖住 send 的返回。
+        //
+        // 这个 then 要几秒后才跑，期间用户可能已经点了「新建会话」或发出了第二轮，
+        // 所以两件事都不能用「那一刻」的外层状态（backlog T-35 + B1）：
+        //  ① id 在**发起时**捕获 —— 拿 resolve 时的 currentSessionId（可能已是 null）
+        //     当 id，会落出 agent_session_null 幽灵会话并写进索引；
+        //  ② 只 patch title 一个字段 —— 整记录 save 会把首轮 events 快照盖到第二轮上。
         if (isFirstTurn) {
+          const titleSessionId = currentSessionId;
           generateTitleAsync(config, userText, events)
             .then(async (title) => {
-              if (!title || !sessionStore) return;
-              await sessionStore.save({
-                id: currentSessionId,
-                workflowId: getWorkflowId(),
-                status: 'active',
-                createdAt: createdAt || Date.now(),
-                lastAccessedAt: Date.now(),
-                events,
-                pins,
-                focusedTabId,
-                usage,
-                title,
-              });
-              agentLog('title.saved', { sessionId: currentSessionId });
+              if (!title || !sessionStore || !titleSessionId) return;
+              const patched = await sessionStore.patchTitle(
+                titleSessionId,
+                title
+              );
+              if (!patched) {
+                // 会话在生成期间被删：放弃，patchTitle 不会替它造记录
+                agentLog('title.skip', {
+                  sessionId: titleSessionId,
+                  reason: 'session-gone',
+                });
+                return;
+              }
+              agentLog('title.saved', { sessionId: titleSessionId });
               if (deps.onSessionsChanged) deps.onSessionsChanged();
             })
             .catch((err) => {

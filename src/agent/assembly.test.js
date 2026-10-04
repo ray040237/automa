@@ -1,5 +1,6 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { installGlobals } from './__stubs__/globals';
 
 installGlobals();
@@ -628,4 +629,58 @@ describe('配置读写往返（走 credentialUtil）', () => {
     assert.equal(r.ok, false);
     assert.match(r.errors.join(), /baseUrl/);
   });
+});
+
+/**
+ * T-35 + B1 接线守卫：标题回写是几秒之后才跑的 fire-and-forget 回调，
+ * 它不能再用「resolve 那一刻」的外层状态 —— 那时用户可能已经点了新建会话
+ * （currentSessionId 变 null → 落出 agent_session_null 幽灵会话），也可能
+ * 已经发出了第二轮（整记录 save 把首轮 events 快照盖回去）。
+ *
+ * generateTitleAsync 直接吃模块级 streamChat、不吃 deps 注入，本仓没有能把
+ * 这条回调跑到 resolve 的测试基建 —— 所以退而钉住源码接线（同 T-02 的做法）：
+ * id 在发起时捕获、回写走 patchTitle、then 里不许再出现拿外层 id 的整记录 save。
+ */
+test('T-35/B1 接线守卫：标题回写在发起时捕获 id，且只 patch title', () => {
+  const src = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+
+  const thenAt = src.indexOf('.then(async (title) => {');
+  assert.ok(thenAt > 0, '回写回调还在吗');
+  assert.equal(
+    src.indexOf('.then(async (title) => {', thenAt + 1),
+    -1,
+    '标题回写回调应该只有一处'
+  );
+
+  const captureAt = src.lastIndexOf(
+    'const titleSessionId = currentSessionId;',
+    thenAt
+  );
+  assert.ok(captureAt > 0, 'id 必须在发起标题请求前捕获一次');
+
+  const callAt = src.indexOf(
+    'generateTitleAsync(config, userText, events)',
+    captureAt
+  );
+  assert.ok(
+    callAt > captureAt && callAt < thenAt,
+    '顺序必须是「捕获 id → 发起请求」—— 拿 resolve 时的 currentSessionId 会读到用户刚切走后的 null'
+  );
+
+  const catchAt = src.indexOf('.catch((err) => {', thenAt);
+  const block = src.slice(thenAt, catchAt > thenAt ? catchAt : thenAt + 800);
+
+  assert.match(
+    block,
+    /patchTitle\(\s*titleSessionId/,
+    '必须走 patchTitle，只改标题这一个字段'
+  );
+  assert.ok(
+    !/id:\s*currentSessionId/.test(block),
+    'then 里不许再拿 resolve 时的 currentSessionId 当 id —— 那正是 agent_session_null 的来源'
+  );
+  assert.ok(
+    !/\b(events|pins|focusedTabId|usage),/.test(block),
+    'then 里不许把首轮快照整记录写回 —— 会盖掉第二轮 events（B1）'
+  );
 });

@@ -137,6 +137,24 @@ export function createSessionStore(io) {
     await io.set(SESSION_INDEX_KEY, list);
   }
 
+  const loadRec = async (id) =>
+    id ? (await io.get(sessionStorageKey(id))) || null : null;
+
+  // 写串行：save / remove / patchTitle 共用一条写链。
+  // 没有它，patchTitle 的「读 → 改 → 写」会和另一轮的 save 交错 —— 它把读到的旧
+  // 快照原样写回，刚落盘的第二轮 events 又被盖回第一轮，B1 换个窗口复发。串行之
+  // 后这个窗口不存在：后一个写一定在前一个写收尾之后才开始。
+  // tail 无论成败都放行给下一个写，否则一次写失败会永久卡死后续所有落盘。
+  let writeTail = Promise.resolve();
+  function serialized(fn) {
+    const run = writeTail.then(fn);
+    writeTail = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  }
+
   return {
     /**
      * 索引列表，lastAccessedAt 降序。
@@ -157,8 +175,7 @@ export function createSessionStore(io) {
      * @param {string} id
      */
     async load(id) {
-      if (!id) return null;
-      return (await io.get(sessionStorageKey(id))) || null;
+      return loadRec(id);
     },
 
     /**
@@ -166,23 +183,61 @@ export function createSessionStore(io) {
      * @param {Object} session
      */
     async save(session) {
-      const clean = {
-        ...session,
-        events: cropToTurns(session.events || []),
-        title: session.title || titleFromEvents(session.events),
-        lastAccessedAt: session.lastAccessedAt || Date.now(),
-      };
+      return serialized(async () => {
+        const clean = {
+          ...session,
+          events: cropToTurns(session.events || []),
+          title: session.title || titleFromEvents(session.events),
+          lastAccessedAt: session.lastAccessedAt || Date.now(),
+        };
 
-      await io.set(sessionStorageKey(clean.id), clean);
+        await io.set(sessionStorageKey(clean.id), clean);
 
-      const index = await readIndex();
-      const entry = indexEntryFromSession(clean);
-      const idx = index.findIndex((e) => e.id === clean.id);
-      if (idx === -1) index.push(entry);
-      else index[idx] = entry;
-      await writeIndex(index);
+        const index = await readIndex();
+        const entry = indexEntryFromSession(clean);
+        const idx = index.findIndex((e) => e.id === clean.id);
+        if (idx === -1) index.push(entry);
+        else index[idx] = entry;
+        await writeIndex(index);
 
-      return clean;
+        return clean;
+      });
+    },
+
+    /**
+     * 只回写标题这一个字段：events / pins / usage / 时间一律原样保留。
+     *
+     * 标题回写的专用通道（backlog T-35 + B1）。以前的两个坑，形状是同一个 ——
+     * 「在几秒之后才跑的回调里，拿那一刻的状态去写当时的快照」：
+     *  ① id 由调用方在**发起时**捕获后传进来，本方法对空 id 直接返回 null、绝不
+     *     兜底造键，否则就会落出 agent_session_null 这种幽灵记录；
+     *  ② 不整记录 save —— 首轮 events 快照会盖到第二轮上。
+     *
+     * @param {string} id 发起标题请求时的会话 id（不是「此刻的当前会话」）
+     * @param {string} title LLM 生成的标题
+     * @returns {Promise<Object|null>} 写完的记录；id/title 为空或会话已删 → null
+     */
+    async patchTitle(id, title) {
+      if (!id || !title) return null;
+
+      return serialized(async () => {
+        const rec = await loadRec(id);
+        // 标题生成期间会话被删：放弃，不为了给标题找个去处而把它复活
+        if (!rec) return null;
+
+        const clean = { ...rec, title };
+        await io.set(sessionStorageKey(id), clean);
+
+        // 索引只改 title 字段（索引条目本就不带 events，无覆盖风险）
+        const index = await readIndex();
+        const at = index.findIndex((e) => e.id === id);
+        if (at !== -1) {
+          index[at] = { ...index[at], title };
+          await writeIndex(index);
+        }
+
+        return clean;
+      });
     },
 
     /**
@@ -190,10 +245,12 @@ export function createSessionStore(io) {
      * @param {string} id
      */
     async remove(id) {
-      const removed = await this.load(id);
-      await io.remove(sessionStorageKey(id));
-      await writeIndex((await readIndex()).filter((e) => e.id !== id));
-      return removed;
+      return serialized(async () => {
+        const removed = await loadRec(id);
+        await io.remove(sessionStorageKey(id));
+        await writeIndex((await readIndex()).filter((e) => e.id !== id));
+        return removed;
+      });
     },
   };
 }

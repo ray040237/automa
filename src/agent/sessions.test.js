@@ -7,6 +7,7 @@ import {
   cropToTurns,
   indexEntryFromSession,
   sessionOptionLabel,
+  sessionStorageKey,
   titleFromEvents,
 } from './sessions';
 import { AGENT_EVENTS } from './events';
@@ -228,4 +229,136 @@ test('remove 同时清掉索引与本体', async () => {
   assert.ok(removed, '返回被删的本体');
   assert.equal(await store.load('s1'), null);
   assert.equal((await store.listIndex()).length, 0);
+});
+
+/* ---------------- 标题回写通道 patchTitle（backlog T-35 + B1） ---------------- */
+
+test('patchTitle 只改标题这一个字段，别的一律原样', async () => {
+  const io = memoryIO();
+  const store = createSessionStore(io);
+
+  await store.save({
+    id: 's1',
+    workflowId: 'wf1',
+    status: 'active',
+    createdAt: 1,
+    lastAccessedAt: 222,
+    events: [
+      userMsg('帮我抓列表'),
+      delta('好'),
+      userMsg('第二轮'),
+      delta('嗯'),
+    ],
+    pins: [{ tabId: 7 }],
+    focusedTabId: 7,
+    usage: { input: 10, output: 20 },
+  });
+  const before = JSON.parse(JSON.stringify(await store.load('s1')));
+
+  const patched = await store.patchTitle('s1', 'LLM 生成的标题');
+  const after = JSON.parse(JSON.stringify(await store.load('s1')));
+
+  assert.deepEqual(
+    after,
+    { ...before, title: 'LLM 生成的标题' },
+    '除 title 外一个字段都不许动 —— 整记录 save 会把首轮 events 快照盖到第二轮上（B1）'
+  );
+  assert.equal(patched.title, 'LLM 生成的标题');
+  assert.equal(
+    after.lastAccessedAt,
+    before.lastAccessedAt,
+    '回写标题不算一次访问，不能顺手把会话顶到列表最前'
+  );
+
+  const idx = (await store.listIndex('wf1'))[0];
+  assert.equal(
+    idx.title,
+    'LLM 生成的标题',
+    '索引里的标题要跟着换，否则下拉还是旧的'
+  );
+  assert.ok(!('events' in idx), '索引条目仍然不带 events');
+});
+
+test('patchTitle 对空 id / 已删会话返回 null，绝不落出幽灵记录', async () => {
+  const io = memoryIO();
+  const store = createSessionStore(io);
+
+  assert.equal(await store.patchTitle(null, 'x'), null, 'id 为空必须拒绝');
+  assert.equal(await store.patchTitle(undefined, 'x'), null);
+  assert.equal(await store.patchTitle('s1', ''), null, '标题为空没有可写的');
+  assert.equal(await store.patchTitle('missing', 'x'), null, '会话已删就放弃');
+
+  const keys = [...io.data.keys()];
+  assert.ok(
+    !keys.some((k) => k.includes('null')),
+    `不许出现幽灵键，实际键：${keys}`
+  );
+  const index = io.data.get(SESSION_INDEX_KEY) || [];
+  assert.ok(
+    !index.some((e) => e.id === 'null' || e.id == null),
+    '索引里不许有 id 为 null 的条目 —— 用户会看到一个点进去是空的会话'
+  );
+  assert.equal(
+    await store.load('s1'),
+    null,
+    '不存在的会话不能因为一次标题回写被复活'
+  );
+  assert.ok(
+    !io.data.has(sessionStorageKey('missing')),
+    '更不许凭空造出一条只有标题的半截记录'
+  );
+});
+
+test('patchTitle 与并发的第二轮 save 串行：回写不把 events 盖回第一轮', async () => {
+  const data = new Map();
+  let armed = false;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+
+  // 读拿到「这一刻」的快照后卡住，给第二轮 save 腾出一个确定的落盘窗口
+  const io = {
+    data,
+    get: async (k) => {
+      if (!armed) return data.get(k);
+      armed = false;
+      const snapshot = data.get(k);
+      await gate;
+      return snapshot;
+    },
+    set: async (k, v) => data.set(k, v),
+    remove: async (k) => data.delete(k),
+  };
+
+  const store = createSessionStore(io);
+  const turn1 = [userMsg('帮我抓列表'), delta('好')];
+  await store.save({
+    id: 's1',
+    workflowId: 'wf1',
+    createdAt: 1,
+    lastAccessedAt: 1,
+    events: turn1,
+  });
+
+  armed = true;
+  const patching = store.patchTitle('s1', 'LLM 生成的标题');
+  const turn2 = store.save({
+    id: 's1',
+    workflowId: 'wf1',
+    createdAt: 1,
+    lastAccessedAt: 2,
+    events: [...turn1, userMsg('第二轮'), delta('嗯')],
+  });
+  release();
+
+  const [patched] = await Promise.all([patching, turn2]);
+  assert.equal(patched.title, 'LLM 生成的标题', '回写本身必须写成');
+
+  const rec = await store.load('s1');
+  assert.equal(
+    rec.events.length,
+    4,
+    '回写读到的是旧快照，若不与 save 串行就会把第二轮 events 盖回第一轮（B1 换窗口复发）'
+  );
 });

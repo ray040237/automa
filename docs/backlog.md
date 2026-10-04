@@ -186,17 +186,6 @@
 建议：`record()`（loop 的入史口）改为节流落盘——每步结束（tool-result 入史后）调一次 `saveSession`，或至少 debounce 1s；转中 save 失败不影响轮（catch 吞掉但 console.warn）。注意与 B1（标题回写覆盖事件）一起修：B1 的「整记录覆盖」风险在增加落盘频率后会更容易触发，两处应同批处理（patch 单字段或带事件数校验）。约 1-2 小时。
 状态：待审核
 
-### T-35 — 标题异步回写读到悬挂的 `currentSessionId`，落出 `agent_session_null` 幽灵会话进索引
-
-类型：bug
-登记日期：2026-10-04
-来源：同上 dump 分析，触发点 `src/agent/index.js:563-582`（title then 里读 `currentSessionId`）、B1 的姊妹症状
-现象：首轮 send 结束后 `generateTitleAsync` fire-and-forget，其 `.then` 里 `sessionStore.save({ id: currentSessionId, ... })` 读的是**resolve 时刻**的 `currentSessionId`。若用户在标题生成期间点了「新建会话」（`newSession()` 把 `currentSessionId` 置 null）或切走，晚到的标题保存就以 null id 落盘。dump 实证：存在键面值 `agent_session_null` 的完整会话记录（createdAt 与 `1d1c9a1e` 同为 12:50，title 是 LLM 生成的「注入JS获取书本列表并批量打开」），且索引里有 `id: "null"` 的条目——用户会看到一个切进去是空的幽灵会话。
-证据：**实测（dump）** —— `agent_session_null` 记录存在、`agent_session_index` 含 `{"id":"null"}` 条目；该记录 title 为生成文案而 events 仅为首轮快照，与「title then 回写」路径吻合（save 载荷字段与 `:567-578` 逐一对应）。
-影响：会话列表出现幽灵条目，点进去为空/错乱；与 B1 同根——回写用的是「当时的会话身份 + 当时的快照」而不是「请求时的」。
-建议：与 B1 合并修：title 回写改为「闭包捕获发起时的 sessionId + 只 patch title 字段（读改写仅 title 键）」，回写前校验 `currentSessionId === 捕获的 id`，不等则放弃。约 20 行。
-状态：待审核
-
 ### T-47 — agent-architecture.html 的代码快照与行号仍停在 T-29/T-30 之前，与页脚「行号均为实测引用」的承诺不符
 
 类型：bug（文档与代码不一致）
@@ -263,13 +252,6 @@
 
 每项一条：编号、来源、内容、为什么缓、重开的触发条件。修掉的项目移到本区文末「已清」。新增欠账先登记再排期，不允许「口头知道但不记录」。
 
-### B1 — 标题异步回写可能覆盖并发写入的会话事件 🚨 bug
-
-来源：`docs/pie-agent-borrowing-practices.md` A3（2026-10-03 对 pie 调研发现）。
-内容：`src/agent/index.js` 的 `generateTitleAsync().then` 用**整记录 save()** 回写，`events` 是首轮捕获的快照。若用户在标题生成期间发出第二轮，晚到的标题保存会用首轮事件覆盖第二轮已落盘的事件（最终一致性受损；标题本身正确）。
-缓决原因：窗口小（标题请求只发一次、通常秒回），需要用户在亚秒级内发第二轮才触发。
-重开条件：立即修——改为只 patch title 字段，或回写前校验会话 `lastAccessedAt`/事件数未增长。
-状态：**待修**。
 
 ### B2 — LLM 历史最后防线：空消息清洗 + 相邻同 role 修复
 
@@ -638,6 +620,18 @@
 结论：已按建议处理 —— 原 `:222` 的 agent-architecture.html 条目重编为 T-47，待审核区不再有重号；T-41 文案里「配合 T-40」恢复唯一指代。自 T-43 起编号连续（grep 复核无重复）。
 状态：已清（2026-10-05 完成）
 
+### T-35 — 标题异步回写读到悬挂的 `currentSessionId`，落出 `agent_session_null` 幽灵会话进索引
+
+类型：bug
+登记日期：2026-10-04
+来源：同上 dump 分析，触发点 `src/agent/index.js:563-582`（title then 里读 `currentSessionId`）、B1 的姊妹症状
+现象：首轮 send 结束后 `generateTitleAsync` fire-and-forget，其 `.then` 里 `sessionStore.save({ id: currentSessionId, ... })` 读的是**resolve 时刻**的 `currentSessionId`。若用户在标题生成期间点了「新建会话」（`newSession()` 把 `currentSessionId` 置 null）或切走，晚到的标题保存就以 null id 落盘。dump 实证：存在键面值 `agent_session_null` 的完整会话记录（createdAt 与 `1d1c9a1e` 同为 12:50，title 是 LLM 生成的「注入JS获取书本列表并批量打开」），且索引里有 `id: "null"` 的条目——用户会看到一个切进去是空的幽灵会话。
+证据：**实测（dump）** —— `agent_session_null` 记录存在、`agent_session_index` 含 `{"id":"null"}` 条目；该记录 title 为生成文案而 events 仅为首轮快照，与「title then 回写」路径吻合（save 载荷字段与 `:567-578` 逐一对应）。
+影响：会话列表出现幽灵条目，点进去为空/错乱；与 B1 同根——回写用的是「当时的会话身份 + 当时的快照」而不是「请求时的」。
+建议：与 B1 合并修：title 回写改为「闭包捕获发起时的 sessionId + 只 patch title 字段（读改写仅 title 键）」，回写前校验 `currentSessionId === 捕获的 id`，不等则放弃。约 20 行。
+结论：按建议落地 —— `index.js` 首轮标题回写改为 `sessionStore.patchTitle(titleSessionId, title)`：发起时闭包捕获 sessionId，resolve 后 ID 失效（会话被删/切走）时 `patchTitle` 返回 null 直接放弃并记 `title.skip` 日志，不再可能落出 `agent_session_null`；`patchTitle` 只读改写 title 键、不动 events/pins/usage/lastAccessedAt。`sessions.js` 的 save/remove/patchTitle 统一走串行队列（writeTail），堵住 B1 的整记录覆盖竞态：晚到的 patch 只能改 title，不会回退第二轮已落盘的 events。测试：sessions.test.js 新增 3 条（patchTitle 只改 title、null/空 title/缺会话不落盘、索引同步只改 title）+ assembly.test.js 新增源码接线守卫（捕获 id、patchTitle、then 块内不出现 `id: currentSessionId` 与整记录 save）。`npm test` 350 pass / 0 fail，目标文件 eslint 0 error。
+状态：已清（2026-10-05 完成）
+
 ### B 区已清
 
 - **B5 — 技术方案 Q4：确认卡会话级授权**（2026-10-04 完成）
@@ -647,4 +641,13 @@
   - **留给用户判断**：授权只绑会话、不绑目标页 —— 勾了之后换目标页（`onPickTab`）不会重新确认，而 §8.2 列的失效点里本来也没有它。要更保守就在 `onPickTab` 里一并清一次，本次未擅自加。
   - 实测：`npm test` 296 pass / 0 fail（原 282）、`npm run check:i18n` 通过、`npm run lint` 存量 1 error / 10 warning、`npm run build` exit=0。**复选框的实际交互未在真机点过**（需装扩展 + 配 key）。
 - （2026-10-03 code-review 的 14 项修复不在本登记范围，见 git 历史与 `docs/adr/0001~0003`）
+
+### B1 — 标题异步回写可能覆盖并发写入的会话事件 🚨 bug
+
+来源：`docs/pie-agent-borrowing-practices.md` A3（2026-10-03 对 pie 调研发现）。
+内容：`src/agent/index.js` 的 `generateTitleAsync().then` 用**整记录 save()** 回写，`events` 是首轮捕获的快照。若用户在标题生成期间发出第二轮，晚到的标题保存会用首轮事件覆盖第二轮已落盘的事件（最终一致性受损；标题本身正确）。
+缓决原因：窗口小（标题请求只发一次、通常秒回），需要用户在亚秒级内发第二轮才触发。
+重开条件：立即修——改为只 patch title 字段，或回写前校验会话 `lastAccessedAt`/事件数未增长。
+结论：按「重开条件」落地 —— 标题回写不再用整记录 `save()`，改为 `sessionStore.patchTitle(id, title)` 只 patch title 键；同时 `sessions.js` 把 save / remove / patchTitle 串进同一条串行队列，晚到的标题写入被排到第二轮收尾 save 之后执行，天然只覆盖 title、覆盖不了 events。并修掉同一处闭包读到悬挂 currentSessionId 的幽灵会话（T-35）。局限：串行队列只保证单运行时实例内有序，跨实例（多标签页同时开同一工作流）仍靠 lastAccessedAt 的最后写入获胜，本轮未引入锁。`npm test` 350 pass / 0 fail。
+状态：**已清（2026-10-05）**。
 
