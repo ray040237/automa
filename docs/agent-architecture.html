@@ -256,7 +256,7 @@
    │           └─▶ src/content/blocksHandler/handlerAgentReadPage.js（1360 行，读页实现）
    │
    └─ browser.runtime.sendMessage({type:'agent:run-js'|'agent:query'|'agent:highlight'})
-         └─▶ src/background/index.js:603/656/721  message.on('agent:run-js', …)
+         └─▶ src/background/index.js:576/629/694  message.on('agent:run-js', …)
                └─▶ runInPage → browser.scripting.executeScript({world:'MAIN'})</div>
 
 <h2 id="events"><span class="n">03</span>三层事件模型<span class="anchor">#events</span></h2>
@@ -308,8 +308,8 @@
                                 ▼                  ▼
                         用户看到的对话          发给模型的请求</div>
 
-<h4>12 种 agent 事件</h4>
-<pre><code><span class="cm">// src/agent/events.js:12-25</span>
+<h4>10 种 agent 事件</h4>
+<pre><code><span class="cm">// src/agent/events.js:12-23</span>
 <span class="kw">export const</span> <span class="fn">AGENT_EVENTS</span> = {
   <span class="str">START</span>:        <span class="str">'agent:start'</span>,
   <span class="str">USER_MESSAGE</span>: <span class="str">'agent:user-message'</span>,
@@ -317,8 +317,6 @@
   <span class="str">THINKING</span>:      <span class="str">'agent:thinking'</span>,
   <span class="str">TOOL_CALL</span>:     <span class="str">'agent:tool-call'</span>,
   <span class="str">TOOL_RESULT</span>:   <span class="str">'agent:tool-result'</span>,
-  <span class="str">CONFIRM</span>:       <span class="str">'agent:confirm'</span>,
-  <span class="str">PROPOSAL</span>:      <span class="str">'agent:proposal'</span>,
   <span class="str">TARGET_TAB</span>:    <span class="str">'agent:target-tab'</span>,
   <span class="str">SYSTEM_NOTICE</span>: <span class="str">'agent:system-notice'</span>,
   <span class="str">DONE</span>:          <span class="str">'agent:done'</span>,
@@ -421,7 +419,7 @@
   且会话按 workflowId 强隔离会让用户在 A 工作流问过的问题到 B 工作流就「消失」。
 </blockquote>
 
-<p><strong>关键点</strong>：工具组过滤是<strong>连提示词一起裁剪</strong>的 — loop.js:453 把过滤后的列表喂给 <code>promptFacts</code>，所以<strong>模型完全不知道有画布工具存在</strong>，loop 与工具实现零改动。</p>
+<p><strong>关键点</strong>：工具组过滤是<strong>连提示词一起裁剪</strong>的 — loop.js:314 把过滤后的列表喂给 <code>promptFacts</code>，所以<strong>模型完全不知道有画布工具存在</strong>，loop 与工具实现零改动。</p>
 <pre><code><span class="cm">// src/agent/index.js:429-432</span>
     <span class="cm">// 按宿主声明过滤工具组：page/context/tab 通用，canvas 只在有画布的宿主启用</span>
     <span class="kw">const</span> activeTools = enabledGroups
@@ -605,7 +603,7 @@
 </div>
 
 <div class="step">
-  <div class="hd"><div class="stepnum">3</div><div class="steptitle">loop.send：建历史 + 12 步 ReAct 循环</div><div class="stepmeta">loop.js:261-485</div></div>
+  <div class="hd"><div class="stepnum">3</div><div class="steptitle">loop.send：建历史 + 12 步 ReAct 循环</div><div class="stepmeta">loop.js:298-559</div></div>
   <div class="bd">
     <h4>3a — 准备：事实表 + 系统提示 + 三条起步事件</h4>
 <pre><code>controller = <span class="kw">new</span> <span class="fn">AbortController</span>();
@@ -639,7 +637,7 @@ history.<span class="fn">push</span>(userEv); <span class="fn">emit</span>(userE
 
 <span class="kw">const</span> tabEv = { kind: AGENT_EVENTS.TARGET_TAB, tab: targetTab };
 history.<span class="fn">push</span>(tabEv); <span class="fn">emit</span>(tabEv);</code></pre>
-    <p class="srcline">src/agent/loop.js:267-317</p>
+    <p class="srcline">src/agent/loop.js:306-315</p>
     <p><code>buildUserMessage</code>（prompt.js:237-259）把用户这条消息拆成三段 untrusted 块再拼起来：</p>
 <pre><code><span class="kw">if</span> (targetTab &amp;&amp; targetTab.url) parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str">'untrusted_tab_metadata'</span>, <span class="str">'url='</span>+targetTab.url, {url, title}));
 <span class="kw">if</span> (workflowContext)        parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str">'untrusted_workflow_context'</span>, workflowContext));
@@ -649,7 +647,7 @@ parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str
     <p><strong>系统提示里装了什么</strong>（prompt.js）：角色定义、强项（读真实 DOM 的优势）、可用工具清单（按 class 分组列出）、目标页与标签页规则、Automa 领域知识（JS 块运行时函数 + 关键语义、模板函数、模板引用语法、工作流结构要点）、输出约定、安全声明。<strong>其中「Automa 领域知识」是动态取自项目常量的</strong> — 不硬编码拷贝，块增删或改名时自动跟上。</p>
 
     <h4>3b — 每一步的五件事（顺序不能反）</h4>
-    <p><code>for (let step = 0; step &lt; MAX_STEPS; step += 1)</code>，<code>MAX_STEPS = 12</code>（loop.js:30）。每一步依次做：</p>
+    <p><code>for (let step = 0; step &lt; MAX_STEPS; step += 1)</code>，<code>MAX_STEPS = 12</code>（loop.js:33）。每一步依次做：</p>
 <pre><code><span class="kw">for</span> (<span class="kw">let</span> step = 0; step &lt; MAX_STEPS; step += 1) {
 
   <span class="cm">// ① 每步开工前的环境预检（tab 还在吗？origin 漂了吗？页面变了吗？）</span>
@@ -693,9 +691,9 @@ parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str
 
   <span class="kw">for</span> (<span class="kw">const</span> chunk <span class="kw">of</span> pendingToolCalls) { <span class="cm">/* …见第 4 步… */</span> }
 }</code></pre>
-    <p class="srcline">src/agent/loop.js:329-475（节选）</p>
+    <p class="srcline">src/agent/loop.js:368-513（节选）</p>
     <blockquote class="note">
-      <strong>为什么 ③ 的顺序不能反？</strong>注释写得很清楚（loop.js:368-369）：<em>「先把旧的页面快照换成占位符（省 90% 的那一刀），再按预算裁剪 —— 先裁的话，12 步单轮整组法一条都丢不掉，等于没裁。」</em>
+      <strong>为什么 ③ 的顺序不能反？</strong>注释写得很清楚（loop.js:408-409）：<em>「先把旧的页面快照换成占位符（省 90% 的那一刀），再按预算裁剪 —— 先裁的话，12 步单轮整组法一条都丢不掉，等于没裁。」</em>
     </blockquote>
 
     <h4>3c — 消费 provider 事件</h4>
@@ -712,14 +710,14 @@ parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str
   <span class="kw">if</span> (ev.kind === AGENT_EVENTS.DONE) <span class="kw">continue</span>;  <span class="cm">// 收尾统一发</span>
   history.<span class="fn">push</span>(ev); <span class="fn">emit</span>(ev);
 }</code></pre>
-    <p class="srcline">src/agent/loop.js:386-411</p>
-    <p><strong>中止的处理很讲究</strong>（loop.js:412-420）：用户点停止后 catch 住 abort，置 <code>stopped = true</code> 并 break，<strong>已说的半截话也留在历史里</strong>；其余异常原样上抛给宿主。</p>
-    <p>参数 JSON 解析失败也不炸整轮（loop.js:447-463）— 转成 error 观察值让模型重新发起调用，因为「把 SyntaxError 抛上去只会炸掉整轮对话」。</p>
+    <p class="srcline">src/agent/loop.js:408-414</p>
+    <p><strong>中止的处理很讲究</strong>（loop.js:460-464）：用户点停止后 catch 住 abort，置 <code>stopped = true</code> 并 break，<strong>已说的半截话也留在历史里</strong>；其余异常原样上抛给宿主。</p>
+    <p>参数 JSON 解析失败也不炸整轮（loop.js:506-513）— 转成 error 观察值让模型重新发起调用，因为「把 SyntaxError 抛上去只会炸掉整轮对话」。</p>
   </div>
 </div>
 
 <div class="step">
-  <div class="hd"><div class="stepnum">4</div><div class="steptitle">工具执行 + 确认门 + 观察值</div><div class="stepmeta">loop.js:158-211</div></div>
+  <div class="hd"><div class="stepnum">4</div><div class="steptitle">工具执行 + 确认门 + 观察值</div><div class="stepmeta">loop.js:109-165</div></div>
   <div class="bd">
 <pre><code><span class="kw">async function</span> <span class="fn">executeCall</span>({ call, tools, requestConfirmation, toolCtx }) {
   <span class="kw">const</span> tool = tools.<span class="fn">find</span>((t) =&gt; t.name === call.name);
@@ -750,13 +748,13 @@ parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str
     <span class="kw">return</span> [runningEv, <span class="fn">failEvent</span>(call, TOOL_STATUS.ERROR, <span class="fn">toolError</span>(err).message)];
   }
 }</code></pre>
-    <p class="srcline">src/agent/loop.js:158-211</p>
+    <p class="srcline">src/agent/loop.js:109-165</p>
     <p><strong>「错误即观察值」</strong>：工具抛错不终止循环，转成 <code>status:'error'</code> 的观察值喂回模型让它自纠。这是 ReAct 模式的核心韧性来源。</p>
 
     <h4>观察值的三步加工</h4>
     <div class="flowline">工具返回值 {payload, status?, ...meta}
       │
-      ├─① normalizeToolOutcome（loop.js:95-111）解开信封
+      ├─① normalizeToolOutcome（loop.js:109）解开信封
       │     把 {status, payload} 拆开，meta（pageFingerprint 等）上提到事件顶层
       │     理由：不解的话「63 字符的正文」会被整个 JSON.stringify 成 100 字符的 JSON 包裹（实测 +59%）；
       │     内层 status:'error' 更是走不到错误分支，模型看到的是机器话而不是一句人话
@@ -811,13 +809,13 @@ parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str
 </div>
 
 <div class="step">
-  <div class="hd"><div class="stepnum">6</div><div class="steptitle">收尾事件 DONE 与渲染</div><div class="stepmeta">loop.js:477-485</div></div>
+  <div class="hd"><div class="stepnum">6</div><div class="steptitle">收尾事件 DONE 与渲染</div><div class="stepmeta">loop.js:537-549</div></div>
   <div class="bd">
 <pre><code><span class="kw">const</span> doneEv = { kind: AGENT_EVENTS.DONE, stopped,
   aborted: controller.signal.aborted, usage };
 <span class="fn">emit</span>(doneEv);
 <span class="kw">return</span> doneEv;</code></pre>
-    <p class="srcline">src/agent/loop.js:477-485</p>
+    <p class="srcline">src/agent/loop.js:537-549</p>
     <p>注意 DONE <strong>不在 history 里</strong>（只是 emit），所以不会被下一轮 <code>buildWireMessages</code> 当成一轮边界 flush 掉。</p>
     <p>同时 <code>AgentTranscript.vue</code> 的 <code>pendingHint</code> 逻辑会决定要不要显示「思考中…」：<strong>只在工具跑完、下一个字还没来的空窗期显示</strong>，流式吐字时反而隐藏 —「那一行只会打扰阅读」。</p>
     <p>然后 <code>finally</code> 释放标签页锁、<code>agent.busy = false</code>、发送按钮从「停止」变回「发送」、刷新会话列表。</p>
@@ -1165,12 +1163,12 @@ canvas: {
 <table>
 <tr><th>消息 type</th><th>方向</th><th>通道</th><th>处理端</th></tr>
 <tr><td><code>agent:read-page</code></td><td>扩展页 → content</td><td><code>browser.tabs.sendMessage</code></td><td><span class="path">src/content/index.js:323</span> → <code>blocksHandler().agentReadPage()</code></td></tr>
-<tr><td><code>agent:run-js</code></td><td>扩展页 → background</td><td><code>browser.runtime.sendMessage</code></td><td><span class="path">src/background/index.js:603</span></td></tr>
-<tr><td><code>agent:query</code></td><td>扩展页 → background</td><td><code>browser.runtime.sendMessage</code></td><td><span class="path">src/background/index.js:656</span></td></tr>
-<tr><td><code>agent:highlight</code></td><td>扩展页 → background</td><td><code>browser.runtime.sendMessage</code></td><td><span class="path">src/background/index.js:721</span></td></tr>
+<tr><td><code>agent:run-js</code></td><td>扩展页 → background</td><td><code>browser.runtime.sendMessage</code></td><td><span class="path">src/background/index.js:576</span></td></tr>
+<tr><td><code>agent:query</code></td><td>扩展页 → background</td><td><code>browser.runtime.sendMessage</code></td><td><span class="path">src/background/index.js:629</span></td></tr>
+<tr><td><code>agent:highlight</code></td><td>扩展页 → background</td><td><code>browser.runtime.sendMessage</code></td><td><span class="path">src/background/index.js:694</span></td></tr>
 </table>
 
-<p><strong>每条通道的发送侧都有硬超时，且外层必须大于内层</strong>（否则正常回程会被误杀）：页内求值 <strong>10s</strong> → <code>runInPage</code> 的 <code>executeScript</code> <strong>15s</strong>（<code>AGENT_PAGE_TIMEOUT_MS</code>，<code>src/background/index.js:556</code>）与 <code>tabs.sendMessage</code> <strong>15s</strong>（<code>TAB_CHANNEL_TIMEOUT_MS</code>）→ 发送侧 <code>toBackground</code> 整个 round trip <strong>20s</strong>（<code>BACKGROUND_CHANNEL_TIMEOUT_MS</code>，<code>src/agent/index.js:181</code>）。超时一律<strong>不 reject</strong>，而是回 <code>{ok:false, error}</code> 的人话观察值。</p>
+<p><strong>每条通道的发送侧都有硬超时，且外层必须大于内层</strong>（否则正常回程会被误杀）：页内求值 <strong>10s</strong> → <code>runInPage</code> 的 <code>executeScript</code> <strong>15s</strong>（<code>AGENT_PAGE_TIMEOUT_MS</code>，<code>src/background/index.js:528</code>）与 <code>tabs.sendMessage</code> <strong>15s</strong>（<code>TAB_CHANNEL_TIMEOUT_MS</code>）→ 发送侧 <code>toBackground</code> 整个 round trip <strong>20s</strong>（<code>BACKGROUND_CHANNEL_TIMEOUT_MS</code>，<code>src/agent/index.js:202</code>）。超时一律<strong>不 reject</strong>，而是回 <code>{ok:false, error}</code> 的人话观察值。</p>
 <p>发送侧那层是 <strong>T-39（2026-10-05）</strong>加的：前面几层的兜底都在 background / content 里，<strong>回程丢失</strong>（SW 被浏览器回收、响应回不到发送方）时它们一个都救不了 —— <code>browser.runtime.sendMessage</code> 的 promise 永不 settle，真机日志里只留下一条 <code>channel.send</code> 之后既无 reply 也无 fail，整轮 agent 就挂死在那里。20s 之后发送方自己兜底，并把「这一步是否已执行<strong>无法确认</strong>」如实告诉模型，让它先 <code>read_page</code> 看现状再决定，而不是原地重调（<code>channel.reply</code>/<code>channel.fail</code> 附耗时 <code>ms</code>，超时单独打 <code>channel.timeout</code> 便于事后定位）。</p>
 
 <h3>读页：为什么必须走 tabs.sendMessage</h3>
@@ -1191,43 +1189,46 @@ canvas: {
 <p>还有几处很有价值的细节：<strong>导航/页脚折叠</strong>（实测 60 条交互索引里 53 条是侧栏）、<strong>行内强调标记识别</strong>（<code>&lt;strong&gt;/&lt;em&gt;/&lt;b&gt;/&lt;i&gt;/&lt;small&gt;/&lt;mark&gt;</code> 兄弟组是句子里的强调，不是数据项）、<strong>抽不出字段的结构组不输出</strong>（否则给模型「有列表」的错觉）、<strong>相对选择器</strong>（字段永远是项的后代，给项内子路径模型才能直接拼进「循环元素」块）。</p>
 
 <h3>写类工具的 MAIN world 执行</h3>
-<pre><code><span class="cm">// src/background/index.js:579-592</span>
+<pre><code><span class="cm">// src/background/index.js:544-569</span>
 <span class="kw">async function</span> <span class="fn">runInPage</span>(tabId, func, args = []) {
-  <span class="kw">try</span> {
+  <span class="kw">const</span> exec = (<span class="kw">async</span> () =&gt; {
     <span class="kw">const</span> res = <span class="kw">await</span> browser.scripting.<span class="fn">executeScript</span>({
       target: { tabId },
-      world: <span class="str">'MAIN'</span>,     <span class="cm">// ← 页面主世界，能访问页面自己的 JS 全局</span>
+      world: <span class="str">'MAIN'</span>,   <span class="cm">// ← 页面主世界，能访问页面自己的 JS 全局</span>
       func, args,
     });
-    <span class="kw">return</span> res?.[0]?.result;
-  } <span class="kw">catch</span> (err) {
-    <span class="kw">return</span> { ok: <span class="kw">false</span>, error: err?.message || <span class="fn">String</span>(err) };
-  }
+    <span class="kw">return</span> res &amp;&amp; res[0] &amp;&amp; res[0].result;
+  })();
+  <span class="cm">// T-30 硬兜底：executeScript 永不 settle 时 15s 给观察值，不让轮挂死</span>
+  <span class="kw">return</span> <span class="fn">raceTimeout</span>(exec, AGENT_PAGE_TIMEOUT_MS, {
+    ok: <span class="kw">false</span>, error: <span class="str">`页面执行超时（15s）…`</span>,
+  }).<span class="fn">catch</span>((err) =&gt; ({ ok: <span class="kw">false</span>, error: err?.message || <span class="fn">String</span>(err) }));
 }</code></pre>
-<pre><code><span class="cm">// src/background/index.js:538-555 —— test_js 的核心</span>
-<span class="kw">async function</span> <span class="fn">agentEvalInPage</span>(src) {
-  <span class="kw">let</span> value;
+<pre><code><span class="cm">// src/agent/agentEvalInPage.js:36-101 —— test_js 的核心（T-29 抽出、T-38 双形式求值）</span>
+<span class="kw">export async function</span> <span class="fn">agentEvalInPage</span>(src) {
+  <span class="kw">let</span> fn, usedStatementForm = <span class="kw">false</span>, value;
+  <span class="cm">// T-38：表达式优先编译；表达式 SyntaxError 才回退语句形式 async 包装。</span>
+  <span class="cm">// 回退只在编译期发生（代码从未执行），运行期错误绝不回退——不双跑副作用。</span>
   <span class="kw">try</span> {
-    <span class="kw">const</span> fn = <span class="kw">new</span> <span class="fn">Function</span>(<span class="str">'return ('</span> + src + <span class="str">')'</span>);
-    <span class="cm">// async 求值 + 10s 超时：模型经常写出返回 Promise 的代码（忘了 await），</span>
-    <span class="cm">// 同步求值会把结果变成 "[object Promise]"；fetch 之类也确实需要异步</span>
-    value = <span class="kw">await</span> <span class="fn">Promise.race</span>([
-      <span class="fn">Promise.resolve</span>(fn()()),
-      <span class="kw">new</span> <span class="fn">Promise</span>((_, reject) =&gt; {
-        setTimeout(() =&gt; <span class="fn">reject</span>(<span class="kw">new</span> <span class="fn">Error</span>(<span class="str">'执行超时（10s）'</span>)), <span class="num">10000</span>);
-      }),
-    ]);
-  } <span class="kw">catch</span> (err) { <span class="kw">return</span> { ok: <span class="kw">false</span>, error: '代码执行出错：' + (err?.message || err) }; }
-
-  <span class="kw">if</span> (value === undefined) <span class="kw">return</span> { ok: <span class="kw">true</span>, value: <span class="str">'undefined'</span>, json: <span class="kw">true</span> };
-
-  <span class="cm">// 模型给的代码可能返回 DOM 节点、循环引用或函数，直接回传会序列化失败</span>
+    fn = <span class="kw">new</span> <span class="fn">Function</span>(<span class="str">`return (function(){ return (${src}) })`</span>);
+  } <span class="kw">catch</span> {
+    fn = <span class="kw">new</span> <span class="fn">Function</span>(<span class="str">`return (async function(){\n${src}\n})`</span>);
+    usedStatementForm = <span class="kw">true</span>;
+  }
+  value = <span class="kw">await</span> <span class="fn">Promise.race</span>([
+    <span class="fn">Promise.resolve</span>(fn()()),
+    <span class="kw">new</span> <span class="fn">Promise</span>((_, reject) =&gt;
+      setTimeout(() =&gt; <span class="fn">reject</span>(<span class="kw">new</span> <span class="fn">Error</span>(<span class="str">'执行超时（10s）'</span>)), <span class="num">10000</span>)),
+  ]);
+  <span class="kw">if</span> (value === <span class="kw">undefined</span> &amp;&amp; usedStatementForm)
+    <span class="kw">return</span> { ok: <span class="kw">true</span>, value: <span class="str">'undefined（语句形式跑完但没 return——末尾加 return 或包 IIFE）'</span>, json: <span class="kw">false</span> };
   <span class="kw">try</span> { <span class="kw">const</span> json = <span class="fn">JSON.stringify</span>(value);
         <span class="kw">if</span> (json !== <span class="kw">undefined</span>) <span class="kw">return</span> { ok: <span class="kw">true</span>, value: json, json: <span class="kw">true</span> };
-  } <span class="kw">catch</span> (e) {}
+  } <span class="kw">catch</span> {}
   <span class="kw">return</span> { ok: <span class="kw">true</span>, value: <span class="fn">String</span>(value), json: <span class="kw">false</span> };
-}</code></pre>
-<p><strong>为什么另开一条 agent 专用通道？</strong>（background/index.js:514-523）已有的 <code>script:execute-callback</code> handler 两条路径都只返回 true/false，执行结果被整个丢掉了 — 而 agent 要的恰恰就是结果。老逻辑被工作流引擎依赖，改它的返回值可能波及既有流程。</p>
+}
+</code></pre>
+<p><strong>为什么另开一条 agent 专用通道？</strong>（src/background/index.js:864）已有的 <code>script:execute-callback</code> handler 两条路径都只返回 true/false，执行结果被整个丢掉了 — 而 agent 要的恰恰就是结果。老逻辑被工作流引擎依赖，改它的返回值可能波及既有流程。</p>
 <p><code>agentHighlightInPage</code> 同模式：只改 presentation（outline + outlineOffset），<strong>不动 DOM 结构、不动任何数据</strong>，且上一轮没撤干净会先撤掉（免得描边叠成一片），所以能被安全地反复调用。</p>
 
 <h3>扩展权限</h3>
@@ -1372,7 +1373,7 @@ REJECTED: Unhandled Background Error: TypeError: Cannot read properties of undef
 
 <hr>
 <p style="color:var(--dim);font-size:.84rem">
-  本文档基于 <code>D:\project\automa</code> 工作区当前代码逐文件阅读整理，代码行号与函数签名均为实测引用。<br>
+  本文档基于 <code>D:\project\automa</code> 工作区当前代码逐文件阅读整理，代码行号与函数签名均为实测引用（最后核对：2026-10-05，T-47）。<br>
   相关文档：<code>CONTEXT.md</code>（术语表）· <code>docs/adr/0001~0003</code>（架构决策）· <code>docs/backlog.md</code>（登记表：T 编号会话捕获 + B 编号助手欠账）
 </p>
 

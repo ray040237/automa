@@ -175,28 +175,6 @@
 建议：`npx eslint --fix src/lib/dayjs.js`，约 1 行改动、1 分钟即可转绿。**另 10 个 warning（`no-console` 等，散布在 `[id].vue`、`App.vue` 等处）建议单独处理**，别和这条混在一起，否则改动面失控。
 状态：待审核
 
-### T-47 — agent-architecture.html 的代码快照与行号仍停在 T-29/T-30 之前，与页脚「行号均为实测引用」的承诺不符
-
-类型：bug（文档与代码不一致）
-登记日期：2026-10-05
-来源：会话 2026-10-05 更新该文档（T-02/T-39 的结论要写进去）时逐块核对源码发现，触发点 `docs/agent-architecture.html` §13「写类工具的 MAIN world 执行」的两个代码块。
-现象：§13 里 `runInPage` 标着 `// src/background/index.js:579-592` 且是裸 `try/catch`；`agentEvalInPage` 标着 `// src/background/index.js:538-555 —— test_js 的核心`，代码是 `new Function('return (' + src + ')')` + `fn()()` —— 正是 T-29 判死的那个必炸形状。
-证据：**实测** —— `grep -n "function runInPage|function agentEvalInPage|raceTimeout" src/background/index.js` 输出：`12: import { agentEvalInPage, raceTimeout } from '@/agent/agentEvalInPage'`、`528: const AGENT_PAGE_TIMEOUT_MS = 15000`、`544: async function runInPage(...)`、`556: return raceTimeout(exec, AGENT_PAGE_TIMEOUT_MS, {`。即 `runInPage` 行号与实现都已变（T-30 套了超时），`agentEvalInPage` **根本不在这个文件里**（T-29 抽成了 `src/agent/agentEvalInPage.js`，且 T-38 改成双形式求值）。另有行号未复核：§13 通道表的处理端（`background/index.js:603/656/721`）、§06 流程分解（`loop.js:158-211` 等）。**文档页脚自称「代码行号与函数签名均为实测引用」，现状与这句不符。**
-影响：这份 117KB 的 html 是本仓的架构入口（AGENTS.md 与 CONTEXT.md 都指向它）。照着它读代码的人（或 agent）会去找一个不存在的函数位置，或把已修掉的 `fn()()` 当成现状 —— 与「把有实测依据的偏离纠正回旧方案」同类的风险，方向相反。
-建议：**只复核不重写** —— 按 §13 → §06 → §08 顺序逐个代码块对源码核行号与函数体，更新后在页脚加一行「最后核对于 YYYY-MM-DD」。整篇重写风险大于收益（文档 117KB，且大部分段落仍准确）。本条已在同一轮更新过 §07（确认门快照、四条路径表、T-02/T-27 状态）与 §13（超时分层说明），**剩下的代码快照未动，等审核**。代价约 1 小时。
-状态：待审核
-
-### T-44 — 「这条观察值是不是页面快照」有三处互不知情的判定，靠字符串对齐
-
-类型：改进
-登记日期：2026-10-05
-来源：会话 2026-10-05 架构评审候选 2，触发点 `src/agent/window.js:114`（文本前缀嗅探）
-现象：同一个判断有三份独立实现，彼此靠**字符串**而非数据对齐：`loop.js:153` 用 `tool.group === 'page'`（工具对象只在执行那一刻存在）；`events.js:61` 用 `outcome.wrap === 'untrusted_page_content'`（上一层塞进来的字符串）；`window.js:114/125` 用 `m.content.trimStart().startsWith('<untrusted_page_content')`（已混进 content 的文本前缀）。第三处的存在是被持久化逼出来的 —— `TOOL_RESULT` 落盘再读回时事件里只剩 `name`，工具对象连同它的 group 一起没了。
-证据：**静态** —— `grep -rn "group === 'page'" src` 仅 `loop.js:153` 一处；`untrusted_page_content` 在实现里的命中点为 `untrusted.js:28`、`events.js:61-62`、`loop.js:153-154`、`window.js:114,125`。持久化代价：**实测** `sessions.js:6` 记录会话以整条 `{events}` 落 IndexedDB，`cropToTurns` / `titleFromEvents` 直接吃这个数组，所以改字段形状必然要一条旧记录 fallback。测试侧 `window.test.js:21` 手工拼 `'<untrusted_page_content>\n' + t` 构造输入，是在复述实现细节。
-影响：新增一类「也该被陈旧压缩」的观察值要同时改 4~5 处（group→wrap 映射、wrap 白名单、`window.js` 前缀嗅探、`untrusted.js` 标签登记、`prompt.js` 措辞），漏改任何一处不报错、只静默失效。**排期注意：本条与 T-34 / T-35 / B1 争同一批文件**（都要改会话记录的写入路径），评审未注意这层耦合，排在它们之后做更省事。
-建议：把「观察值形态」提升成跟着事件走的一等字段（工具定义上声明一次，或在 `tools/index.js` 做一处 `group → observationKind` 映射作为唯一真源），`loop` 挂到 `TOOL_RESULT` 上、`wire` 写进消息 meta 而不混进 content、`elideStaleObservations` 按 meta 判定。`untrusted_*` 标签仍是安全边界，继续按 `untrusted.js` 登记 —— 两件事职责不同，不要合并。必须同批定下旧会话记录的 fallback 规则（按 `name` 判定或一律当 value），不能「跑不出来再说」。
-状态：待审核
-
 ### T-46 — `buildWireMessages → elide → budget` 的顺序知识留在调用方
 
 类型：改进
@@ -643,6 +621,29 @@
 建议：`record()`（loop 的入史口）改为节流落盘——每步结束（tool-result 入史后）调一次 `saveSession`，或至少 debounce 1s；转中 save 失败不影响轮（catch 吞掉但 console.warn）。注意与 B1（标题回写覆盖事件）一起修：B1 的「整记录覆盖」风险在增加落盘频率后会更容易触发，两处应同批处理（patch 单字段或带事件数校验）。约 1-2 小时。
 结论：按建议落地 —— index.js 的 send 接上 createCheckpointSaver（turnRecord.js）：USER_MESSAGE / TOOL_RESULT / DONE 入史后 debounce(1s) 落一次；转中 save 失败走 agentLog.warn(checkpoint.save.fail) 不打断轮；收尾前 checkpoints.cancel() 再写最终记录（迟到的旧快照不能覆盖最终态），finally 兜底再取消一次。首轮 send 起 currentSessionId 即创建——卡死轮留下的在途 events 现在能落盘供诊断（usage 字段在途记上一轮，收尾整份覆盖，形状一致）。turnRecord.test.js 新增 3 条（debounce 合并 / flush / cancel / save 失败只 warn），assembly.test.js 新增源码接线守卫（cancel 必须先于最终 save）。`npm test` 363 pass / 0 fail，相关文件 eslint 0 error。
 状态：已清（2026-10-05 完成）
+
+### T-47 — agent-architecture.html 的代码快照与行号仍停在 T-29/T-30 之前，与页脚「行号均为实测引用」的承诺不符
+
+类型：bug（文档与代码不一致）
+登记日期：2026-10-05
+来源：会话 2026-10-05 更新该文档（T-02/T-39 的结论要写进去）时逐块核对源码发现，触发点 `docs/agent-architecture.html` §13「写类工具的 MAIN world 执行」的两个代码块。
+现象：§13 里 `runInPage` 标着 `// src/background/index.js:579-592` 且是裸 `try/catch`；`agentEvalInPage` 标着 `// src/background/index.js:538-555 —— test_js 的核心`，代码是 `new Function('return (' + src + ')')` + `fn()()` —— 正是 T-29 判死的那个必炸形状。
+证据：**实测** —— `grep -n "function runInPage|function agentEvalInPage|raceTimeout" src/background/index.js` 输出：`12: import { agentEvalInPage, raceTimeout } from '@/agent/agentEvalInPage'`、`528: const AGENT_PAGE_TIMEOUT_MS = 15000`、`544: async function runInPage(...)`、`556: return raceTimeout(exec, AGENT_PAGE_TIMEOUT_MS, {`。即 `runInPage` 行号与实现都已变（T-30 套了超时），`agentEvalInPage` **根本不在这个文件里**（T-29 抽成了 `src/agent/agentEvalInPage.js`，且 T-38 改成双形式求值）。另有行号未复核：§13 通道表的处理端（`background/index.js:603/656/721`）、§06 流程分解（`loop.js:158-211` 等）。**文档页脚自称「代码行号与函数签名均为实测引用」，现状与这句不符。**
+影响：这份 117KB 的 html 是本仓的架构入口（AGENTS.md 与 CONTEXT.md 都指向它）。照着它读代码的人（或 agent）会去找一个不存在的函数位置，或把已修掉的 `fn()()` 当成现状 —— 与「把有实测依据的偏离纠正回旧方案」同类的风险，方向相反。
+建议：**只复核不重写** —— 按 §13 → §06 → §08 顺序逐个代码块对源码核行号与函数体，更新后在页脚加一行「最后核对于 YYYY-MM-DD」。整篇重写风险大于收益（文档 117KB，且大部分段落仍准确）。本条已在同一轮更新过 §07（确认门快照、四条路径表、T-02/T-27 状态）与 §13（超时分层说明），**剩下的代码快照未动，等审核**。代价约 1 小时。
+结论：按「只复核不重写」落地 —— §13 两个快照整体替换为当前实现（`runInPage` 544-569 含 raceTimeout 15s、`agentEvalInPage` 36-101 双形式编译链并标注「T-29 抽出、T-38 双形式求值」、`script:execute-callback` handler 514-523→864）；§06 行号逐条对源码重核（promptFacts 守卫 306-315、MAX_STEPS 33、elide→budget 顺序注释 408-409、预算管线 408-414、abort 停轮 460-464、SyntaxError 降级 506-513、normalizeToolOutcome 109、DONE 537-549）；§03 事件表同步（10 种、删 CONFIRM/PROPOSAL 两行、events.js:12-23）；通道表 603/656/721→576/629/694、AGENT_PAGE_TIMEOUT_MS 556→528、BACKGROUND_CHANNEL_TIMEOUT_MS :181→:202；`handlerAgentReadPage.js` 1360 行核实属实（wc -l）；页脚加「最后核对：2026-10-05，T-47」。狗咬尾巴式的风险点：文档里已删事件表与代码事件表的不一致，靠 eventContract.test.js（T-41）兜住。
+状态：已清（2026-10-05 完成）
+
+### T-44 — 「这条观察值是不是页面快照」有三处互不知情的判定，靠字符串对齐
+
+类型：改进
+登记日期：2026-10-05
+来源：会话 2026-10-05 架构评审候选 2，触发点 `src/agent/window.js:114`（文本前缀嗅探）
+现象：同一个判断有三份独立实现，彼此靠**字符串**而非数据对齐：`loop.js:153` 用 `tool.group === 'page'`（工具对象只在执行那一刻存在）；`events.js:61` 用 `outcome.wrap === 'untrusted_page_content'`（上一层塞进来的字符串）；`window.js:114/125` 用 `m.content.trimStart().startsWith('<untrusted_page_content')`（已混进 content 的文本前缀）。第三处的存在是被持久化逼出来的 —— `TOOL_RESULT` 落盘再读回时事件里只剩 `name`，工具对象连同它的 group 一起没了。
+证据：**静态** —— `grep -rn "group === 'page'" src` 仅 `loop.js:153` 一处；`untrusted_page_content` 在实现里的命中点为 `untrusted.js:28`、`events.js:61-62`、`loop.js:153-154`、`window.js:114,125`。持久化代价：**实测** `sessions.js:6` 记录会话以整条 `{events}` 落 IndexedDB，`cropToTurns` / `titleFromEvents` 直接吃这个数组，所以改字段形状必然要一条旧记录 fallback。测试侧 `window.test.js:21` 手工拼 `'<untrusted_page_content>\n' + t` 构造输入，是在复述实现细节。
+影响：新增一类「也该被陈旧压缩」的观察值要同时改 4~5 处（group→wrap 映射、wrap 白名单、`window.js` 前缀嗅探、`untrusted.js` 标签登记、`prompt.js` 措辞），漏改任何一处不报错、只静默失效。**排期注意：本条与 T-34 / T-35 / B1 争同一批文件**（都要改会话记录的写入路径），评审未注意这层耦合，排在它们之后做更省事。
+建议：把「观察值形态」提升成跟着事件走的一等字段（工具定义上声明一次，或在 `tools/index.js` 做一处 `group → observationKind` 映射作为唯一真源），`loop` 挂到 `TOOL_RESULT` 上、`wire` 写进消息 meta 而不混进 content、`elideStaleObservations` 按 meta 判定。`untrusted_*` 标签仍是安全边界，继续按 `untrusted.js` 登记 —— 两件事职责不同，不要合并。必须同批定下旧会话记录的 fallback 规则（按 `name` 判定或一律当 value），不能「跑不出来再说」。
+状态：待审核
 
 ### B 区已清
 
