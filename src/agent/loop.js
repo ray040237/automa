@@ -24,6 +24,7 @@ import {
   TOOL_STATUS,
   errorEvent,
   toolError,
+  wrapObservation,
 } from './events';
 import { toAgentTools } from './tools/adapter';
 import { noopLog } from './log';
@@ -167,7 +168,7 @@ export function createAgent(deps) {
     // 迁移期若未注入，工具路径会因缺它而抛错 —— 这正是想要的行为（见 T-55）。
     wrapUntrusted,
     buildUserMessage = ({ userText }) => userText,
-    // eslint-disable-next-line no-unused-vars
+    // 票 04：写类/未知工具的确认门，默认拒绝（得显式调用方放行才过）
     requestConfirmation = async () => ({ approved: false }),
     toolCtx = {},
     // eslint-disable-next-line no-unused-vars
@@ -199,6 +200,17 @@ export function createAgent(deps) {
   /** 本轮中止控制器 */
   let controller = null;
 
+  /**
+   * 被确认门拒绝的工具调用：toolCallId -> 拒绝原因。
+   *
+   * 为什么需要这张表：pi 的 beforeToolCall 里返回 {block:true} 后，循环会
+   * 产出一个 isError:true 的 tool_execution_end。而 UI 契约要求「用户拒绝」
+   * 是独立于「工具失败」的状态（TOOL_STATUS.REJECTED）—— 同一个 isError:true
+   * 无法区分两者。所以在前置钩子里记下「这是拒绝」，映射层收到对应的
+   * tool_execution_end 时把状态改成 REJECTED。
+   */
+  const rejectedBy = new Map();
+
   const record = (ev) => {
     history.push(ev);
   };
@@ -222,6 +234,28 @@ export function createAgent(deps) {
       return;
     }
     if (!mapped || mapped.emitsNothing) return;
+
+    // 确认门拒绝的工具调用：把pi 产出的「失败」重映射成「已拒绝」。
+    // 语义不同、UI 展示不同（REJECTED 不显示成红色错误），且pi 不会告诉我们
+    // 「这是用户拒的」—— 只有我们的钩子知道。
+    if (
+      event.type === 'tool_execution_end' &&
+      rejectedBy.has(event.toolCallId)
+    ) {
+      const reason = rejectedBy.get(event.toolCallId);
+      rejectedBy.delete(event.toolCallId);
+      mapped = {
+        ...mapped,
+        status: TOOL_STATUS.REJECTED,
+        // pi 在被拦的工具结果里已放了原因文本；我们的事件契约要求
+        // observation 是包好的观察值，保持同一份内容（UI 与 history 共用）。
+        observation: wrapObservation({
+          status: TOOL_STATUS.REJECTED,
+          message: reason || '用户拒绝了此次操作',
+        }),
+      };
+    }
+
     record(mapped);
     if (currentEmit) currentEmit(mapped);
   }
@@ -233,11 +267,42 @@ export function createAgent(deps) {
       initialState: {
         systemPrompt,
         model,
-        // 票 02/03：工具经适配层注册，包装在适配层做（必须是单块）。
-        // 票 04 在 beforeToolCall 接确认门。
+        // 票 02：工具经适配层注册。票 04：确认门在 beforeToolCall 接。
         tools: toAgentTools(tools, { toolCtx, wrapUntrusted }),
       },
       streamFn,
+      beforeToolCall: async ({ toolCall, args }) => {
+        // ADR 0002 的闸：class 决定要不要用户裁决。read 免确认，
+        // write 与**未知工具**一律要确认。未知工具按「保守方向倒」处理 ——
+        // 不认识的一律当需要确认，宁可多问一次，也不把写操作变成免确认。
+        const tool = tools.find((t) => t.name === toolCall.name);
+        if (tool && tool.class === 'read') return undefined;
+
+        log('tool.confirm.ask', { name: toolCall.name, args });
+        let approved = false;
+        try {
+          const answer = await requestConfirmation({
+            name: toolCall.name,
+            args,
+          });
+          approved = Boolean(answer && answer.approved);
+        } catch {
+          // 确认门本身的错误按「拒绝」处理，不让放行
+          approved = false;
+        }
+        log('tool.confirm.answer', { name: toolCall.name, approved });
+
+        if (!approved) {
+          rejectedBy.set(
+            toolCall.id,
+            tool
+              ? `用户在「${tool.class}」类工具「${tool.name}」上拒绝`
+              : '未知工具'
+          );
+          return { block: true, reason: '用户拒绝了此次操作' };
+        }
+        return undefined;
+      },
     });
     piAgent.subscribe(handlePiEvent);
     return piAgent;

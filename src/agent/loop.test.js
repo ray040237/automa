@@ -1,7 +1,7 @@
 ﻿import test from 'node:test';
 import assert from 'node:assert';
 import { createAgent, fromPiEvent } from './loop';
-import { AGENT_EVENTS } from './events';
+import { AGENT_EVENTS, TOOL_STATUS } from './events';
 import { wrapUntrusted } from './untrusted';
 
 /**
@@ -98,8 +98,7 @@ function assistant(content, extra = {}) {
   };
 }
 
-// 工具夹具：工具本体与注册表在 src/agent/tools/，票 02 才把它们接给 pi。
-// 这里只留「最小可用样本」—— 票 02 的形状断言直接复用它，不重复造。
+// 票 02：工具定义夹具。票 04 接确认门时需要一只 write 类工具。
 const echoTool = {
   name: 'echo',
   label: '回显参数',
@@ -108,6 +107,16 @@ const echoTool = {
   description: '回显参数',
   parameters: { type: 'object', properties: {} },
   execute: async (args) => ({ payload: 'echo:' + JSON.stringify(args) }),
+};
+
+const writeTool = {
+  name: 'do_write',
+  label: '写东西',
+  class: 'write',
+  group: 'page',
+  description: '写页面',
+  parameters: { type: 'object', properties: { code: { type: 'string' } } },
+  execute: async () => '已写入',
 };
 
 const testModel = {
@@ -557,8 +566,107 @@ test('页面类工具结果用 untrusted_page_content 包装', async () => {
 
 // ── 票 04：确认门 ──
 
-test.skip('写类工具必须经过确认', async () => {}, { skip: '票 04' });
-test.skip('用户拒绝时工具绝不能执行', async () => {}, { skip: '票 04' });
+test('写类工具执行前必须经过确认，read 类免确认', async () => {
+  const asked = [];
+  const h = makeAgent(
+    [toolCallStream('do_write', { code: '1 + 1' }), piStream('好的')],
+    {
+      tools: [writeTool],
+      requestConfirmation: async (req) => {
+        asked.push(req);
+        return { approved: true };
+      },
+    }
+  );
+  await send(h);
+  assert.equal(asked.length, 1, '写类工具必须问');
+  assert.equal(asked[0].name, 'do_write');
+  assert.deepEqual(
+    asked[0].args,
+    { code: '1 + 1' },
+    'confirmation 必须带完整 args'
+  );
+});
+
+test('read 类工具不走确认门', async () => {
+  let asked = 0;
+  const h = makeAgent([toolCallStream('echo', { a: 1 }), piStream('好的')], {
+    requestConfirmation: async () => {
+      asked += 1;
+      return { approved: true };
+    },
+  });
+  await send(h);
+  assert.equal(asked, 0, 'read 类工具免确认');
+});
+
+test('用户拒绝时工具绝不执行，事件标记 REJECTED', async () => {
+  let executed = false;
+  const tool = {
+    ...writeTool,
+    execute: async () => {
+      executed = true;
+      return 'should not run';
+    },
+  };
+  const h = makeAgent([toolCallStream('do_write', {}), piStream('停止')], {
+    tools: [tool],
+    requestConfirmation: async () => ({ approved: false }),
+  });
+  await send(h);
+
+  assert.equal(executed, false, '被拒绝的工具绝不能执行');
+  const endEvents = h.events.filter(
+    (e) =>
+      e.kind === AGENT_EVENTS.TOOL_RESULT && e.status !== TOOL_STATUS.RUNNING
+  );
+  assert.ok(endEvents.length >= 1, '拒绝也要产出 TOOL_RESULT 事件');
+  const rejected = endEvents.find((e) => e.status === TOOL_STATUS.REJECTED);
+  assert.ok(
+    rejected,
+    `应有 REJECTED 状态的事件，实际 ${JSON.stringify(
+      endEvents.map((e) => e.status)
+    )}`
+  );
+  assert.ok(
+    rejected.observation.includes('工具未成功执行'),
+    'REJECTED 事件的观察值应是「未成功执行」而非裸原因'
+  );
+});
+
+test('被拒绝的工具，模型看到的是原因而不是「执行成功」', async () => {
+  const h = makeAgent([toolCallStream('do_write', {}), piStream('停止')], {
+    tools: [writeTool],
+    requestConfirmation: async () => ({ approved: false }),
+  });
+  await send(h);
+  // 第二轮的 transcript 里必须有 toolResult，且 isError 为真、内容是拒绝原因
+  const second = h.streamFn.calls[1].context.messages;
+  const toolMsg = second.find((m) => m.role === 'toolResult');
+  assert.ok(toolMsg, '拒绝也要给模型一个 toolResult');
+  assert.equal(toolMsg.isError, true, '拒绝是失败结果，不能让模型以为成功了');
+});
+
+test('start 事件早于被拦的工具的 end —— UI 必须按 end.isError 判定，不能按 start', async () => {
+  // 实测 pi 先于 beforeToolCall 发 tool_execution_start。被拒绝的工具同样
+  // 会先发 start，所以 UI 若只看 start 就会显示「正在执行」—— 这是
+  // 已知行为，靠这条测试钉住，未来 pi 改了就会红。
+  const h = makeAgent([toolCallStream('do_write', {}), piStream('停止')], {
+    tools: [writeTool],
+    requestConfirmation: async () => ({ approved: false }),
+  });
+  await send(h);
+
+  const toolEvents = h.events.filter(
+    (e) => e.kind === AGENT_EVENTS.TOOL_RESULT
+  );
+  assert.equal(toolEvents[0].status, TOOL_STATUS.RUNNING, 'start 先到');
+  assert.equal(
+    toolEvents[toolEvents.length - 1].status,
+    TOOL_STATUS.REJECTED,
+    'end 才带出真实结论'
+  );
+});
 
 test.skip('旧的页面快照在下一步被压成占位符（elide）', async () => {}, {
   skip: 'B9 第 1 项：本次不做 token 预算，陈旧快照剔除随之不做',
