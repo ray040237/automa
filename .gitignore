@@ -45,8 +45,16 @@ getPassKey.js
 .agent-test/agent-live.mjs
 .agent-test/repro-*.mjs
 
+# 临时草稿：agent 通道里的即兴脚本与取证文件，问题结了就没用了
+# （有用的是结论 —— 结论应当登记进 docs/backlog.md，不是留在这）
+/.scratch/
+
 # 第三方参考仓库，自带 .git、1.6 万个文件，只在本机读
 /pie-ai-agent
+
+# pi monorepo（第三方，只读参考）。运行时依赖走 npm 装 @earendil-works/pi-*，
+# 这份本地 clone 仅用于查阅源码与跑 PoC，见 docs/adr/0004。
+/pi
 
 # WorkBuddy 工作台：本机会话记录与技能，不该随项目代码走
 /.workbuddy

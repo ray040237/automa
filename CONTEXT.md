@@ -2,6 +2,26 @@
 
 本文件只收本项目特有、易混淆的概念与**禁用词**。不含实现细节——实现问题去读对应模块顶部的"为什么"注释。
 
+## 文档地图
+
+改代码前按这个顺序找依据，**不要按文件名猜**：
+
+| 想找什么 | 去哪 | 状态 |
+| --- | --- | --- |
+| 术语、禁用词、三层事件的区别 | 本文件 + `AGENTS.md` | **现行** |
+| 有意的架构决策与被拒备选 | `docs/adr/0001~0004` | **现行** |
+| 工程流水线的配置（issue tracker / triage 标签 / 领域文档） | `docs/agents/` | **现行** |
+| 模块怎么协作、事件在哪产生 | `docs/agent-architecture.html` | **现行**（页脚标最后核对日期） |
+| 现在该做什么 / 已知欠账 | `docs/backlog.md` | **现行**（只放未完成） |
+| 某个坑当初怎么被实测出来的 | `docs/backlog-done.md` | 档案，非待办 |
+| 领域知识事实表（prompt 的依据） | `docs/agent-assist-tech-design.md` §6.2 | 现行（该文其余章节已过时，顶部有状态头） |
+| `read_page` 的输出契约与分段预算 | `docs/agent-readpage-design.md` | 现行 |
+| 选择器引擎重构提案 | `docs/selector-engine-redesign.md` | 待审核，与助手无关 |
+
+已删除且不再保留的文档（git 可取回）：`agent-assist-rfc.md`（`4a573976`）、
+`agent-multi-session-plan.md`（`4a573976`）、`agent-readpage-trace.md` 与
+`agent-context-discussion-2026-10-04.md`（`a27f93de`）—— 均为实施前计划，已被 ADR 与实测取代。
+
 ## Agent 事件流(三层,绝不可混用)
 
 **provider 事件**:

@@ -13,7 +13,7 @@
 1. **`highlight_selector` 归 `write`(过确认门),偏离方案的 read 分类。**
    理由:它确实修改用户正在看的页面(描边 + 自动滚动)。"只是展示性改动"不构成免确认的理由——"模型每说一句就改一次你的页面"本身应当由用户点头;且确认卡上直接显示选择器,用户点「允许」恰好回答了"你说的是这个吗"。把它算成 read 是拿一致性换方便(见 highlight.js 顶部注释)。
 
-2. **`focus_tab` 归 `read`(免确认),偏离 multi-session plan §2.3 的 write 分类。**
+2. **`focus_tab` 归 `read`(免确认),偏离方案的 write 分类。**
    理由:它只改 agent 内部的目标页指针,不改用户浏览器的任何状态(不 activate、不导航),风险面与 query_elements 相同;过确认门会把跨页任务的确认次数翻倍而无信息增益。需要让**用户**看到某页时的行为(activate_tab)本版未实现,将来实现时归 `write`。
 
 3. `test_js`、`open_url`、`add_block`、`update_block` 维持 `write`;所有 read 类工具免确认——与方案一致,此处仅存档。

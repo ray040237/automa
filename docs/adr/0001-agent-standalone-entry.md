@@ -2,7 +2,7 @@
 
 日期:2026-10-03
 状态:已实施(未提交)
-关联:docs/agent-multi-session-plan.md §2.2、docs/agent-assist-tech-design.md(被部分取代)
+关联:docs/agent-assist-tech-design.md(被部分取代)
 
 ## 背景
 

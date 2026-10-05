@@ -1,18 +1,31 @@
 # 编辑器内嵌 Agent 技术方案
 
-| | |
-|---|---|
-| 状态 | **待评审** |
-| 输入 | `docs/agent-assist-rfc.md`（RFC 审阅结论见 §1） |
-| 分支 | `feature/offline` |
-| 目标 | 把 RFC 落成可实施的模块设计 / 接口签名 / 文件级任务分解 |
-| 日期 | 2026-10-02 |
+> **状态：部分已落地，部分已被后续决策取代。**
+> 本文是 2026-10-02 的**实施前**技术方案。助手已上线并经过多轮修正，文中**仍有价值的只有两块**：
+> **§1 的 M1–M9 代码事实修正**与 **§6.2 的领域知识事实表** —— 前者解释了为什么代码写成现在这样，
+> 后者已落地为 `src/agent/prompt.js` + `src/agent/facts.js`，抽 6 处核对至今准确。
+> 其余章节是**实施前的计划**，与现状不符，**不要照此实现**。已删除的章节与它们的替代真源：
+
+| 已删除章节 | 为什么作废 | 现在的真源 |
+|---|---|---|
+| §3.3 目录结构 | 列了 4 个从未存在的文件：`transcript.js`（已删）、`store.js`（从未存在）、`tools/workflow.js`（实为 `tools/canvas.js`）、`llm/index.js`（无此文件） | 直接看 `src/agent/` |
+| §3.5 事件契约 | 含 `agent:confirm` / `agent:proposal`，T-41 已作为零产出零消费的残留常量删除 | `src/agent/events.js` + `eventContract.test.js` |
+| §7.2 工具清单 | 列了从未实现的 `pick_element` / `connect_blocks`；漏了已上线的 `find_text` / `list_canvas` / `focus_tab` / `open_url`（现共 13 个） | `src/agent/tools/index.js` |
+| §9.1 UI 接线表 | 整段基于「编辑器内 agent tab」，ADR 0001 已撤除该入口 | `src/composable/agentHost.js` 与两个宿主的接线 |
+| §10 分阶段实施计划 | P0–P3 全部完成，阶段划分不再有指导意义 | 完成记录见 `docs/backlog-done.md` |
+| §11.2 引入 vitest 的建议 | 未采纳，实际用 `node --test`（`npm test`，364 个用例） | `package.json` scripts |
+
+另有两处**参数已变**，引用本文时注意：单轮步数上限 §3.4 的 `maxSteps=8` → 实际 `MAX_STEPS=12`（`src/agent/loop.js`）；§8.1 的 `UNTRUSTED_WRAPPER_TAGS` 从 6 个增至 7 个（多 `untrusted_system_notice`）。
+
+`docs/adr/0002`（工具确认门分级）与 `0003`（SSE 外部依赖）记录了对本文的**有意偏离**，那两份 ADR 才是这些点上的现行依据。
 
 ---
 
 ## 1. 对 RFC 的审阅结论
 
-RFC 的目标（G1–G6）、非目标（N1–N6）、分阶段计划（P0–P3）全部保留。本节只记录**与真实代码核对后的修正**与**RFC 未覆盖的缺口**。
+> RFC 原文（`docs/agent-assist-rfc.md`）已随过时文档删除，git `4a573976` 可取回。本节记录的是**与真实代码核对后的修正**，这部分独立于 RFC 原文仍然成立。
+
+RFC 的目标（G1–G6）、非目标（N1–N6）全部落地。本节只记录**与真实代码核对后的修正**与**RFC 未覆盖的缺口**。
 
 ### 1.1 必须修正（RFC 与代码不符）
 
@@ -133,46 +146,6 @@ export function isTargetable(tab) { /* http/https/file 且未 discarded */ }
 
 **依赖注入**：`deps.getTargetTab` 由面板提供，工具内**禁止**直接调 `getActiveTab()`。
 
-### 3.3 目录结构
-
-```
-src/agent/
-  index.js            createAgent(deps) -> { send, abort, getState }
-  loop.js             ReAct 循环（不 import 任何 Pinia / vue-flow / 具体工具）
-  events.js           事件常量 + 观察值包装（untrusted 标签 + 8K 截断）
-  transcript.js       事件 → DisplayMessage 折叠（移植 Pie fold.ts）
-  prompt.js           系统提示构建（只拼包内常量）
-  window.js           历史裁剪 + token 预算 + 陈旧观察值剔除
-  untrusted.js        防注入转义（移植 Pie untrusted-wrappers.ts，去类型）
-  tab.js              resolveTargetTab / isTargetable（§3.2）
-  config.js           provider/baseUrl/model/apiKey 读写（§8.3）
-  llm/
-    index.js          streamChat({messages, tools, config, signal})
-    sse.js            readSSELines（移植 Pie sse.ts，47 行）
-    providers/
-      openai-compat.js  Chat Completions 流式 + tool_calls 聚合 + 方言 quirk
-  tools/
-    index.js          注册表 + read/write 分类 + 构建期校验 + JSON Schema
-    page.js           read_page / query_elements / highlight_selector / pick_element / test_js
-    context.js        get_variables / get_block_schema
-    workflow.js       add_block / update_block / connect_blocks（P2）
-
-src/content/blocksHandler/
-  handlerAgentReadPage.js        （P0，read_page）
-  handlerAgentQueryElements.js   （P1，query_elements）
-
-src/components/newtab/workflow/agent/
-  AgentPanel.vue         主容器：header / transcript / composer / 配置入口
-  AgentTranscript.vue    事件折叠渲染
-  AgentToolStep.vue      工具步骤卡（可折叠，显示入参与观察值）
-  AgentConfirmCard.vue   确认卡（test_js / 会话授权，Q4）
-  AgentProposalCard.vue  写操作 proposal 卡 + diff + 应用/拒绝（P2）
-  AgentTargetTab.vue     目标页选择器（§3.2）
-  AgentConfigModal.vue   provider / baseUrl / model / apiKey / contextWindow
-```
-
-新增代码全部落在 `@` alias 覆盖范围内 → **不改 webpack 配置**，agent 随 newtab bundle 打包。
-
 ### 3.4 依赖注入契约
 
 ```js
@@ -192,7 +165,7 @@ export function createAgent({
   // —— 可覆盖（测试用）——
   llm,                  // { streamChat }，默认走 src/agent/llm
   tools,                // Tool[]，默认 tools/index.js 注册表
-  maxSteps = 8,         // 单轮 ReAct 上限（成本护栏；Pie 用软上限 30，本场景任务更短）
+  maxSteps = 8,         // 单轮 ReAct 上限 —— ⚠️ 实际实现是 MAX_STEPS = 12（src/agent/loop.js）
   now, nanoid,          // 可注入以便断言
 }) => ({ send(text), abort(), getState() })
 ```
@@ -201,7 +174,13 @@ export function createAgent({
 
 ### 3.5 事件契约
 
-在 RFC §4.4 基础上补 3 类（加粗为新增）：
+> ⚠️ **本节的 `agent:confirm` 与 `agent:proposal` 两类事件已删除**（T-41：零产出零消费的残留常量，
+> 确认门走 `deps.requestConfirmation` 直接 resolve，不经事件流）。且 `transcript.js` 这个折叠层也不存在了 ——
+> 展示折叠现在内联在各宿主的渲染层（`AgentTranscript.vue`）。
+> **现行事件契约见 `src/agent/events.js` 的 `AGENT_EVENTS`，并由 `eventContract.test.js` 钉死**（10 种）。
+> 术语与三层事件的区别见根目录 `CONTEXT.md`。
+
+原始提案（保留供追溯）：
 
 ```
 agent:start        { runId, targetTabId }
@@ -209,14 +188,12 @@ agent:text-delta   { runId, text }
 agent:thinking     { runId, text }              // provider 返回 reasoning_content 时
 agent:tool-call    { runId, step, name, args, status: 'pending' | 'running' }
 agent:tool-result  { runId, step, name, status: 'ok' | 'error' | 'rejected', observation }
-agent:confirm      { runId, step, confirmId, kind, title, body, allowSession }   ← 新增
-agent:proposal     { runId, step, proposalId, kind, payload, diff }              ← P2
-agent:target-tab   { tabId, title, url }                                        ← 新增
+agent:confirm      { runId, step, confirmId, kind, title, body, allowSession }   ← 已删（T-41）
+agent:proposal     { runId, step, proposalId, kind, payload, diff }              ← 已删（T-41）
+agent:target-tab   { tabId, title, url }
 agent:done         { runId, summary, aborted: boolean }
-agent:error        { runId, kind: 'config' | 'network' | 'provider' | 'tool' | 'no-target-tab', message }
+agent:error        { runId, kind, message }     // kind 实际有 6 种，含 T-40 补的 internal
 ```
-
-UI 侧 `transcript.js` 把事件折叠为 `DisplayMessage[]`（角色：`user | assistant | agent-step | confirm | proposal`），同 `fold.ts` 的 `foldAgentStep` 语义：同一 `stepIndex` 的 call/result **原位替换**而非追加。
 
 ---
 
@@ -469,18 +446,24 @@ for (const name of KNOWN_TOOL_NAMES) {
 
 ### 7.2 十个工具的实现路径
 
+> ⚠️ **本节的工具清单已过时**：它列的 10 个工具里，`pick_element` 与 `connect_blocks` **从未实现**，
+> 而已上线的 `find_text` / `list_canvas` / `focus_tab` / `open_url` 没被列进来（现共 13 个）。
+> `highlight_selector` 的分类也在本表写错（此处的 `read`）—— ADR 0002 已把它归为 `write` 过确认门。
+> **现行清单与分类见 `src/agent/tools/index.js`**（`validateTools` 在模块加载期强制每个工具显式声明 `class`）。
+> 下表保留供追溯设计意图。
+
 | 工具 | 类 | 阶段 | 调用链（复用 / 新增） |
 |---|---|---|---|
 | `read_page` | read | **P0** | `ctx.getTargetTab()` → `browser.tabs.sendMessage(tabId, {isBlock:true, label:'agent-read-page', data:{detail, budget}}, {frameId:0})` → **新文件** `handlerAgentReadPage.js` |
 | `get_variables` | read | **P0** | newtab 直读：`dbStorage.variables.toArray()`（先例 `[id].vue:954`）+ `workflow.table \|\| workflow.dataColumns`（`:580-586`）+ `parseJSON(workflow.globalData)` |
 | `get_block_schema` | read | **P0** | newtab 直读：`getBlocks()`（`@/utils/getSharedData.js`，含 `@business` 自定义块） |
 | `query_elements` | read | P1 | `tabs.sendMessage(..., label:'agent-query-elements')` → **新文件** `handlerAgentQueryElements.js` → 复用 `queryElements()` / `getDocumentCtx()`（`src/content/handleSelector.js:12-58`） |
-| `highlight_selector` | read | P1 | 复用 `elementSelector.verifySelector(data, tab)`，**新增可选 `tab` 参数**（R-2）；1.7s 高亮遮罩是给用户看的，保留 |
-| `test_js` | write | P1 | `confirm()` → `MessageListener.sendMessage('agent:run-js', {target:{tabId, frameIds:[0]}, code, timeout}, 'background')` → **background 新增 handler**（§7.4） |
-| `pick_element` | read | P3 | 复用 `elementSelector.selectElement(name, tab)`，**新增可选 `tab` 参数**（R-2）；port 回的是 selector 字符串（`elementSelector/App.vue:374`），取消时 `Port closed` reject（`elementSelector.js:89-91`） |
-| `add_block` | write | P2 | 校验 → `propose()` → `editor.addNodes([...])` + `markDirty()`（§9.2） |
-| `update_block` | write | P2 | 校验 + editState 竞态守卫 → `propose()` → `node.data = {...node.data, ...patch}` + `markDirty()` |
-| `connect_blocks` | write | P2 | handle 校验 → `propose()` → `editor.addEdges([{id, source, target, sourceHandle, targetHandle, class}])` |
+| `highlight_selector` | ~~read~~ **write** | P1 | 复用 `elementSelector.verifySelector(data, tab)`，**新增可选 `tab` 参数**（R-2）；分类见 ADR 0002 |
+| `test_js` | write | P1 | `confirm()` → `MessageListener.sendMessage('agent:run-js', {target:{tabId, frameIds:[0]}, code, timeout}, 'background')` → **background 新增 handler**（§7.4；⚠️ 实现走的是裸 `browser.runtime.sendMessage`，不是 `MessageListener`，见 T-28） |
+| `pick_element` | read | P3 | **未实现** |
+| `add_block` | write | P2 | 校验 → `editor.addNodes([...])` + `onCanvasChanged()`（无 proposal 卡，ADR 0001 后写工具直接过确认门） |
+| `update_block` | write | P2 | 校验 + editState 竞态守卫 → `node.data = {...node.data, ...patch}` + `onCanvasChanged()` |
+| `connect_blocks` | write | P2 | **未实现**（现为 `list_canvas`，read 类） |
 
 ### 7.3 P0 三个工具的详细设计
 
@@ -690,7 +673,19 @@ message.on('agent:run-js', async ({ target, code, timeout = 10000 }) => { /* 见
 
 ## 9. 与编辑器集成
 
-### 9.1 UI 接线（Q1 = A 的精确改动点）
+### 9.1 UI 接线（原方案，已作废）
+
+> ⚠️ **本节整段作废**。它描述的是「在编辑器 `[id].vue` 内加一个 agent tab」，而 ADR 0001 撤除了该入口：
+> 助手改为**主面板标签页 `/workflows/agent` 单例**（`src/newtab/pages/Agent.vue` + `router.js:60`），
+> 会话全局化（`getWorkflowId: () => null`）。因此下表 9 项改动**一项都不存在**，`[id].vue` 里已无任何 agent 代码。
+>
+> 仍然成立的是**两个宿主的差异**（`CONTEXT.md` 的「宿主」条有当前版本）：
+> ① 独立助手页 —— 无画布，`enabledGroups: ['page','context','tab']`，canvas 组不注册；
+> ② 编辑器侧栏 —— 持有 vue-flow 句柄，canvas 组开放，会话按 `workflowId` 过滤。
+> 两者共用 `src/composable/agentHost.js` 的接线与 `AgentPanel.vue`。
+> 接线的真源是 `agentHost.js` 顶部的 `@param deps` 注释，不是本表。
+
+原表（保留供追溯）：
 
 全部改动集中在 `src/newtab/pages/workflows/[id].vue`：
 
@@ -828,9 +823,15 @@ markDirty();
 
 ---
 
-## 10. 分阶段实施计划
+## 10. 分阶段实施计划（已全部完成，留档）
 
-RFC 的 P0–P3 内容与交付判定**原样保留**，此处只拆到文件级任务 + 补验收细节。
+> ⚠️ **本节整段留档，不再是待办。** P0–P3 已全部落地，助手已上线。
+> 逐项的完成记录、实测数字与后续修正见 **`docs/backlog-done.md`**（44 条已清条目，含每条的实测证据）。
+> 计划本身与现状有多处不符（下表列的文件名与目录结构均已作废，见顶部状态头的对照表），
+> **保留它只是为了追溯「当初为什么这么排期」**，不要照此排期。
+>
+> 唯一还有约束力的是验收标准里那条**贯穿性红线**（G5，§8.4）：agent 能改内存画布，永不落库，
+> 保存由用户自己点。这条写在 `AGENTS.md` 与 `CONTEXT.md` 里，本文只是它最早的一次记录。
 
 ### P0 — agent 面板 + 三个读工具 + 生成预览（不落库、不试跑）
 
@@ -914,7 +915,7 @@ RFC 的 P0–P3 内容与交付判定**原样保留**，此处只拆到文件级
 
 ## 11. 测试与质量
 
-### 11.1 现状
+### 11.1 现状（当时的，已不成立）
 
 | 检查项 | 结论 | 证据 |
 |---|---|---|
@@ -923,34 +924,38 @@ RFC 的 P0–P3 内容与交付判定**原样保留**，此处只拆到文件级
 | i18n 守卫 | 有 | `npm run check:i18n` |
 | Pie 侧测试 | 有但不可复用 | `pie-ai-agent` 是独立 pnpm+TS 工程，`.test.ts` 依赖 vitest，不能在本仓库跑 |
 
-### 11.2 建议（需评审确认，对应 M9）
+### 11.2 引入 vitest 的建议（未采纳）
 
-**推荐：新增 `vitest` 为 devDependency**，加 `"test": "vitest run"`。
+**原推荐**：新增 `vitest` 为 devDependency，加 `"test": "vitest run"`。
 
-- 仅 devDependency，不进产物，**不改变构建工具链**（N3 约束的是 webpack+babel 构建链，测试运行器是另一回事）—— 但这是新增依赖，必须明示；
-- 好处：可以原样复用 Pie 的 `.test.ts` 断言逻辑（去类型后移植为 `.test.js`），尤其是 `untrusted-wrappers.test.ts` 的注入用例 —— 这类安全代码**没有测试是最危险的**。
-
-**若不接受新增依赖**：退化为 §10 的手工验收清单 + `lint` + `check:i18n`，并在 §12 记为风险 R-7。
+**实际没有采纳。** 落地时改用 **Node 内置的 `node --test`**（零新增依赖），
+配 `utils/test-loader.mjs` 做 ESM/alias 解析，`npm test` 跑 `src/agent/**/*.test.js`，
+`npm run test:dom` 跑 `.agent-test/dom.test.mjs`（需要本机 Chrome）。
+所以原推荐里「可以原样复用 Pie 的 `.test.ts` 断言」这条收益没有兑现 ——
+安全代码（`untrusted.js`）的覆盖是**重写**的，见 `src/agent/untrusted.test.js`。
+风险 R-7（无自动化测试）因此已关闭，风险清单里的对应行不再成立。
 
 ### 11.3 分层测试策略
 
 | 层 | 可测性设计 | 用例 |
 |---|---|---|
-| 纯函数（`untrusted.js` / `window.js` / `transcript.js` / `sse.js`） | 零外部依赖 | ① 6 类闭合标签逃逸（ASCII / 全角 `＜` / 零宽 U+200B / 多斜杠 `<//` / 带属性 `</tag x>` / U+2039）；② 预算超限时丢 head 最旧轮、永不丢 system 与末轮 user；③ 同 stepIndex 的 call/result 原位替换；④ SSE 半包、`\r\n`、事件边界 flush |
+| 纯函数（`untrusted.js` / `window.js` / `sse.js`） | 零外部依赖 | ① 8 类闭合标签逃逸（ASCII / 全角 `＜` / 零宽 U+200B / 多斜杠 `<//` / 带属性 `</tag x>` / U+2039 / U+2329 / CJK 括号）；② 预算超限时丢 head 最旧轮、永不丢 system 与末轮 user；③ SSE 半包、`\r\n`、事件边界 flush。**注：`transcript.js` 不存在**（该层已内联进渲染） |
 | `llm/openai-compat.js` | 依赖注入 `fetch` | 喂 fixture chunks 断言事件序列：分片 tool_call 聚合、`[DONE]` 无 `tool_calls` 的 flush（智谱 quirk）、首包带全字段、`finish_reason` 映射 |
 | `tools/index.js` | 模块加载即校验 | 构造"未分类 / 未分组"工具 → 断言 throw（对齐 Pie `tool-names.ts:319-410`） |
 | `tab.js` | 注入 mock `browser` | 4 级优先级各自的命中与降级；tab 关闭后失效 |
 | `loop.js` | 全依赖注入 | stub `llm.streamChat`：多步工具循环、确认拒绝后继续、`abort` 后 `done{aborted:true}`、步数上限触发 |
-| content / background handler | **不自动化** | 手工验收（需真实页面与 CSP 场景） |
-| 面板 UI | **不自动化** | §10 手工验收 |
+| content handler | **已自动化**（后来补的） | `npm run test:dom` 在真 Chromium 里跑 `handlerAgentReadPage` 的断言 |
+| background handler | **不自动化** | 手工验收（需真实页面与 CSP 场景） |
+| 面板 UI | **不自动化** | 手工验收 |
 
 ### 11.4 必跑的验收命令
 
 ```bash
 npm run lint
 npm run check:i18n
-npm test                # 若采纳 vitest
-npm run build           # OFFLINE_MODE=1，验证 IS_OFFLINE 路径
+npm test                     # node --test 跑 src/agent/**/*.test.js
+npm run test:dom             # 真 Chromium 跑 handler 断言（需本机 Chrome）
+npm run build                # OFFLINE_MODE=1，验证 IS_OFFLINE 路径
 npm run build:offline:firefox   # 验证 Firefox 构建不炸（Q6-A 降级）
 ```
 
@@ -966,13 +971,18 @@ npm run build:offline:firefox   # 验证 Firefox 构建不炸（Q6-A 降级）
 | R-4 | **prompt 注入**（T1） | 模型被页面文本带偏 | untrusted 包装 + system 声明 + **写操作必须人点确认**（纵深防御）。诚实：不承诺 100% |
 | R-5 | OpenAI-compatible 方言差异 | tool_calls 解析失败 | 保留 Pie 的 4 条 quirk（`openai-compat-core.ts:11-22`）；P0 验收时至少覆盖 OpenAI + 一家国产 + Ollama |
 | R-6 | apiKey 加密强度有限（`getPassKey` 硬编码，`getPassKey.js:4`） | 存储被 dump 时可解密 | 与现有 credentials / secrets **完全同级**，不弱于现状；文档与 UI 不宣称"强加密"；`rememberApiKey:false` 提供纯内存选项 |
-| R-7 | **无自动化测试** | 安全相关纯函数回归风险 | §11.2 建议引入 vitest；否则手工清单 + 把 `untrusted.js` 标记为"改动必审" |
+| ~~R-7~~ | ~~无自动化测试~~ | — | **已关闭**：改用 `node --test`，`src/agent/**/*.test.js` 全覆盖（364 pass / 0 fail） |
 | R-8 | `editorCommands` 在 init 后 1s 内为 null（`[id].vue:1238-1244`） | agent 早期写节点抛 TypeError | 写工具捕获 + 300ms 重试一次（§9.2）；属既有缺陷，可顺手修但不阻塞 |
 | R-9 | Firefox 无 `chrome.debugger` | CSP 严格页的 `test_js` 不可用 | Q6-A：结构化降级错误，其余工具不受影响；Firefox 构建必须能编译通过 |
 | R-10 | 重页面 `read_page` 成本失控 | 单轮吃掉数万 token | 预算自适应降级（Q3）+ 8K 上限 + 交互索引 60 条上限 + 陈旧快照剔除 |
 | R-11 | 模型不支持 function calling | 工具调用完全失效 | 配置弹窗做一次 0-token 探测或在错误里明确提示；P0 验收第 5 条 |
 | R-12 | 面板关闭即中断（RFC §4.2 明示为特性） | 用户以为 agent 在后台继续 | UI 上明示"关闭编辑器会停止助手"；不做后台化（N1 / §13） |
-| R-13 | `state.dataChanged` 未覆盖的写路径 | "未保存"提示缺失 → 用户误以为已落库 | 所有写工具统一 `markDirty()`（R-11 → §9.3）；P2 验收明确检查 |
+| R-13 | `state.dataChanged` 未覆盖的写路径 | "未保存"提示缺失 → 用户误以为已落库 | 所有写工具统一置 dirty（现为 `deps.canvas.onCanvasChanged`）；P2 验收明确检查 |
+
+> **另有一类风险是本方案没预见、后来补上的**：跨进程通道的发送侧超时。方案只设计了工具级超时，
+> 而 background 响应丢失、页面被注入代码占死等都会让整轮永久挂起。已按「外层必须大于内层」补齐
+> 页内求值 10s → background `executeScript` 15s → `toBackground` round trip 20s，超时回人话观察值而非 reject。
+> 详见 `CONTEXT.md` 的「通道超时兜底」条与 `docs/backlog-done.md` 的 T-30 / T-33 / T-39。
 
 ---
 
@@ -985,8 +995,8 @@ npm run build:offline:firefox   # 验证 Firefox 构建不炸（Q6-A 降级）
 | 能力 | 为什么不做 |
 |---|---|
 | 多目标页 / 会话级 tab pin 模型 | Pie 的 pinned-tab-registry 是为长时程跨会话任务设计的；本方案单 target tab 足够（§3.2），且 N1 明确排除标签页管理 |
-| transcript 持久化 / 历史落盘 | `ui-tab-panel cache` 已保证切换不丢；跨会话恢复无场景 |
-| 工具渐进披露 `load_tools` | 10 个工具全披露约 1.2K token，机制成本远大于收益 |
+| ~~transcript 持久化 / 历史落盘~~ | — | **已推翻**：后来做了多会话 + 事件历史落盘（`sessions.js`），理由是跨轮记忆，见 `docs/adr/0001` |
+| 工具渐进披露 `load_tools` | 13 个工具全披露仍只有约 1.5K token，机制成本远大于收益 |
 | 多 provider 并发路由 / 限流器 | 单 provider 单请求，429 退避即可（P1） |
 | 并发 run / 任务队列 | 单飞 + 中止语义已覆盖 |
 | Anthropic / Gemini 原生协议 | Q2=A；等 P0 验证核心假设后再评估（且 Anthropic 需绕开 SDK 依赖） |
@@ -999,14 +1009,20 @@ npm run build:offline:firefox   # 验证 Firefox 构建不炸（Q6-A 降级）
 
 ## 附录 A：与 RFC 的差异总览（评审速查）
 
+> RFC 原文已删除（git `4a573976`）。本表是当时**评审用的速查**，其中「决策」一行的 Q1 已被 ADR 0001 推翻。
+
 | 类型 | 条目 |
 |---|---|
 | **修正**（RFC 说错了） | M1 变量数据源、M2 test_js 复用路径、M3 query_elements 复用对象、M4 保存路径、M5 改节点入口、M6 `!!` 前置条件 + `!` 前缀、M7 context 分支、M8 model-router 非全 fetch、M9 无测试框架 |
 | **补充**（RFC 没写） | R-1 目标页解析（**P0 阻塞项**）、R-2 elementSelector 加 tab 参数、R-3/R-4 面板接线细节、R-5 editState 竞态、R-6 undo 双轨、R-7 editorCommands 时序、R-8 i18n 守卫、R-9 存储位置、R-10 跨域可行性、R-11 dataChanged 置位 |
-| **决策**（Q1–Q6） | A / A / B+预算自适应 / A+会话授权 / A+B（字段 vs 结构）/ A+降级不崩溃 |
+| **决策**（Q1–Q6） | A / A / B+预算自适应 / A+会话授权 / A+B（字段 vs 结构）/ A+降级不崩溃。**⚠️ Q1「编辑器内加 agent tab」已被 ADR 0001 推翻** |
 | **不变** | G1–G6、N1–N6、C1–C4、P0–P3 阶段划分与交付判定、§12 token 预算分级取景 L0–L3、附录 A YAGNI |
 
 ## 附录 B：本次核对引用的代码位置索引
+
+> ⚠️ **行号是 2026-10-02 核对时的快照，只保证当时准确。**
+> 这份文档的价值在 §1 的**结论**（M1–M9、R-1~R-11），不在这些行号 —— 需要当前位置就直接 grep 文件。
+> 现行架构与当前行号见 `docs/agent-architecture.html`（页脚标了最后核对日期，由 T-47 维护）。
 
 | 位置 | 内容 |
 |---|---|
