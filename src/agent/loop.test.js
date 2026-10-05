@@ -1,7 +1,12 @@
 ﻿import test from 'node:test';
 import assert from 'node:assert';
-import { createAgent, fromPiEvent, historyToPiMessages } from './loop';
-import { AGENT_EVENTS, TOOL_STATUS } from './events';
+import {
+  createAgent,
+  fromPiEvent,
+  historyToPiMessages,
+  classifyPiErrorMessage,
+} from './loop';
+import { AGENT_EVENTS, ERROR_KIND, TOOL_STATUS } from './events';
 import { wrapUntrusted } from './untrusted';
 
 /**
@@ -712,6 +717,11 @@ test('LLM 报错时发 ERROR 事件，且 send 返回 ERROR 而非 DONE', async 
   const errs = events.filter((e) => e.kind === AGENT_EVENTS.ERROR);
   assert.equal(errs.length, 1, '必须产出错误事件');
   assert.equal(errs[0].message, '网络断了');
+  assert.equal(
+    errs[0].errorKind,
+    'provider',
+    '无法分类时至少归为 provider，不留空'
+  );
   assert.equal(ret.kind, AGENT_EVENTS.ERROR, 'send 返回的必须是 ERROR');
   assert.equal(
     events.filter((e) => e.kind === AGENT_EVENTS.DONE).length,
@@ -847,6 +857,57 @@ test('分片参数聚合后，工具拿到的是完整参数对象', async () =>
   // 直接调它验签名与参数形状 —— 票 02 才把它接进 pi 的循环
   await tool.execute('call-1', { msg: '窗前明月光', n: 2 });
   assert.deepEqual(got, [{ msg: '窗前明月光', n: 2 }]);
+});
+
+// ── 票 05：错误分类降级与重试接线 ──
+
+test('HTTP 状态码能从错误信息里提取出来（韧性要求）', () => {
+  // pi 的错误信息里实测带状态码：「429: {...}」「OpenAI API error (429): ...」。
+  // 票 05 明确：分类必须在降级后如实保留 HTTP 状态码，不能只有个「网络错误」模糊词。
+  const err = fromPiEvent({
+    type: 'message_end',
+    message: {
+      role: 'assistant',
+      stopReason: 'error',
+      errorMessage: '429: {"error": {"message": "rate limited"}}',
+    },
+  });
+  assert.equal(err.errorKind, ERROR_KIND.PROVIDER);
+  assert.equal(err.httpStatus, 429, '必须提取出状态码 429');
+});
+
+test('「Connection error.」与「fetch failed」归为 network，与 provider 区分', () => {
+  // pi 网络层失败的固定文案（实测：Connection error.）。这类错误和
+  // provider 返回错误在用户语义上截然不同（一个是「没连上」，一个是
+  // 「连上了但服务端报错」），UI 要靠 kind 分开。
+  const net = fromPiEvent({
+    type: 'message_end',
+    message: {
+      role: 'assistant',
+      stopReason: 'error',
+      errorMessage: 'Connection error.',
+    },
+  });
+  assert.equal(net.errorKind, ERROR_KIND.NETWORK);
+
+  const fetchFail = fromPiEvent({
+    type: 'message_end',
+    message: {
+      role: 'assistant',
+      stopReason: 'error',
+      errorMessage: 'fetch failed',
+    },
+  });
+  assert.equal(fetchFail.errorKind, ERROR_KIND.NETWORK);
+});
+
+test('streamFn 的 optionsd 带 maxRetries: 3，可重试失败有救', async () => {
+  // pi 的 Agent 不转发maxRetries（provider-retry 里默认 0），我们包了一层
+  // streamFnWithRetry 显式注入。这条测试钉住注入点——它不能静默降级成不重试。
+  const h = makeAgent([piStream('ok')]);
+  await send(h);
+  const opts = h.streamFn.calls[0].options;
+  assert.equal(opts.maxRetries, 3, `实际 ${JSON.stringify(opts.maxRetries)}`);
 });
 
 /* ---------------- 多会话跨轮记忆（P1） ---------------- */

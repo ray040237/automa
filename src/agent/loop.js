@@ -170,6 +170,44 @@ export function historyToPiMessages(events) {
 }
 
 /**
+ * 从 pi 的错误信息里提取「对我们的六类分类最该给什么」。
+ *
+ * 为什么不能只拿 stopReason：它永远是 'error'|'aborted'，分不清
+ * 「配置问题」「401 key 无效」「429 限流」「网络断了」。而 UI 要靠 kind
+ * 决定文案与建议动作。pi 没有直接暴露结构化 status，但它的 errorMessage
+ * 里习惯性带状态码（实测格式：`429: {...}` / `429 Rate limit reached` /
+ * `OpenAI API error (429): ...`）；网络类错误是固定文案（`Connection error.`）。
+ * 这比手写六十条正则类的维护成本低得多——只匹配「状态码前缀」一类。
+ *
+ * 反推规则（任一命中即返回对应 kind）：
+ *   - `Connection error.` / `fetch failed` / `ECONNREFUSED` / `ENOTFOUND` /
+ *     `ETIMEDOUT` / `socket hang up` → NETWORK
+ *   - 以 3 位数字开头或包含 `(nnn)` 的 → PROVIDER + httpStatus 数字
+ *   - 其余 → PROVIDER（没有状态码）
+ */
+export function classifyPiErrorMessage(message) {
+  const msg = String(message || '');
+
+  if (
+    /connection error|fetch failed|econnrefused|enotfound|etimedout|socket hang up|networkerror/i.test(
+      msg
+    )
+  ) {
+    return { errorKind: ERROR_KIND.NETWORK };
+  }
+
+  const statusMatch = msg.match(/^(\d{3})[:\s]/) || msg.match(/\((\d{3})\)/);
+  if (statusMatch) {
+    return {
+      errorKind: ERROR_KIND.PROVIDER,
+      httpStatus: Number(statusMatch[1]),
+    };
+  }
+
+  return { errorKind: ERROR_KIND.PROVIDER };
+}
+
+/**
  * pi 的事件 -> 我们的 agent 事件。
  *
  * 这是**唯一**的翻译层（迁移前是 toAgentEvent，provider 层消失后本函数取而代之）。
@@ -210,9 +248,13 @@ export function fromPiEvent(event) {
       // 错误：pi 把失败编码成 assistant 消息的 errorMessage + stopReason。
       // 中止（aborted）不是错误 —— 用户点停止走正常收尾（技术方案 §5.4）。
       if (message.stopReason === 'error') {
+        const { errorKind, httpStatus } = classifyPiErrorMessage(
+          message.errorMessage
+        );
         return errorEvent({
           message: message.errorMessage || '未知错误',
-          errorKind: ERROR_KIND.PROVIDER,
+          errorKind,
+          ...(httpStatus !== undefined && { httpStatus }),
         });
       }
       if (message.stopReason === 'aborted') return { emitsNothing: true };
@@ -328,6 +370,12 @@ export function createAgent(deps) {
     );
   }
 
+  // 票 05：重试显式开启。pi 的 Agent 不转发 maxRetries（provider-retry 里
+  // 默认 `options.maxRetries ?? 0`，即完全不重试），所以把 streamFn 包一层
+  // 显式注入。这里是「可重试失败会重试」的落点，不可静默降级成不重试。
+  const streamFnWithRetry = (modelArg, context, options = {}) =>
+    streamFn(modelArg, context, { maxRetries: 3, ...options });
+
   // pi Agent 实例：每个 createAgent 一个，跨轮复用（它持有对话状态）
   let piAgent = null;
   let piMessages = [];
@@ -409,7 +457,7 @@ export function createAgent(deps) {
         // 票 02：工具经适配层注册。票 04：确认门在 beforeToolCall 接。
         tools: toAgentTools(tools, { toolCtx, wrapUntrusted }),
       },
-      streamFn,
+      streamFn: streamFnWithRetry,
       // 票 06：预检通知与插话队列。注入点选 transformContext ——
       // pi 每次 LLM 请求前调用它，产物只用于当次请求、**不写回 transcript**。
       // 这样通知期后模型能看到，但不会进持久历史（persist 的只是用户/助手/工具消息），
