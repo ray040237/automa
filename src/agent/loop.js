@@ -233,9 +233,9 @@ export function createAgent(deps) {
       initialState: {
         systemPrompt,
         model,
-        // 票 02：工具经适配层注册。ticket 04 在beforeToolCall 接确认门，
-        // 票 03 在 afterToolCall 落不可信包装。
-        tools: toAgentTools(tools, { toolCtx }),
+        // 票 02/03：工具经适配层注册，包装在适配层做（必须是单块）。
+        // 票 04 在 beforeToolCall 接确认门。
+        tools: toAgentTools(tools, { toolCtx, wrapUntrusted }),
       },
       streamFn,
     });

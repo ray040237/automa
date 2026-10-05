@@ -15,7 +15,7 @@
  * 不碰 webextension-polyfill、不碰 @/ 别名，更不能碰 workflowStore.update。
  */
 
-import { TOOL_STATUS } from '../events';
+import { TOOL_STATUS, wrapObservation } from '../events';
 import { validateTools } from './index';
 
 /**
@@ -32,7 +32,17 @@ import { validateTools } from './index';
  * @param {*} raw 工具 execute 的原始返回值
  * @returns {{content: Array, details: Object, isError: boolean}}
  */
-export function toToolResult(raw) {
+export function toToolResult(raw, opts = {}) {
+  const { wrapUntrusted, tag } = opts;
+  if (typeof wrapUntrusted !== 'function') {
+    // 缺注入必须炸：静默用一个不逃逸的兜底等于零防护且无任何报警（T-55）。
+    throw new Error(
+      'toToolResult: 缺 wrapUntrusted。工具结果必须经不可信包装 —— ' +
+        '不要传兜底实现，直接抛。'
+    );
+  }
+  const wrapTag = tag || 'untrusted_tool_result';
+
   // 已经是 AgentToolResult 形状 —— 原样放行，不认识的结构不猜
   if (
     raw &&
@@ -49,30 +59,44 @@ export function toToolResult(raw) {
     !Array.isArray(raw) &&
     Object.prototype.hasOwnProperty.call(raw, 'payload');
 
+  let body;
+  let details = {};
+  let failed = false;
+
   if (!isEnvelope) {
     // 裸值：字符串直接给，别的 JSON 化。
     // ⚠️ 空字符串也要产出**一个**内容块：pi 把空 content 兜成
     // `"(no tool output)"`，那会把「工具确实返回了空」变成「工具没说话」。
-    let text;
-    if (typeof raw === 'string') text = raw;
-    else if (raw === undefined) text = '';
-    else text = JSON.stringify(raw ?? null, null, 2);
-    return { content: [{ type: 'text', text }], details: {}, isError: false };
-  }
-
-  const { payload, status, ...meta } = raw;
-  const failed =
-    status === TOOL_STATUS.ERROR || status === TOOL_STATUS.REJECTED;
-  let body;
-  if (failed) body = `工具未成功执行：${payload ?? '未知原因'}`;
-  else if (typeof payload === 'string') body = payload;
-  else body = JSON.stringify(payload ?? null, null, 2);
-
-  return {
-    content: [{ type: 'text', text: body }],
+    if (typeof raw === 'string') body = raw;
+    else if (raw === undefined) body = '';
+    else body = JSON.stringify(raw ?? null, null, 2);
+  } else {
+    const { payload, status, ...meta } = raw;
+    failed = status === TOOL_STATUS.ERROR || status === TOOL_STATUS.REJECTED;
     // meta 上提到 details：观察值文本可能被陈旧快照剔除换成占位符，
     // runtime 判断页面变没变只能读结构化字段，不能读文本。
-    details: meta,
+    details = meta;
+    if (failed) body = `工具未成功执行：${payload ?? '未知原因'}`;
+    else if (typeof payload === 'string') body = payload;
+    else body = JSON.stringify(payload ?? null, null, 2);
+  }
+
+  return {
+    // 截断在包装**之前**（wrapObservation 的既有约定）：先包装后截断会把
+    // 闭合标签砍掉，剩下半个标签暴露出去。
+    // ⚠️ wrapObservation 的错误分支读的是 `message`，成功分支读 `payload` ——
+    // 传错键名会让错误原因变成「未知原因」（实测踩过）。
+    content: [
+      {
+        type: 'text',
+        text: wrapObservation(
+          failed
+            ? { status: TOOL_STATUS.ERROR, message: body, wrap: wrapTag }
+            : { payload: body, wrap: wrapTag }
+        ),
+      },
+    ],
+    details,
     isError: failed,
   };
 }
@@ -87,8 +111,8 @@ export function toToolResult(raw) {
  *
  * @param {Array<Object>} tools 我们的工具定义
  * @param {Object} deps
+ * @param {Function} deps.wrapUntrusted 不可信包装，**必填**
  * @param {Object} deps.toolCtx 工具执行上下文（读页、发消息等）
- * @param {Object=} deps.signalRegistry 中止信号注册表：按 toolCallId 存
  * @returns {Array<Object>} pi 的 AgentTool[]
  */
 export function toAgentTools(tools, deps = {}) {
@@ -97,6 +121,14 @@ export function toAgentTools(tools, deps = {}) {
     throw new Error(
       'toAgentTools: tools 必须是数组且必填（T-45）—— ' +
         '默认回落全量 TOOLS 会泄露画布工具给无画布的宿主'
+    );
+  }
+  // wrapUntrusted 必填：不提供就在第一次调工具时抛，而不是给一个不逃逸的
+  // 兜底（那条兜底已经删掉了，见 T-55）。
+  if (typeof deps.wrapUntrusted !== 'function') {
+    throw new Error(
+      'toAgentTools: 缺 wrapUntrusted。工具结果必须经不可信包装 —— ' +
+        '不要传兜底实现，直接抛。'
     );
   }
   // 模块期校验不能丢 —— pi 不会替我们炸。缺 class 就等于给写操作免确认，
@@ -116,16 +148,28 @@ export function toAgentTools(tools, deps = {}) {
         // 中止信号按调用传下去：工具有后台任务时必须能被取消
         ...(signal ? { signal } : {}),
       };
+      // group 决定不可信标签：页面类内容用 page_content，其余用 tool_result。
+      // 这个判定以前在 loop 里（靠 tool.group === 'page'），搬到这里是因为
+      // 包装必须与产出内容同处，否则要包两次。
+      const tag =
+        tool.group === 'page'
+          ? 'untrusted_page_content'
+          : 'untrusted_tool_result';
       try {
-        return toToolResult(await tool.execute(params || {}, ctx));
+        return toToolResult(await tool.execute(params || {}, ctx), {
+          wrapUntrusted: deps.wrapUntrusted,
+          tag,
+        });
       } catch (err) {
         // 工具抛错不终止循环（技术方案 §4.1「错误即观察值」）。
         // 这里返回 isError 而不重抛 —— 重抛会让 pi 把整个 run 打断。
-        return {
-          content: [{ type: 'text', text: `工具未成功执行：${err.message}` }],
-          details: {},
-          isError: true,
-        };
+        return toToolResult(
+          { status: TOOL_STATUS.ERROR, payload: err.message },
+          {
+            wrapUntrusted: deps.wrapUntrusted,
+            tag,
+          }
+        );
       }
     },
   }));

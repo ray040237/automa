@@ -513,19 +513,56 @@ test('一条消息里多个互不依赖的工具被并发执行', async () => {
   );
 });
 
-// ── 票 03~04：不可信包装与确认门 ──
+// ── 票 03：不可信包装 ──
 
-test.skip('工具结果按 untrusted 包装后回到对话', async () => {}, {
-  skip: '票 03',
+test('工具结果按 untrusted 包装后回到对话，且包装是单块', async () => {
+  const h = makeAgent([toolCallStream('echo', { a: 1 }), piStream('好的')]);
+  await send(h);
+  const toolMsg = h.streamFn.calls[1].context.messages.find(
+    (m) => m.role === 'toolResult'
+  );
+  // 红线第 2 条：整个包装必须是**一个**内容块。pi 会用换行拼接多块
+  // （openai-completions.ts:1414-1417），拆分点落在标签内部时闭合标签
+  // 就断了，内层内容裸奔且不报任何错。
+  assert.equal(toolMsg.content.length, 1, '包装必须整体放进一个内容块');
+  const { text } = toolMsg.content[0];
+  assert.ok(text.includes('<untrusted_tool_result>'), text);
+  assert.ok(text.includes('</untrusted_tool_result>'), text);
+  assert.ok(text.includes('echo:'), text);
 });
-test.skip('页面类工具结果用 untrusted_page_content 包装', async () => {}, {
-  skip: '票 03',
+
+test('页面类工具结果用 untrusted_page_content 包装', async () => {
+  const pageTool = {
+    name: 'read_page',
+    label: '读页面',
+    class: 'read',
+    group: 'page',
+    description: '读页面',
+    parameters: { type: 'object', properties: {} },
+    execute: async () => ({ payload: '页面正文' }),
+  };
+  const h = makeAgent([toolCallStream('read_page', {}), piStream('好的')], {
+    tools: [pageTool],
+  });
+  await send(h);
+  const toolMsg = h.streamFn.calls[1].context.messages.find(
+    (m) => m.role === 'toolResult'
+  );
+  assert.ok(
+    toolMsg.content[0].text.includes('<untrusted_page_content>'),
+    toolMsg.content[0].text
+  );
+  assert.equal(toolMsg.content.length, 1);
 });
-test.skip('旧的页面快照在下一步被压成占位符（elide）', async () => {}, {
-  skip: '票 03',
-});
+
+// ── 票 04：确认门 ──
+
 test.skip('写类工具必须经过确认', async () => {}, { skip: '票 04' });
 test.skip('用户拒绝时工具绝不能执行', async () => {}, { skip: '票 04' });
+
+test.skip('旧的页面快照在下一步被压成占位符（elide）', async () => {}, {
+  skip: 'B9 第 1 项：本次不做 token 预算，陈旧快照剔除随之不做',
+});
 
 test.skip('工具调用不无限循环（MAX_STEPS 兜底）', async () => {}, {
   skip: 'B9 第 1 项：本次不做步数上限。pi 无内置等价物，若将来补用 finishTurn',
