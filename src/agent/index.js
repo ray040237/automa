@@ -2,7 +2,7 @@
  * 装配层。
  *
  * 这是整个 agent 里唯一允许碰浏览器 API 与项目别名（@/）的文件。
- * 下面所有模块（loop / tools / wire / prompt …）都保持纯函数，
+ * 下面所有模块（loop / tools / prompt / events …）都保持纯函数，
  * 因此可以被 node --test 直接覆盖，也因此不会在 import 期就要求一个浏览器环境。
  *
  * 另外注意：这里用的是原生 fetch，不是 @/utils/api 的 fetchApi ——
@@ -600,7 +600,8 @@ export function createAgentRuntime(deps) {
     }
 
     // 会话续接：每次 send 都从存储现读，不在 runtime 里另存一份副本 ——
-    // 两份状态必然漂移。上一轮中断留下的悬空 tool_calls 由 wire 配对净化兜住。
+    // 两份状态必然漂移。上一轮中断留下的悬空 tool_calls 由 pi 的消息净化
+    // 兜住（为孤儿调用合成结果，见 ADR 0004）。
     let initialHistory = [];
     let createdAt;
     let usageBefore = { input: 0, output: 0 };

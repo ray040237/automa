@@ -418,6 +418,160 @@
 结论：按建议落地 —— `sessions.js` 的 `save()` title 兜底升级为三级：`session.title` → 已存记录的 title → `titleFromEvents`。读改写走已有串行队列（T-35/B1 的 writeTail），不引入新窗口。sessions.test.js 新增回归：patchTitle 后第二轮不带 title 的 save，标题与索引均保持 LLM 标题（索引同步是 `indexEntryFromSession` 直接吃 clean，跟着走）。`npm test` 364 pass / 0 fail，sessions 两文件 eslint 0 error。
 状态：已清（2026-10-05 完成）
 
+### T-61 — 轮末在全量历史里找 ERROR，会话出过一次错之后每轮成功也不发 DONE
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review，触发点 `src/agent/loop.js:676-677`
+现象：每轮收尾用 `history.find((e) => e.kind === AGENT_EVENTS.ERROR)` 判断「本轮是否出错」，但 `loop.js:600` 把 `params.initialHistory`（上一轮持久化的全部事件）整体灌进了 `history`，而 ERROR 事件会被持久化（`turnRecord.js:27` 的 `pruneEphemeralEvents` 只剪 THINKING）。于是只要历史里存在**任何一轮**的旧 ERROR，本轮即使完全成功也会命中 find、走 `return errorEv` 分支，不发 DONE。
+证据：**代码位置核实（2026-10-05）** —— `loop.js:600`（`history = [...(params.initialHistory || [])]`）、`:677`（find 全量）、`src/agent/index.js:610`（`initialHistory = rec.events`，来自上一轮落盘）、`src/agent/turnRecord.js:26-27`（ERROR 不被剪）。
+影响：多轮会话里一旦某轮失败过，之后每一轮成功收尾都被判为失败——UI 收不到 DONE，表现为「回答正常流完但会话状态不对」一类静默异常。
+结论：`send()` 在历史重置后记 `turnHistoryStart` 基线，轮末错误判定改为 `history.slice(turnHistoryStart).find(ERROR)`，只扫本轮新增事件。回归测试钉住「initialHistory 含旧 ERROR 时本轮成功仍发 DONE、usage 不受历史影响」。
+状态：已清（2026-10-05 完成）
+
+### T-62 — 轮 usage 只取最后一条 assistant 消息，多步轮次 token 用量低估
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review，触发点 `src/agent/loop.js:652-661`
+现象：DONE 事件的 usage 从 transcript 末尾找第一条带 usage 的 assistant 消息就 break，只统计了本轮最后一个 LLM 请求的用量。一个工具轮里模型调了 3 次工具就有 3 条 assistant 消息，前两次的 input/output 全部丢掉。迁移前实现是按流 chunk 累加的。
+证据：**代码位置核实（2026-10-05）** —— `loop.js:654-661`（倒序找到即 break）；旧实现 `git show 894ec164:src/agent/loop.js` 第 447-449 行为 `usage.input += ...` 累加。
+影响：多步工具轮的 token 用量系统性低估（最坏只报 1/N），UI 展示与后续任何按用量计费/限流的逻辑都会失真。
+结论：prompt 前记 `turnTranscriptStart` 基线，usage 改为累加本轮范围内全部带 usage 的 assistant 消息。回归测试两条：多步轮 100+200=300 钉住累加；同一 agent 跨轮第二次 send 只含自身用量，钉住基线不把上一轮算进来。
+状态：已清（2026-10-05 完成）
+
+### T-63 — `ev.wire || ev.text` 裸文本回落随票 07 复活进 loop.js，T-56 宣称已修但同形兜底仍在
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review；原条目 T-56（`wire.js` 的裸文本回落，票 08 随文件删除）
+现象：票 07 新增的 `historyToPiMessages` 里，USER_MESSAGE 与 SYSTEM_NOTICE 两支都写 `content: ev.wire || ev.text || ''`（`loop.js:95`、`:104`）。`ev.text` 是**未包装**的原始文本——历史事件一旦缺 `wire` 字段，未包装文本就直达模型，正是 T-56 登记过的那条裸文本回落通道。票 03/08 提交信息宣称 T-56「新路径无裸文本通道」，与代码不符。
+证据：**代码位置核实（2026-10-05）** —— `loop.js:95`、`:104`。当前生产路径（用户消息/预检/插话）都写 wire，迁移前落盘的历史事件也带 wire，故现网触发路径未实测到，属推断风险。
+影响：任何未来新增的 USER_MESSAGE/SYSTEM_NOTICE 发射点漏写 wire 字段时，不可信内容不经包装直达模型，且无测试报警。
+结论：删掉 `|| ev.text` 回落，USER_MESSAGE / SYSTEM_NOTICE 缺 wire 直接 throw（带事件文本摘要，与「不静默降级」一致）。回归测试钉住两类事件缺 wire 必抛错。
+状态：已清（2026-10-05 完成）
+
+### T-64 — provider.js 硬编码 `maxTokens: 4096`，长回答被静默截断且 spec 无此要求
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review，触发点 `src/agent/provider.js:80`
+现象：模型参数对象里写死 `maxTokens: 4096`，spec 与 ADR 0004 都没有这条要求，迁移前 provider 也没有输出上限。效果是每次回复最多约 4096 token，长代码/长工作流 JSON 会被静默截断（stopReason=length，用户只看到话说一半）。
+证据：**代码位置核实（2026-10-05）** —— `provider.js:80`；`git grep maxTokens src/agent/` 仅此一处硬编码；旧 provider 不设该参数。
+影响：所有「回答很长」的场景都踩到；无报错、无提示，表现为回答戛然而止。
+结论：删掉该行，输出上限交给端点默认（pi 不设 maxTokens 时请求不带 max_tokens）。provider.test.js 无该字段断言，全量测试不受影响。
+状态：已清（2026-10-05 完成）
+
+### T-65 — 输出 token 截断保护（story 2）无测试钉住
+
+类型：改进
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review，对照 `docs/agent-core-migration-spec.md:32`（story 2）
+现象：spec story 2 要求「模型撞到输出 token 上限时被告知参数可能不完整、重新发起，而不是执行一个参数被截断的工具」，迁移后仓库里没有测试钉住这个行为。（更正：登记时误写成「上下文超预算时截断保护」，story 2 实际指**输出** token 上限，与 B9 的「上下文预算裁剪不做」是两回事。）
+证据：**代码位置核实（2026-10-05）** —— `src/agent/*.test.js` 中无相关断言。
+影响：pi 升级或映射层改动悄悄破坏该行为时，模型会执行参数被截断的工具，无测试报警。
+结论：实测 pi 内核已实现该行为（`node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js` 的 `failToolCallsFromTruncatedMessage`：`stopReason==='length'` 时消息里所有 toolCall 一律不执行，产出 isError 的「arguments may be truncated. Re-issue the tool call」错误结果）。新增测试把这个行为钉死：截断消息里的工具不执行、isError 为真、错误文案含 truncated/output token limit、整轮不终止。
+状态：已清（2026-10-05 完成）
+
+### T-66 — loop.js 头部不变式写「只能 import src/agent 下的纯模块」，实现却动态 import pi-agent-core
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review（Standards 轴），触发点 `src/agent/loop.js:4-7` 与 `:451`
+现象：头部不变式声明「本文件与 tools/* 只能 import src/agent 下的纯模块」，但票 01 起本文件动态 `import('@earendil-works/pi-agent-core')`。实现没违反 ADR 0004（pi 走 npm 是决策的一部分），违反的是自己头部的声明。
+证据：**代码位置核实（2026-10-05）**。
+影响：文档性缺陷，误导后续维护者。
+结论：头部改写为真实不变式：不碰 `node:`/`process.`/webextension-polyfill/`@/` 别名/工作流保存；pi 包是 ADR 0004 明文允许的唯一 import 例外，与「三层事件」段落同步改为两层。
+状态：已清（2026-10-05 完成）
+
+### T-67 — 「wire」措辞残留：事件字段名 `wire` 与多处新注释仍在扩散已删除的第三层命名
+
+类型：改进
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review（Standards 轴），对照 `CONTEXT.md`「2026-10-05 变更：第三层 wire 消息已删除」
+现象：`loop.js` 事件字段名仍叫 `wire`（3 处发射 + historyToPiMessages 消费），注释写「wire 字段」「通知进 wire」；`index.js:5` 模块清单列着已删除的 wire、`:603` 说「由 wire 配对净化兜住」。
+证据：**代码位置核实（2026-10-05）**；UI（.vue）不消费该字段，只在 src/agent 内部与持久化事件里出现。
+影响：命名指向一个不存在的层，新读者会去找 wire.js。
+结论：字段改名 `promptText`（进 prompt 的最终包装文本）；`historyToPiMessages` 兼容读旧记录的 `ev.wire`（升级前的老会话续接不炸），兼容读有专测；`index.js` 两处注释改为现行表述（悬空 tool_calls 由 pi 的消息净化兜住）。
+状态：已清（2026-10-05 完成）
+
+### T-68 — piMessages 死存储：每轮成功后 `piMessages = agent.state.messages.slice()` 无人读
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review（Standards 轴），触发点 `src/agent/loop.js:720`
+现象：轮末把 transcript 拷进 `piMessages`，注释说「留给下一轮 / 票 07 的历史对接」，但下一轮续接走 `historyToPiMessages(params.initialHistory)` 重建，`piMessages` 从未被读。
+证据：**代码位置核实（2026-10-05）** —— grep piMessages 仅声明、send 内局部使用、死赋值三处。
+影响：误导性死代码；遮蔽「续接靠 initialHistory 重建」这个真实机制。
+结论：删除死赋值与外层声明，重建用变量收进 send() 内局部 const。全量测试无行为变化。
+状态：已清（2026-10-05 完成）
+
+### T-69 — adapter.js 必填的 `wrapUntrusted` 形参从未被调用，必填校验是摆设
+
+类型：改进
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review（Standards 轴），触发点 `src/agent/tools/adapter.js`
+现象：`toAgentTools`/`toToolResult` 把 `wrapUntrusted` 当必填依赖、缺失即 throw，但函数体内从不调用它 —— 实际包装由 `wrapObservation`（内部 import untrusted.js）完成。必填形参是假契约。
+证据：**代码位置核实（2026-10-05）** —— adapter.js 内 `wrapUntrusted` 仅出现于解构、校验与透传，无调用点。
+影响：误导契约；调用方被迫传一个不用的参数。
+结论：形参与校验从 adapter 删除（包装点只准有一个）。原「缺注入必须炸」的 T-55 校验迁到真正的消费点 `createAgent`（缺 wrapUntrusted 即 throw，有专测）；adapter.test.js 的对应断言改为「不再收该形参 + 包装照常」。
+状态：已清（2026-10-05 完成）
+
+### T-70 — tool_execution_end 的 observation 恒为空占位：UI 工具卡从不显示结果文本，跨会话重建把 AgentToolResult 整个 JSON 进上下文
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review（Standards 轴），触发点 `src/agent/loop.js` fromPiEvent
+现象：`tool_execution_end` 映射出 `observation: ''`（注释还是票 02/03 之前的占位说辞）。后果一：UI 工具卡读 `step.observation`，普通工具结果在界面上从不显示文本。后果二：票 07 的 transcript 重建走 `ev.observation || JSON.stringify(ev.details)`，把整个 AgentToolResult JSON 化送进上下文——未包装、双层编码、混着 content 结构噪音。
+证据：**代码位置核实（2026-10-05）** —— `loop.js` fromPiEvent、`AgentTranscript.vue:166,178-181`、`AgentToolStep.vue:25-26`、historyToPiMessages TOOL_RESULT 分支。
+影响：所有工具调用的结果对用户不可见；重开会话后模型看到 JSON 垃圾而非结果文本，跨会话记忆质量受损。
+结论：fromPiEvent 的 end 分支从 `event.result.content` 提取文本作 observation：adapter 产出的（已包装、单块、首部即 `<untrusted_*>`）原样透传；pi 自产结果（未知工具短路、输出截断、参数校验失败）在映射层补 `untrusted_tool_result` 包装 —— 红线第 2 条全路径保住。两条新测试分别钉「已包装透传 / pi 自产补包装」与「重建用 observation 而非 details 的 JSON」。附带效果：UI 工具卡恢复显示结果正文（`<untrusted_*>` 标签露出是 T-07 已登记的独立展示问题）。
+状态：已清（2026-10-05 完成）
+
+### T-71 — historyToPiMessages 的 default 分支注释说「不能静默丢」，实现却静默丢
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review（Standards 轴）
+现象：default 分支注释写「映射不了必须知道，不能静默丢」，实现是 `flushAssistant(); break;`。与 fromPiEvent 的抛错策略自相矛盾，违反「不静默降级」。
+证据：**代码位置核实（2026-10-05）**。
+影响：未来新增的带内容事件类型漏改本函数时，内容静默不进 transcript，跨会话丢记忆且无报警。
+结论：default 分支改 throw（带 kind 值），与 fromPiEvent 一致；现有 AGENT_EVENTS 全集已被 switch 覆盖，正常路径不受影响。专测钉住未知 kind 必抛。
+状态：已清（2026-10-05 完成）
+
+### T-72 — record + currentEmit 成对调用在 loop.js 重复约 9 处，「入史+发外」单一入口不变式被拆散
+
+类型：改进
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review（Standards 轴，Duplicated Code 坏味道）
+现象：`record(ev); if (currentEmit) currentEmit(ev);` 成对模式散落约 9 处，新增发射点漏掉一半不会有人报错。
+证据：**代码位置核实（2026-10-05）**。
+影响：维护性；只入史不发外 = UI 缺行，只发外不入史 = 续接丢数据。
+结论：抽 `emitAndRecord(ev)` 单一入口替换全部 9 处成对调用，头部注释写明「新增发射点只准走这里」；`doneEv` 保持只发外不入史的现状（emitAndRecord 注释里显式点名这是唯一例外）。全量测试无行为变化。
+状态：已清（2026-10-05 完成）
+
+### T-73 — historyToPiMessages 伪造 `provider:'test'` / `model:'rehydrated'` 魔法值且无注释说明
+
+类型：改进
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review（Standards 轴，Primitive Obsession 坏味道）
+现象：重建 assistant 消息时填 `provider: 'test', model: 'rehydrated'`，像测试夹具泄漏进生产代码，也无注释解释。
+证据：**代码位置核实（2026-10-05）**。
+影响：读者怀疑夹具泄漏；'test' 字样进了生产 transcript。
+结论：改为 `provider: 'replay', model: 'replayed-history'`，注释说明这只是 pi 消息形状要求的非空占位、消息来自历史重放、usage 按 0 记。
+状态：已清（2026-10-05 完成）
+
+### T-74 — TOOL_CALL 事件顶层字段与 calls[] 重复携带：并行调用在 UI 与跨会话重建里只活下来第一个
+
+类型：bug（兼契约坏味道 Data Clumps）
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 迁移 code review 二轮口头清单，用户追问后探针实测坐实；触发点 `src/agent/loop.js` fromPiEvent 的 TOOL_CALL 组装与 historyToPiMessages 的 TOOL_CALL 分支
+现象：一条 assistant 消息里 N 个并行工具调用被折成**一条** TOOL_CALL 事件，第一个调用的 name/args/toolCallId 同时出现在顶层和 calls[0]，其余调用只存在于 calls[]。后果一（实测）：跨会话重建 transcript 时 historyToPiMessages 每条 TOOL_CALL 事件只 push 一个 toolCall 块，calls[1..N] 全部丢失，重建出的 assistant 消息只有 c1 的 toolCall，c2..cN 的 toolResult 成为孤儿。后果二（代码读判定，未实测渲染）：UI 合并逻辑键是 name+step 且不读 calls[]，同名并行调用的卡片互相覆盖。
+证据：**实测（探针，2026-10-05）** —— `.scratch/probe-calls.mjs`：喂入含两个并行调用（c1/c2）+ 两条 TOOL_RESULT 的历史，输出 `重建出的 toolCall 块: ["c1"]`、`重建出的 toolResult: ["c1","c2"]`、`孤儿 toolResult: ["c2"]`。孤儿结果发到端点是否被拒（400）推断未实测；「模型丢失对 c2 调用的记忆」由输出直接成立。
+影响：用过并行工具调用的会话重开后，模型的上下文里那次并行只剩第一个调用，后续轮次的引用/对比/追问建立在残缺历史上；孤儿 toolResult 有让续接请求被端点拒绝的风险。
+结论：按**方案 B「一条调用一条事件」**落地（用户 2026-10-05 选定）。① `handlePiEvent`（唯一发射点）把翻译层的合装事件拆成 N 条单调用 TOOL_CALL 事件，事件流里不再有 calls[] 字段，事件流与 TOOL_RESULT 形成 1:1 配对；`fromPiEvent` 的合装形状保留为翻译层内部形状（测试已改注释说明）。② `historyToPiMessages` 展开逻辑重写：新格式走顶层平铺字段，旧持久化记录按 calls[] 展开（升级前的老会话并行调用不再丢），两条重建测试分别钉新格式无孤儿与旧格式展开。③ `AgentTranscript.vue` 卡片合并键从 name+step 改为 toolCallId（从后往前找归属卡，并行交错也能正确归并），卡片对象增加 toolCallId 字段。验收：`npm test` 373 pass / 0 fail（新增 3 条），eslint 0 error，`npm run build` exit=0（22:07 产物）。**局限**：UI 卡片合并的实际渲染效果无法在 node 单测覆盖（T-53 已登记的欠账），需真机验证——装新构建后跑一轮「一条消息并行调两个同名工具」看是否出两张卡。
+状态：已清（2026-10-05 完成）
+
 ### B 区已清
 
 - **B5 — 技术方案 Q4：确认卡会话级授权**（2026-10-04 完成）

@@ -161,25 +161,29 @@ function applyEvent(ev) {
       const step = {
         name: ev.name,
         step: ev.step,
+        toolCallId: ev.toolCallId,
         args: ev.args,
         status: ev.status || TOOL_STATUS.RUNNING,
         observation: ev.observation,
       };
-      const last = items[items.length - 1];
-      // 同一步的 call 与 result 合并成一张卡
-      if (
-        last &&
-        last.type === 'tool' &&
-        last.step.step === ev.step &&
-        last.step.name === ev.name
-      ) {
-        Object.assign(last.step, {
+      // 同一次调用（按 toolCallId 配对）的 call 与 result 合并成一张卡。
+      // 旧键是 name+step：同名并行调用（一条消息里两次 read_page）会互相
+      // 覆盖参数与观察值；事件流已按调用拆开（T-74 方案 B），这里按 id
+      // 从后往前找归属卡 —— 并行时事件交错，归属卡不一定就是最后一张。
+      let target = null;
+      for (let i = items.length - 1; i >= 0; i -= 1) {
+        const it = items[i];
+        if (it.type === 'tool' && it.step.toolCallId === ev.toolCallId) {
+          target = it.step;
+          break;
+        }
+      }
+      if (target) {
+        Object.assign(target, {
           status: step.status,
           observation:
-            ev.observation !== undefined
-              ? ev.observation
-              : last.step.observation,
-          args: ev.args !== undefined ? ev.args : last.step.args,
+            ev.observation !== undefined ? ev.observation : target.observation,
+          args: ev.args !== undefined ? ev.args : target.args,
         });
       } else {
         push({ type: 'tool', step });

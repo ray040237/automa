@@ -77,7 +77,8 @@ export function buildModel(config) {
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     reasoning: false,
     contextWindow: config.contextWindow,
-    maxTokens: 4096,
+    // 不设 maxTokens：端点的输出上限交给端点默认。写死一个数字（曾为 4096）
+    // 会让长回答被静默截断在半句（stopReason=length），且 spec 无此要求（T-64）。
   };
 }
 

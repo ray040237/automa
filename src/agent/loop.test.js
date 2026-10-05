@@ -339,7 +339,9 @@ test('tool-call 的 args 是 pi 给的完整参数对象', () => {
   assert.equal(r.toolCallId, 'i');
 });
 
-test('一条消息里多个工具调用时全部透出', () => {
+test('fromPiEvent 翻译层保留合装形状（含 calls[]），扇出在发射点做（T-74）', () => {
+  // 这个形状只在翻译层内部存在：handlePiEvent 会把它拆成 N 条单调用事件
+  // 再入史（见「并行工具调用拆成 N 条 TOOL_CALL 事件」那条）。
   const r = fromPiEvent({
     type: 'message_end',
     message: assistant(
@@ -388,8 +390,8 @@ test('用户输入走 untrusted 包装后才进对话', async () => {
   await send(h);
   const userEv = of(h, AGENT_EVENTS.USER_MESSAGE)[0];
   assert.ok(
-    userEv.wire.includes('<untrusted_user_message>'),
-    `实际：${userEv.wire}`
+    userEv.promptText.includes('<untrusted_user_message>'),
+    `实际：${userEv.promptText}`
   );
 });
 
@@ -962,8 +964,8 @@ test('getHistory 带回完整历史，用户消息以 USER_MESSAGE 入史', asyn
   assert.ok(userEv, '用户消息必须入史');
   assert.equal(userEv.text, '你好');
   assert.ok(
-    userEv.wire.includes('<untrusted_user_message>'),
-    'wire 形态存进事件，续接时无需二次包装'
+    userEv.promptText.includes('<untrusted_user_message>'),
+    'promptText 形态存进事件，续接时无需二次包装（票 08 前叫 wire）'
   );
   // pi 把多段文本拆成多个 text_delta 事件，所以要拼起来比对，
   // 不能指望某一条 delta 恰好等于全文（迁移前是一个 chunk 一整段）。
@@ -1028,7 +1030,7 @@ test('上一轮中断留下的悬空 tool_calls 在续接时不会让 transcript
     {
       kind: AGENT_EVENTS.USER_MESSAGE,
       text: 'hi',
-      wire: '<untrusted_user_message>\nhi\n</untrusted_user_message>',
+      promptText: '<untrusted_user_message>\nhi\n</untrusted_user_message>',
     },
     toolCallEv,
     { kind: AGENT_EVENTS.TEXT_DELTA, text: '还没回复就断了' },
@@ -1080,7 +1082,7 @@ test('preStepNotice 的通知以 user 角色注入对话，且是 SYSTEM_NOTICE 
   const notice = h.events.find((e) => e.kind === AGENT_EVENTS.SYSTEM_NOTICE);
   assert.ok(notice, '必须对外发 SYSTEM_NOTICE 事件');
   assert.ok(
-    notice.wire.includes('<untrusted_system_notice>'),
+    notice.promptText.includes('<untrusted_system_notice>'),
     'notice 必须经不可信包装'
   );
 
@@ -1134,7 +1136,7 @@ test('drainInstructions 的插话以 user 角色注入，且标明是任务中�
     (e) => e.kind === AGENT_EVENTS.USER_MESSAGE && e.text.includes('价格')
   );
   assert.ok(inj, '插话必须对外发 USER_MESSAGE 事件');
-  assert.ok(inj.wire.includes('任务进行中插话'), '要标明是任务中插话');
+  assert.ok(inj.promptText.includes('任务进行中插话'), '要标明是任务中插话');
 
   const ctx = h.streamFn.calls[0].context.messages;
   const injected = ctx.find(
@@ -1330,4 +1332,354 @@ test('默认无日志时不炸：不传 log 照常跑完', async () => {
   const h = makeAgent([piStream('hi')]);
   await send(h);
   assert.equal(of(h, AGENT_EVENTS.DONE).length, 1);
+});
+
+/* ---------------- T-61~T-65（2026-10-05 迁移 review 修复回归） ---------------- */
+
+test('initialHistory 带着上一轮的旧 ERROR 时，本轮成功仍发 DONE（T-61）', async () => {
+  // 轮末的「本轮是否出错」判定只准扫本轮新增的事件 —— history 里灌进了
+  // 上轮落盘的全部事件，旧 ERROR 会把本轮成功误判成失败、不发 DONE。
+  const history1 = [
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '你好',
+      promptText: wrapUntrusted('untrusted_user_message', '你好'),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '第一轮半路断了' },
+    {
+      kind: AGENT_EVENTS.ERROR,
+      message: '网络断了',
+      errorKind: ERROR_KIND.PROVIDER,
+      timestamp: Date.now(),
+    },
+  ];
+  const h = makeAgent([piStream('第二轮成功了')]);
+  const doneEv = await h.agent.send({
+    userText: '再试一次',
+    onEvent: (e) => h.events.push(e),
+    initialHistory: history1,
+  });
+
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE, '旧 ERROR 不能把本轮判成失败');
+  assert.deepEqual(
+    doneEv.usage,
+    { input: 10, output: 5 },
+    'usage 也只统计本轮，不受历史影响'
+  );
+});
+
+test('usage 累加本轮全部 assistant 消息，多步轮不低估（T-62）', async () => {
+  const step1 = piStream(
+    [{ type: 'toolCall', id: 'call-1', name: 'echo', arguments: {} }],
+    {
+      stopReason: 'toolUse',
+      usage: {
+        input: 100,
+        output: 10,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 110,
+      },
+    }
+  );
+  const step2 = piStream('好的', {
+    usage: {
+      input: 200,
+      output: 20,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 220,
+    },
+  });
+  const h = makeAgent([step1, step2]);
+  const doneEv = await send(h);
+
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE);
+  assert.deepEqual(
+    doneEv.usage,
+    { input: 300, output: 30 },
+    '一个工具轮两次 LLM 请求的用量必须累加，只取末条会低估'
+  );
+
+  // 跨轮：piAgent 复用，第二轮只准统计本轮新增的 assistant 消息
+  const doneEv2 = await send(h);
+  assert.deepEqual(
+    doneEv2.usage,
+    { input: 10, output: 5 },
+    '第二轮只含它自己那一次请求的用量'
+  );
+});
+
+test('USER_MESSAGE / SYSTEM_NOTICE 事件缺 promptText 时抛错，不回落裸文本（T-63）', () => {
+  // ev.text 是未包装原文，回落即裸文本直达模型（T-56 的同形复活）。
+  // 包装缺失必须炸出来，不能静默降级。
+  assert.throws(
+    () =>
+      historyToPiMessages([
+        { kind: AGENT_EVENTS.USER_MESSAGE, text: '未包装的原文' },
+      ]),
+    /缺 promptText/
+  );
+  assert.throws(
+    () =>
+      historyToPiMessages([
+        { kind: AGENT_EVENTS.SYSTEM_NOTICE, text: '未包装的通知' },
+      ]),
+    /缺 promptText/
+  );
+});
+
+test('输出撞到 token 上限时工具不执行，模型收到「参数可能被截断」（story 2 / T-65）', async () => {
+  // pi 对 stopReason==='length' 的处理（agent-loop.js failToolCallsFromTruncatedMessage）：
+  // 消息里所有 toolCall 一律不执行，产出 isError 的「参数可能被截断，请重发」
+  // 错误结果。spec story 2 要求的正是这个行为，这条测试把它钉住 —— pi 改了就会红。
+  let executed = false;
+  const tool = {
+    ...echoTool,
+    execute: async () => {
+      executed = true;
+      return 'should not run';
+    },
+  };
+  const h = makeAgent(
+    [
+      piStream(
+        [
+          {
+            type: 'toolCall',
+            id: 'call-1',
+            name: 'echo',
+            arguments: { msg: 'x' },
+          },
+        ],
+        { stopReason: 'length' }
+      ),
+      piStream('好的'),
+    ],
+    { tools: [tool] }
+  );
+  const doneEv = await send(h);
+
+  assert.equal(executed, false, '截断消息里的工具调用绝不能执行');
+  const toolMsg = h.streamFn.calls[1].context.messages.find(
+    (m) => m.role === 'toolResult'
+  );
+  assert.ok(toolMsg, '截断也要产出工具结果消息');
+  assert.equal(toolMsg.isError, true, '截断是错误结果，不能让模型以为执行成功');
+  assert.match(
+    toolMsg.content[0].text,
+    /truncat|output token limit/i,
+    `错误信息要说明参数可能被截断，实际 ${toolMsg.content[0].text}`
+  );
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE, '截断不终止整轮，模型可重发');
+});
+
+/* ---------------- T-66~T-73（2026-10-05 review 二轮修复回归） ---------------- */
+
+test('createAgent 缺 wrapUntrusted 直接抛（T-55 校验迁到消费点，T-69）', () => {
+  // adapter 的同名形参删除后，「缺注入必须炸」由真正的消费点 createAgent 执行：
+  // 用户消息回显、预检、插话、pi 自产工具结果的包装全靠它。
+  assert.throws(
+    () =>
+      createAgent({
+        streamFn: async () => ({}),
+        model: testModel,
+        promptFacts: () => ({}),
+      }),
+    /缺 wrapUntrusted/
+  );
+});
+
+test('旧持久化记录的 wire 字段在续接时兼容读（T-67）', () => {
+  // 升级前的会话记录里字段名叫 wire；改名后老会话续接不能炸。
+  const msgs = historyToPiMessages([
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧会话的消息',
+      wire: '<untrusted_user_message>\n旧会话的消息\n</untrusted_user_message>',
+    },
+  ]);
+  assert.equal(msgs.length, 1);
+  assert.equal(msgs[0].role, 'user');
+  assert.ok(
+    String(msgs[0].content).includes('<untrusted_user_message>'),
+    '兼容读必须拿到包装文本'
+  );
+});
+
+test('historyToPiMessages 遇到未知事件类型抛错，不静默丢（T-71）', () => {
+  // default 分支的旧实现是注释喊着「不能静默丢」、实现悄悄 break。
+  assert.throws(
+    () =>
+      historyToPiMessages([
+        { kind: 'agent:future-kind', text: '未来才有的事件' },
+      ]),
+    /未知的 agent 事件类型/
+  );
+});
+
+test('tool_execution_end 的 observation 是包装好的结果文本（T-70）', () => {
+  // adapter 产出的结果已包装：原样透传，不二次包装
+  const wrapped = wrapUntrusted('untrusted_tool_result', '工具的产出');
+  const ours = fromPiEvent({
+    type: 'tool_execution_end',
+    toolCallId: 'c1',
+    toolName: 'echo',
+    result: { content: [{ type: 'text', text: wrapped }], details: {} },
+    isError: false,
+  });
+  assert.equal(ours.observation, wrapped, '已包装的结果原样透传');
+  assert.equal(ours.status, TOOL_STATUS.OK);
+
+  // pi 自产的结果（未知工具短路等）没有经过 adapter：必须在这里补包装
+  const piNative = fromPiEvent({
+    type: 'tool_execution_end',
+    toolCallId: 'c2',
+    toolName: 'nope',
+    result: {
+      content: [{ type: 'text', text: 'Tool "nope" not found' }],
+    },
+    isError: true,
+  });
+  assert.equal(piNative.status, TOOL_STATUS.ERROR);
+  assert.ok(
+    piNative.observation.includes('<untrusted_tool_result>'),
+    `pi 自产结果必须补包装，实际 ${piNative.observation}`
+  );
+  assert.ok(piNative.observation.includes('not found'), '错误文本保留');
+});
+
+test('重建 transcript 用的是 observation 包装文本，不是 details 的 JSON（T-70）', () => {
+  // 修复前 end 事件 observation 是空占位，重建时把整个 AgentToolResult
+  // JSON.stringify 进上下文 —— 未包装、双层编码。
+  const observation = wrapUntrusted('untrusted_tool_result', '工具的产出');
+  const msgs = historyToPiMessages([
+    {
+      kind: AGENT_EVENTS.TOOL_RESULT,
+      toolCallId: 'c1',
+      name: 'echo',
+      status: TOOL_STATUS.OK,
+      observation,
+      details: { content: [{ type: 'text', text: 'should not appear' }] },
+    },
+  ]);
+  const toolMsg = msgs.find((m) => m.role === 'toolResult');
+  assert.equal(toolMsg.content[0].text, observation, 'transcript 里是包装文本');
+  assert.ok(
+    !toolMsg.content[0].text.includes('should not appear'),
+    'details 的 JSON 不许漏进 transcript'
+  );
+});
+
+/* ---------------- T-74 方案 B：TOOL_CALL 按调用拆开发射 ---------------- */
+
+test('并行工具调用拆成 N 条 TOOL_CALL 事件，事件流里不再有 calls[]（T-74 方案 B）', async () => {
+  const multi = piStream(
+    [
+      { type: 'toolCall', id: 'c1', name: 'echo', arguments: { n: 1 } },
+      { type: 'toolCall', id: 'c2', name: 'echo', arguments: { n: 2 } },
+    ],
+    { stopReason: 'toolUse' }
+  );
+  const h = makeAgent([multi, piStream('好的')]);
+  await send(h);
+
+  const callEvents = of(h, AGENT_EVENTS.TOOL_CALL);
+  assert.equal(callEvents.length, 2, '两个调用必须拆成两条事件');
+  assert.deepEqual(
+    callEvents.map((e) => e.toolCallId),
+    ['c1', 'c2'],
+    JSON.stringify(callEvents.map((e) => e.toolCallId))
+  );
+  assert.deepEqual(
+    callEvents.map((e) => e.args),
+    [{ n: 1 }, { n: 2 }]
+  );
+  for (const e of callEvents) {
+    assert.equal(e.calls, undefined, '事件流里不许再有 calls[] 字段');
+    assert.ok(e.name, '平铺字段必须齐全');
+  }
+});
+
+test('重建：新格式（平铺两条 TOOL_CALL）的并行调用全部进 transcript，无孤儿（T-74）', () => {
+  const msgs = historyToPiMessages([
+    {
+      kind: AGENT_EVENTS.TOOL_CALL,
+      name: 'echo',
+      args: { n: 1 },
+      toolCallId: 'c1',
+    },
+    {
+      kind: AGENT_EVENTS.TOOL_CALL,
+      name: 'echo',
+      args: { n: 2 },
+      toolCallId: 'c2',
+    },
+    {
+      kind: AGENT_EVENTS.TOOL_RESULT,
+      toolCallId: 'c1',
+      name: 'echo',
+      status: TOOL_STATUS.OK,
+      observation: '一',
+    },
+    {
+      kind: AGENT_EVENTS.TOOL_RESULT,
+      toolCallId: 'c2',
+      name: 'echo',
+      status: TOOL_STATUS.OK,
+      observation: '二',
+    },
+  ]);
+  const rebuilt = msgs.find((m) => m.role === 'assistant');
+  const ids = rebuilt.content
+    .filter((c) => c.type === 'toolCall')
+    .map((c) => c.id);
+  assert.deepEqual(ids, ['c1', 'c2'], '两个调用块都必须在');
+  const results = msgs
+    .filter((m) => m.role === 'toolResult')
+    .map((m) => m.toolCallId);
+  assert.deepEqual(results, ['c1', 'c2']);
+  for (const id of results) {
+    assert.ok(ids.includes(id), `toolResult ${id} 成了孤儿（没有配对的调用）`);
+  }
+});
+
+test('重建：旧格式（一条事件装 calls[]）兼容展开，不再丢第 2..N 个调用（T-74）', () => {
+  // 修复前的探针场景（.scratch/probe-calls.mjs）：一条 TOOL_CALL 事件装
+  // c1/c2，重建只活 c1，c2 的结果成了孤儿。旧记录升级后必须照样展开。
+  const msgs = historyToPiMessages([
+    {
+      kind: AGENT_EVENTS.TOOL_CALL,
+      name: 'echo',
+      args: { n: 1 },
+      toolCallId: 'c1',
+      calls: [
+        { name: 'echo', args: { n: 1 }, toolCallId: 'c1' },
+        { name: 'echo', args: { n: 2 }, toolCallId: 'c2' },
+      ],
+    },
+    {
+      kind: AGENT_EVENTS.TOOL_RESULT,
+      toolCallId: 'c1',
+      name: 'echo',
+      status: TOOL_STATUS.OK,
+      observation: '一',
+    },
+    {
+      kind: AGENT_EVENTS.TOOL_RESULT,
+      toolCallId: 'c2',
+      name: 'echo',
+      status: TOOL_STATUS.OK,
+      observation: '二',
+    },
+  ]);
+  const rebuilt = msgs.find((m) => m.role === 'assistant');
+  const ids = rebuilt.content
+    .filter((c) => c.type === 'toolCall')
+    .map((c) => c.id);
+  assert.deepEqual(
+    ids,
+    ['c1', 'c2'],
+    `旧记录的并行调用必须全部展开，实际 ${JSON.stringify(ids)}`
+  );
 });

@@ -26,22 +26,15 @@ import { validateTools } from './index';
  *   2. 信封 `{payload, status?, ...meta}`（`page.js` 等）
  *   3. 已经折好的 AgentToolResult（其他适配器或后续票产出）
  *
- * **不做二次包装** —— 观察值的不可信包装在票 03 落，这里只保证 `content`
- * 非空且 `isError` 明确。理由：包装点拆成两处就多一个能拆错的地方。
+ * **不做二次包装** —— 观察值的不可信包装由 `wrapObservation`（events.js，
+ * 内部走 untrusted.js）在这里一次完成。曾经还有一个必填的 `wrapUntrusted`
+ * 形参，但它从未被调用过（T-69）——包装点只准有一个，多余的依赖只会误导。
  *
  * @param {*} raw 工具 execute 的原始返回值
  * @returns {{content: Array, details: Object, isError: boolean}}
  */
 export function toToolResult(raw, opts = {}) {
-  const { wrapUntrusted, tag } = opts;
-  if (typeof wrapUntrusted !== 'function') {
-    // 缺注入必须炸：静默用一个不逃逸的兜底等于零防护且无任何报警（T-55）。
-    throw new Error(
-      'toToolResult: 缺 wrapUntrusted。工具结果必须经不可信包装 —— ' +
-        '不要传兜底实现，直接抛。'
-    );
-  }
-  const wrapTag = tag || 'untrusted_tool_result';
+  const wrapTag = opts.tag || 'untrusted_tool_result';
 
   // 已经是 AgentToolResult 形状 —— 原样放行，不认识的结构不猜
   if (
@@ -111,7 +104,6 @@ export function toToolResult(raw, opts = {}) {
  *
  * @param {Array<Object>} tools 我们的工具定义
  * @param {Object} deps
- * @param {Function} deps.wrapUntrusted 不可信包装，**必填**
  * @param {Object} deps.toolCtx 工具执行上下文（读页、发消息等）
  * @returns {Array<Object>} pi 的 AgentTool[]
  */
@@ -121,14 +113,6 @@ export function toAgentTools(tools, deps = {}) {
     throw new Error(
       'toAgentTools: tools 必须是数组且必填（T-45）—— ' +
         '默认回落全量 TOOLS 会泄露画布工具给无画布的宿主'
-    );
-  }
-  // wrapUntrusted 必填：不提供就在第一次调工具时抛，而不是给一个不逃逸的
-  // 兜底（那条兜底已经删掉了，见 T-55）。
-  if (typeof deps.wrapUntrusted !== 'function') {
-    throw new Error(
-      'toAgentTools: 缺 wrapUntrusted。工具结果必须经不可信包装 —— ' +
-        '不要传兜底实现，直接抛。'
     );
   }
   // 模块期校验不能丢 —— pi 不会替我们炸。缺 class 就等于给写操作免确认，
@@ -156,19 +140,13 @@ export function toAgentTools(tools, deps = {}) {
           ? 'untrusted_page_content'
           : 'untrusted_tool_result';
       try {
-        return toToolResult(await tool.execute(params || {}, ctx), {
-          wrapUntrusted: deps.wrapUntrusted,
-          tag,
-        });
+        return toToolResult(await tool.execute(params || {}, ctx), { tag });
       } catch (err) {
         // 工具抛错不终止循环（技术方案 §4.1「错误即观察值」）。
         // 这里返回 isError 而不重抛 —— 重抛会让 pi 把整个 run 打断。
         return toToolResult(
           { status: TOOL_STATUS.ERROR, payload: err.message },
-          {
-            wrapUntrusted: deps.wrapUntrusted,
-            tag,
-          }
+          { tag }
         );
       }
     },

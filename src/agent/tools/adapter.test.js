@@ -13,15 +13,14 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { toAgentTools, toToolResult } from './adapter';
-import { wrapUntrusted, UNTRUSTED_WRAPPER_TAGS } from '../untrusted';
+import { UNTRUSTED_WRAPPER_TAGS } from '../untrusted';
 import { TOOL_CLASSES } from './index';
 
 /** 收集注册进来的 AgentTool，供断言形状用 */
-const registry = (tools, deps) =>
-  toAgentTools(tools, { wrapUntrusted, ...deps });
+const registry = (tools, deps) => toAgentTools(tools, deps);
 const find = (list, name) => list.find((t) => t.name === name);
 /** toToolResult 的默认依赖 —— 不可信包装必填（票 03） */
-const wrap = (raw, extra) => toToolResult(raw, { wrapUntrusted, ...extra });
+const wrap = (raw, extra) => toToolResult(raw, extra);
 
 /* ---------------- 红线第 3 条：返回值形状 ---------------- */
 
@@ -97,10 +96,15 @@ test('已折好的结果缺 isError 时补false，不留undefined', () => {
 
 /* ---------------- 红线第 2 条：不可信包装必须单块 ---------------- */
 
-test('缺 wrapUntrusted 直接抛，不给不逃逸的兜底', () => {
-  // T-55：曾经有个不做 escape 的默认兜底，漏注入即零防护且无任何报警。
-  assert.throws(() => toToolResult('x'), /wrapUntrusted/);
-  assert.throws(() => toAgentTools([], {}), /wrapUntrusted/);
+test('adapter 不再收 wrapUntrusted 形参：包装由 wrapObservation 内部完成（T-69）', () => {
+  // T-69：必填的 wrapUntrusted 从未被调用过，必填校验是假契约，已删除。
+  // 真正的「缺注入必须炸」校验挪到了消费点 createAgent（loop.test.js 钉）。
+  const r = toToolResult('x');
+  assert.ok(
+    r.content[0].text.includes('<untrusted_tool_result>'),
+    r.content[0].text
+  );
+  assert.doesNotThrow(() => toAgentTools([], {}));
 });
 
 test('观察值包成 untrusted_tool_result，且标签成对', () => {

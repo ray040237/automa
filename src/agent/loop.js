@@ -1,19 +1,22 @@
 /**
  * Agent 主循环 —— 基于 pi-agent-core（票 01~08 已完成，见 docs/agent-core-migration-spec.md）。
  *
- * 不变式（方案 G5）：本文件与 tools/* 只能 import src/agent 下的纯模块，
- * 一律通过 deps 拿浏览器能力；不碰 webextension-polyfill、不碰 @/ 别名，
+ * 不变式（方案 G5 + ADR 0004）：本文件与 tools/* 只 import src/agent 下的纯模块，
+ * 浏览器能力一律通过 deps 注入；不碰 webextension-polyfill、不碰 @/ 别名，
  * 更不能碰 workflowStore.update / saveWorkflow / registerWorkflowTrigger ——
  * agent 可以改画布，但永远不能落盘保存。
+ * 唯一的 import 例外是 pi 包（@earendil-works/pi-*，ADR 0004 决策的一部分）：
+ * 内核与 provider 层都来自它，npm 安装、实测无 node:/process. 依赖，浏览器可跑
+ * （ensurePiAgent 里的动态 import 就是在等它）。
  *
- * 三层东西不要混：
+ * 两层东西不要混：
  *   provider 事件 —— pi-ai 产出的流内部事件，只在 streamFn 与本文件之间流动；
- *   agent 事件    —— {kind:'agent:*'} 事件，既给 UI 消费，也是唯一的记账；
- *   transcript    —— pi 的对话状态，由 pi 持有；我们不own 一份。
- * 本文件只维护一份事件历史（history），UI 从它派生，不重复记账。
+ *   agent 事件    —— {kind:'agent:*'} 事件，既给 UI 消费，也是唯一的记账。
+ * pi 的对话状态（transcript）由 pi 自己持有，我们不 own 一份；本文件只维护
+ * 一份事件历史（history），UI 从它派生，不重复记账。
  *
  * provider 参数（messages / tools / temperature / 重试）全部由 pi 从 transcript
- * 生成，我们不再有 wire 消息这一层 —— 旧的三层机制已在票 08 删除。
+ * 生成，我们不再现算 —— 旧的自建消息层已随票 08 删除（ADR 0004）。
  */
 
 import { buildSystemPrompt } from './prompt';
@@ -26,6 +29,10 @@ import {
   wrapObservation,
 } from './events';
 import { toAgentTools } from './tools/adapter';
+// fromPiEvent 是无 deps 的纯导出函数，pi 自产结果的补包装（T-70）只能走模块级
+// import；createAgent 里那份是注入的 deps.wrapUntrusted，两者是同一个实现但
+// 生命周期不同，别名以免遮蔽。
+import { wrapUntrusted as wrapUntrustedTag } from './untrusted';
 import { noopLog } from './log';
 
 /** 一轮里最多来回多少次工具调用，防止模型卡在工具循环里。 */
@@ -39,7 +46,8 @@ export const MAX_STEPS = 12;
  * 只传首条 user 消息过去。本函数负责翻译，是 ticket 07 的接缝。
  *
  * 规则要点：
- * - user 消息直接进 transcript，content 用事件里已存好的包装文本（wire 字段）。
+ * - user 消息直接进 transcript，content 用事件里已存好的包装文本
+ *   （promptText 字段；票 08 前的旧持久化记录叫 wire，兼容读）。
  * - 连续的 TEXT_DELTA 视为同一次 assistant 回复（UI 是增量发，但真值是拼接）。
  * - TOOL_CALL 事件先攒着，等 TOOL_RESULT 一起发成一条 assistant（含 toolCall 块）
  *   + 一条 toolResult，因为 pi 要求工具调用与结果成对。
@@ -56,6 +64,23 @@ export function historyToPiMessages(events) {
   let textParts = [];
   let toolCalls = [];
 
+  /**
+   * 取事件的 prompt 包装文本。缺了就抛错，不许回落 ev.text —— 那是未包装的
+   * 原始文本，回落即裸文本直达模型（T-56/T-63：包装缺失必须炸出来）。
+   * 旧持久化记录的字段名叫 wire（票 08 前的命名），续接老会话时兼容读（T-67）。
+   */
+  const promptTextOf = (ev, label) => {
+    const packed = ev.promptText || ev.wire;
+    if (!packed) {
+      throw new Error(
+        `${label} 事件缺 promptText（未包装文本不得进 transcript）：${JSON.stringify(
+          String(ev.text || '')
+        ).slice(0, 80)}`
+      );
+    }
+    return packed;
+  };
+
   const flushAssistant = () => {
     if (!textParts.length && !toolCalls.length) return;
 
@@ -69,8 +94,10 @@ export function historyToPiMessages(events) {
       role: 'assistant',
       content,
       api: 'openai-completions',
-      provider: 'test',
-      model: 'rehydrated',
+      // provider/model 只是 pi 消息形状要求的非空占位：这条消息是从事件历史
+      // 重放的，不是真的来自某次请求，usage 也全部按 0 记（T-73）。
+      provider: 'replay',
+      model: 'replayed-history',
       usage: {
         input: 0,
         output: 0,
@@ -92,7 +119,7 @@ export function historyToPiMessages(events) {
         flushAssistant();
         out.push({
           role: 'user',
-          content: ev.wire || ev.text || '',
+          content: promptTextOf(ev, 'USER_MESSAGE'),
           timestamp: Date.now(),
         });
         break;
@@ -101,7 +128,7 @@ export function historyToPiMessages(events) {
         flushAssistant();
         out.push({
           role: 'user',
-          content: ev.wire || ev.text || '',
+          content: promptTextOf(ev, 'SYSTEM_NOTICE'),
           timestamp: Date.now(),
         });
         break;
@@ -115,17 +142,24 @@ export function historyToPiMessages(events) {
         if (ev.text) textParts.push(ev.text);
         break;
 
-      case AGENT_EVENTS.TOOL_CALL:
-        toolCalls.push({
-          type: 'toolCall',
-          id:
-            ev.toolCallId ||
-            (ev.calls && ev.calls[0] && ev.calls[0].toolCallId),
-          name: ev.name || (ev.calls && ev.calls[0] && ev.calls[0].name),
-          arguments:
-            ev.args || (ev.calls && ev.calls[0] && ev.calls[0].args) || {},
-        });
+      case AGENT_EVENTS.TOOL_CALL: {
+        // 新格式（T-74 方案 B）：一条事件一个调用，走顶层字段。
+        // 旧持久化记录：一条事件装全部并行调用（calls[]），按数组展开 ——
+        // 曾经只取第一个，其余调用在跨会话上下文里整个丢失（探针实测）。
+        const callList =
+          Array.isArray(ev.calls) && ev.calls.length
+            ? ev.calls
+            : [{ name: ev.name, args: ev.args, toolCallId: ev.toolCallId }];
+        for (const c of callList) {
+          toolCalls.push({
+            type: 'toolCall',
+            id: c.toolCallId,
+            name: c.name,
+            arguments: c.args || {},
+          });
+        }
         break;
+      }
 
       case AGENT_EVENTS.TOOL_RESULT:
         flushAssistant();
@@ -136,6 +170,9 @@ export function historyToPiMessages(events) {
           content: [
             {
               type: 'text',
+              // observation 在 fromPiEvent 里已包装好（T-70）。「|| details」
+              // 只为兼容修复前的旧持久化记录（那时 end 事件的 observation 是
+              // 空占位）—— 新事件不会走到。
               text:
                 ev.observation ||
                 (ev.details && JSON.stringify(ev.details)) ||
@@ -157,10 +194,14 @@ export function historyToPiMessages(events) {
         break;
 
       default:
-        // 未知 agent 事件：映射不了必须知道，不能静默丢
-        // （这类事件不该进 history，除非我们自己生产它）
-        flushAssistant();
-        break;
+        // 未知 agent 事件：炸出来，不能静默丢 —— 与 fromPiEvent 对未知
+        // pi 事件的策略一致（T-71）。现有 AGENT_EVENTS 全集已被上面的
+        // 分支覆盖；走到这里说明有新事件类型漏了登记。
+        throw new Error(
+          `historyToPiMessages: 未知的 agent 事件类型 ${JSON.stringify(
+            ev && ev.kind
+          )}`
+        );
     }
   }
 
@@ -290,17 +331,30 @@ export function fromPiEvent(event) {
         pending: true,
       };
 
-    case 'tool_execution_end':
-      // 票 02/03 会改成真正带观察值的结果；现在先发一个占位，
-      // 保证 UI 有「工具结束了」的信号（票 04 要靠 end.isError 判定是否真执行）
+    case 'tool_execution_end': {
+      // 观察值从结果里提取（T-70，替代曾经的空占位）：adapter 产出的结果
+      // 已在 toToolResult 里包装好（单 text 块，首部即 <untrusted_*> 标签），
+      // 原样透传；pi 自产的结果（未知工具短路、输出截断、参数校验失败）没
+      // 经过 adapter，必须在这里补包装 —— 红线第 2 条：工具返回一律 untrusted。
+      // 这份文本同时是 UI 工具卡的正文与跨会话续接时进 transcript 的内容。
+      const resultText = Array.isArray(event.result && event.result.content)
+        ? event.result.content
+            .map((c) => (c && c.type === 'text' ? c.text : ''))
+            .join('\n')
+        : '';
+      const observation =
+        resultText && resultText.startsWith('<untrusted_')
+          ? resultText
+          : wrapUntrustedTag('untrusted_tool_result', resultText);
       return {
         kind: AGENT_EVENTS.TOOL_RESULT,
         toolCallId: event.toolCallId,
         name: event.toolName,
         status: event.isError ? TOOL_STATUS.ERROR : TOOL_STATUS.OK,
-        observation: '',
+        observation,
         details: event.result,
       };
+    }
 
     case 'agent_start':
     case 'turn_start':
@@ -368,6 +422,15 @@ export function createAgent(deps) {
       'createAgent: 缺 model。pi 的模型对象由装配层从config 构造。'
     );
   }
+  if (typeof wrapUntrusted !== 'function') {
+    // 缺注入必须炸：静默用一个不逃逸的兜底等于零防护且无任何报警（T-55）。
+    // 校验原本挂在 adapter 的同名形参上（T-69 删除），真正的消费点在这里：
+    // 用户消息回显、预检通知、插话与 pi 自产工具结果的包装全靠它。
+    throw new Error(
+      'createAgent: 缺 wrapUntrusted。用户输入回显与工具返回必须经不可信' +
+        '包装 —— 不要传兜底实现，直接抛。'
+    );
+  }
 
   // 票 05：重试显式开启。pi 的 Agent 不转发 maxRetries（provider-retry 里
   // 默认 `options.maxRetries ?? 0`，即完全不重试），所以把 streamFn 包一层
@@ -377,7 +440,6 @@ export function createAgent(deps) {
 
   // pi Agent 实例：每个 createAgent 一个，跨轮复用（它持有对话状态）
   let piAgent = null;
-  let piMessages = [];
 
   /** 事件历史：UI 的唯一消费来源，也是唯一的记账 */
   let history = [];
@@ -397,12 +459,18 @@ export function createAgent(deps) {
    */
   const rejectedBy = new Map();
 
-  const record = (ev) => {
-    history.push(ev);
-  };
-
   /** 本轮的事件回调。pi 的 subscribe 在Agent 构造时绑定，所以用闭包变量传。 */
   let currentEmit = null;
+
+  /**
+   * 「入史 + 发外」的单一入口（T-72）：事件历史与 UI 看到的必须是同一份，
+   * 新增事件发射点只准走这里 —— 漏一半（只入史 UI 缺行 / 只发外续接丢数据）
+   * 这种错误从结构上堵死。doneEv 是例外（见 send 末尾：只发外）。
+   */
+  const emitAndRecord = (ev) => {
+    history.push(ev);
+    if (currentEmit) currentEmit(ev);
+  };
 
   function handlePiEvent(event) {
     let mapped;
@@ -415,8 +483,7 @@ export function createAgent(deps) {
         message: toolError(err).message,
         errorKind: ERROR_KIND.INTERNAL,
       });
-      record(ev);
-      if (currentEmit) currentEmit(ev);
+      emitAndRecord(ev);
       return;
     }
     if (!mapped || mapped.emitsNothing) return;
@@ -442,8 +509,33 @@ export function createAgent(deps) {
       };
     }
 
-    record(mapped);
-    if (currentEmit) currentEmit(mapped);
+    // T-74 方案 B：TOOL_CALL 按调用拆开发射 —— 一条 TOOL_CALL 事件配一条
+    // TOOL_RESULT 事件，事件流里不再有 calls[] 字段，事件形状只有「单调用」
+    // 一种。fromPiEvent 产出的合装事件（含 calls[]）只是翻译层内部形状，
+    // 到这个唯一的发射点必须拆开，否则并行调用的第 2..N 个会从消费方眼前消失。
+    if (mapped.kind === AGENT_EVENTS.TOOL_CALL) {
+      const calls =
+        Array.isArray(mapped.calls) && mapped.calls.length
+          ? mapped.calls
+          : [
+              {
+                name: mapped.name,
+                args: mapped.args,
+                toolCallId: mapped.toolCallId,
+              },
+            ];
+      for (const c of calls) {
+        emitAndRecord({
+          kind: AGENT_EVENTS.TOOL_CALL,
+          name: c.name,
+          args: c.args,
+          toolCallId: c.toolCallId,
+        });
+      }
+      return;
+    }
+
+    emitAndRecord(mapped);
   }
 
   async function ensurePiAgent(systemPrompt) {
@@ -454,13 +546,13 @@ export function createAgent(deps) {
         systemPrompt,
         model,
         // 票 02：工具经适配层注册。票 04：确认门在 beforeToolCall 接。
-        tools: toAgentTools(tools, { toolCtx, wrapUntrusted }),
+        tools: toAgentTools(tools, { toolCtx }),
       },
       streamFn: streamFnWithRetry,
       // 票 06：预检通知与插话队列。注入点选 transformContext ——
       // pi 每次 LLM 请求前调用它，产物只用于当次请求、**不写回 transcript**。
       // 这样通知期后模型能看到，但不会进持久历史（persist 的只是用户/助手/工具消息），
-      // 与现状「通知进 wire 不进 transcript」的语义一致。
+      // 与迁移前「通知进消息层不进持久历史」的语义一致。
       //
       // 红线：注入的通知**必须是 user 角色**，绝不能用 system ——
       // pi 在 OpenAI 兼容端点上默认把后续 system 消息并进 system prompt 首部，
@@ -479,10 +571,9 @@ export function createAgent(deps) {
               const ev = {
                 kind: AGENT_EVENTS.SYSTEM_NOTICE,
                 text: notice,
-                wire: wrapped,
+                promptText: wrapped,
               };
-              record(ev);
-              if (currentEmit) currentEmit(ev);
+              emitAndRecord(ev);
               extra.push({
                 role: 'user',
                 content: wrapped,
@@ -506,10 +597,9 @@ export function createAgent(deps) {
               const ev = {
                 kind: AGENT_EVENTS.USER_MESSAGE,
                 text,
-                wire: wrapped,
+                promptText: wrapped,
               };
-              record(ev);
-              if (currentEmit) currentEmit(ev);
+              emitAndRecord(ev);
               extra.push({
                 role: 'user',
                 content: wrapped,
@@ -589,8 +679,7 @@ export function createAgent(deps) {
             '提示词事实表构建失败，本次按空表继续：' + toolError(err).message,
           errorKind: ERROR_KIND.INTERNAL,
         });
-        record(ev);
-        if (currentEmit) currentEmit(ev);
+        emitAndRecord(ev);
       }
 
       const system =
@@ -598,27 +687,28 @@ export function createAgent(deps) {
 
       // 跨轮续接：历史重置为调用方给的上轮历史
       history = [...(params.initialHistory || [])];
+      // 本轮事件的起点。轮末的「本轮是否出错」判定只准扫这之后的事件：
+      // initialHistory 里可能带着上一轮落盘的旧 ERROR（T-61），扫全量会把
+      // 本轮的成功误判成失败、不发 DONE。
+      const turnHistoryStart = history.length;
       stepCounter = 0;
 
       const startEv = { kind: AGENT_EVENTS.START };
-      record(startEv);
-      if (currentEmit) currentEmit(startEv);
+      emitAndRecord(startEv);
 
       const userEv = {
         kind: AGENT_EVENTS.USER_MESSAGE,
         text: userText,
-        wire: buildUserMessage(
+        promptText: buildUserMessage(
           { userText, targetTab, workflowContext },
           wrapUntrusted
         ),
       };
-      record(userEv);
-      if (currentEmit) currentEmit(userEv);
+      emitAndRecord(userEv);
 
       if (targetTab) {
         const tabEv = { kind: AGENT_EVENTS.TARGET_TAB, tab: targetTab };
-        record(tabEv);
-        if (currentEmit) currentEmit(tabEv);
+        emitAndRecord(tabEv);
       }
 
       const agent = await ensurePiAgent(system);
@@ -626,7 +716,7 @@ export function createAgent(deps) {
       // 之前是 filter((ev) => ev.piMessage) —— 但我们从没在事件上存过 piMessage，
       // 等于永远拿不到历史，「重开会话」实际变成「只传本轮 user 消息过去」。
       if (params.initialHistory && params.initialHistory.length > 0) {
-        piMessages = historyToPiMessages(params.initialHistory);
+        const piMessages = historyToPiMessages(params.initialHistory);
         if (piMessages.length > 0) {
           // pi 的 transcript 首条是 system（由 initialState.systemPrompt 种入）。
           // 我们重建的 transcript 没有 system，必须把现有那条补回最前，
@@ -640,6 +730,10 @@ export function createAgent(deps) {
         }
       }
 
+      // 本轮 transcript 的起点。piAgent 跨轮复用、transcript 累积，usage 只准
+      // 累加这之后产生的 assistant 消息（T-62）—— 起点必须在 prompt 之前取。
+      const turnTranscriptStart = agent.state.messages.length;
+
       let stopped = false;
       const usage = { input: 0, output: 0 };
       /** 本轮的错误事件（若有）。pi 把失败编码成 assistant 消息的 stopReason，
@@ -649,14 +743,18 @@ export function createAgent(deps) {
       try {
         await agent.prompt(userText);
         stopped = true;
-        // 用量取**最后一条 assistant 消息**，不是最后一条消息 ——
-        // pi 会为 user 消息也发 message_end，transcript 末条不一定是 assistant。
-        for (let i = agent.state.messages.length - 1; i >= 0; i -= 1) {
+        // usage 累加**本轮全部**带 usage 的 assistant 消息：一个工具轮有 N 次
+        // LLM 请求就有 N 条 assistant 消息，只取最后一条会把前 N-1 次的用量
+        // 全部丢掉。pi 会为 user 消息也发 message_end，所以只认 assistant。
+        for (
+          let i = turnTranscriptStart;
+          i < agent.state.messages.length;
+          i += 1
+        ) {
           const m = agent.state.messages[i];
           if (m.role === 'assistant' && m.usage) {
-            usage.input = m.usage.input || 0;
-            usage.output = m.usage.output || 0;
-            break;
+            usage.input += m.usage.input || 0;
+            usage.output += m.usage.output || 0;
           }
         }
       } catch (err) {
@@ -666,15 +764,18 @@ export function createAgent(deps) {
             message: toolError(err).message,
             errorKind: ERROR_KIND.INTERNAL,
           });
-          record(errorEv);
-          if (currentEmit) currentEmit(errorEv);
+          emitAndRecord(errorEv);
         }
       }
 
       // 映射层已经为 pi 的错误产出了 ERROR 事件，这里不再发 DONE ——
       // UI 靠「有没有 DONE」区分正常收尾与出错收尾。
       errorEv =
-        errorEv || history.find((e) => e.kind === AGENT_EVENTS.ERROR) || null;
+        errorEv ||
+        history
+          .slice(turnHistoryStart)
+          .find((e) => e.kind === AGENT_EVENTS.ERROR) ||
+        null;
       if (errorEv) {
         stopped = false;
         log.error('turn.error', {
@@ -683,9 +784,6 @@ export function createAgent(deps) {
         });
         return errorEv;
       }
-
-      // pi 侧的对话状态留给下一轮 / 票 07 的历史对接
-      piMessages = agent.state.messages.slice();
 
       const doneEv = {
         kind: AGENT_EVENTS.DONE,
