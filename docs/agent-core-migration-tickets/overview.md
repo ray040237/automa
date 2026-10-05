@@ -21,6 +21,14 @@ Spec：[agent-core-migration-spec.md](../agent-core-migration-spec.md) ｜ 决�
 
 **frontier（可立即开工）**：01
 
+## 每票是中间态
+
+**没有一张票是「全绿才算过」。** 每票只让自己负责的路径真绿，属于后续票的断言标 skip 并注明等哪张。
+
+否则会陷入「全红 → 硬凑到全绿 → 票越滚越大 → 最后一张什么都得做」的死循环。
+
+01 的分类基准见 [`loop-test-classification.md`](loop-test-classification.md)（39 条逐条分类，同时是停损点的判据）。
+
 ## 三条红线约束与对应票据
 
 | 红线 | 后果 | 票据 |
