@@ -2,7 +2,7 @@
   <div class="relative min-h-0 flex-1">
     <div
       ref="scroller"
-      class="flex h-full flex-col gap-3 overflow-y-auto p-3"
+      class="scroll scroll-xs flex h-full flex-col gap-3 overflow-y-auto p-3"
       @scroll.passive="onScroll"
     >
       <div
@@ -33,7 +33,7 @@
             @click="toggleThinking(item)"
           >
             <v-remixicon
-              :name="item.open ? 'riArrowDownSLine' : 'riArrowRightSLine'"
+              :name="item.open ? 'riArrowDropDownLine' : 'riArrowRightLine'"
               class="shrink-0"
             />
             <span class="shrink-0">{{ thinkingLabel(item, i) }}</span>
@@ -63,6 +63,33 @@
           class="rounded bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400"
         >
           {{ item.text }}
+        </div>
+
+        <!-- T-76 压缩摘要：折叠卡与思考卡同一交互。默认收起——它记录的是
+             「上面那些消息」的摘要，展开看内容的人是少数 -->
+        <div
+          v-else-if="item.type === 'compaction'"
+          class="rounded border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/40"
+        >
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-500 dark:text-gray-400"
+            @click="item.open = !item.open"
+          >
+            <v-remixicon
+              :name="item.open ? 'riArrowDropDownLine' : 'riArrowRightLine'"
+              class="shrink-0"
+            />
+            <span class="shrink-0">{{
+              t('workflow.agent.compacted', { n: item.turns })
+            }}</span>
+          </button>
+          <div
+            v-if="item.open"
+            class="border-t border-gray-200 px-3 py-2 text-gray-600 dark:border-gray-700 dark:text-gray-300"
+          >
+            <agent-markdown :raw="item.raw" />
+          </div>
         </div>
       </template>
 
@@ -152,6 +179,14 @@ function applyEvent(ev) {
       return;
     case AGENT_EVENTS.SYSTEM_NOTICE:
       push({ type: 'notice', text: ev.text || '' });
+      return;
+    case AGENT_EVENTS.COMPACTION:
+      push({
+        type: 'compaction',
+        raw: ev.summary || '',
+        turns: ev.summarizedTurns || 0,
+        open: false,
+      });
       return;
     case AGENT_EVENTS.ERROR:
       push({ type: 'notice', text: ev.message || t('workflow.agent.error') });

@@ -354,8 +354,12 @@
       "clearKey": "删除这个 Key",
       "privacy": "使用助手时，目标页的正文与结构会发送到你上面填的接口地址（第三方服务）。请勿用于含个人或机密信息的页面。",
       "saved": "已保存",
+      "modelParams": "模型参数",
       "contextWindow": "上下文窗口（token）",
-      "contextWindowHint": "你的模型一次能读的最大 token 数。对话历史超过它会被裁剪；不确定就保持默认。"
+      "contextWindowHint": "你的模型一次能读的最大 token 数。超过时早期轮次会被压缩成摘要（原始记录不删除，界面里仍可往上翻）；切换服务商会自动填入建议值，不确定就保持它。",
+      "maxTokens": "单次回复上限（token）",
+      "maxTokensPlaceholder": "留空表示不限制",
+      "maxTokensHint": "单次回复的输出上限。留空即使用接口默认值；设得太小会让长回答被截断在半句。"
     }
   },
   "workflow": {
@@ -667,6 +671,7 @@
       "send": "发送",
       "thinking": "思考中…",
       "thinkingResult": "思考过程",
+      "compacted": "已压缩早期对话（{n} 轮）",
       "scrollToBottom": "回到底部",
       "placeholder": "问当前这个页面：搜索框在哪、这个列表怎么抓…",
       "empty": "问我关于你正在看的这个页面。我能读到它的真实结构，并直接给你 selector 或块。",
@@ -728,7 +733,7 @@
         "delete": "删除当前会话",
         "placeholder": "选择历史会话",
         "untitled": "未命名会话",
-        "currentLabel": "{label}（当前）",
+        "empty": "还没有历史会话",
         "deleteConfirmTitle": "删除这个会话？",
         "deleteConfirmBody": "将永久删除「{title}」及其中的全部对话，删除后无法恢复。"
       }

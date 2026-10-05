@@ -1,6 +1,8 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { installGlobals } from './__stubs__/globals';
 
 installGlobals();
@@ -107,7 +109,7 @@ describe('createAgentRuntime', () => {
     );
   });
 
-  test('setTargetTab 必须同时换掉 toolCtx 里的快照', () => {
+  test('setTargetTab 改闭包变量，toolCtx.targetTab 是 getter 自动跟随（T-71）', () => {
     const rt = createAgentRuntime(deps());
     const next = { id: 9, url: 'https://other.example.com' };
 
@@ -705,4 +707,74 @@ test('T-35/B1 接线守卫：标题回写在发起时捕获 id，且只 patch ti
     !/\b(events|pins|focusedTabId|usage),/.test(block),
     'then 里不许把首轮快照整记录写回 —— 会盖掉第二轮 events（B1）'
   );
+});
+
+test('T-69/T-84 接线守卫：enabledGroups 支持函数求值，宿主装配必填校验在', () => {
+  const indexSrc = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  // runtime 侧：enabledGroups 的函数形式在每次 send 求值（T-69）
+  assert.ok(
+    indexSrc.includes("typeof enabledGroups === 'function'"),
+    'index.js 必须支持 enabledGroups 传函数（每次 send 求值，权限变化下一轮生效）'
+  );
+
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+  const hostSrc = readFileSync(
+    join(ROOT, 'src/composable/agentHost.js'),
+    'utf8'
+  );
+  assert.ok(
+    hostSrc.includes('deps.enabledGroups 必填'),
+    'agentHost 必须校验 enabledGroups 缺失（否则按未过滤处理，canvas 组泄露）'
+  );
+  assert.ok(
+    hostSrc.includes('deps.getWorkflowId 必填'),
+    'agentHost 必须校验 getWorkflowId 缺失（否则会话归属静默变全局）'
+  );
+
+  // 编辑器宿主必须传 getter 而不是 setup 期快照（T-69 本体）
+  const pageSrc = readFileSync(
+    join(ROOT, 'src/newtab/pages/workflows/[id].vue'),
+    'utf8'
+  );
+  assert.match(
+    pageSrc,
+    /enabledGroups: \(\) =>/,
+    '[id].vue 的 enabledGroups 必须是 getter（setup 期快照会冻结团队权限）'
+  );
+});
+
+test('T-90 接线守卫：面板收 :host 单绑定，两宿主不再逐字重复', () => {
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const panelSrc = readFileSync(
+    join(ROOT, 'src/components/newtab/workflow/agent/AgentPanel.vue'),
+    'utf8'
+  );
+
+  // 面板：收 host 对象，直调 host 方法，不再声明散 prop 与 emits
+  assert.match(panelSrc, /host: \{ type: Object, required: true \}/);
+  assert.ok(
+    !panelSrc.includes('defineEmits'),
+    '面板直调 host 方法，不应再有 emits（T-90）'
+  );
+
+  for (const page of [
+    'src/newtab/pages/Agent.vue',
+    'src/newtab/pages/workflows/[id].vue',
+  ]) {
+    const src = readFileSync(join(ROOT, page), 'utf8');
+    assert.match(
+      src,
+      /<agent-panel\s+:host="/,
+      page + ' 必须只绑 :host（T-90）'
+    );
+    assert.ok(
+      !src.includes(':events='),
+      page + ' 不许再逐字绑定面板状态（T-90）'
+    );
+    assert.ok(
+      !/import\s+\{[^}]*listTabs[^}]*\}\s+from\s+'@\/agent'/.test(src),
+      page + ' 不许绕过 agentHost 直连 @/agent 拿 listTabs（T-90）'
+    );
+  }
 });

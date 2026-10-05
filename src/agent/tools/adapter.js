@@ -119,6 +119,23 @@ export function toAgentTools(tools, deps = {}) {
   // 直接违反 ADR 0002。
   validateTools(tools);
 
+  // 键绑定校验（T-71）：工具声明了的 ctx 键必须在 toolCtx 里真实存在。
+  // 宿主漏传依赖（比如 canvas 组开着却没给画布句柄）在这里炸出人话——
+  // 点名哪个工具缺哪个键，而不是等工具执行时才静默退化成一句观察值。
+  const ctxKeys = deps.toolCtx || {};
+  const missing = [];
+  tools.forEach((tool) => {
+    tool.ctx.forEach((key) => {
+      if (!(key in ctxKeys)) missing.push(tool.name + ' ← ctx.' + key);
+    });
+  });
+  if (missing.length) {
+    throw new Error(
+      'toAgentTools: 以下工具声明的 ctx 键在 toolCtx 里不存在（装配层漏传依赖）：\n' +
+        missing.join('\n')
+    );
+  }
+
   return tools.map((tool) => ({
     name: tool.name,
     label: tool.label || tool.name,

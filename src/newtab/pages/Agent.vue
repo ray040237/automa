@@ -1,31 +1,12 @@
 <template>
   <div class="relative h-[calc(100vh-41px)] w-full">
-    <agent-panel
-      :events="agent.events"
-      :target-tab="agent.targetTab"
-      :config="agent.config"
-      :busy="agent.busy"
-      :list-tabs="listTabs"
-      :sessions="agent.sessions"
-      :current-session-id="agent.sessionId"
-      :usage="agent.usage"
-      :pending-confirm="agent.pendingConfirm"
-      @no-target="agent.noTarget"
-      @go-settings="agent.goToSettings"
-      @send="agent.send"
-      @pick-tab="agent.pickTab"
-      @select-session="agent.openSession"
-      @new-session="agent.newSession"
-      @delete-session="agent.deleteSession"
-      @confirm-answer="agent.answerConfirm"
-      @abort="agent.abort"
-    />
+    <!-- T-90：面板收单个 host 对象（useAgentHost 的返回值），绑定只此一行 -->
+    <agent-panel :host="agent" />
   </div>
 </template>
 
 <script setup>
 import { onMounted } from 'vue';
-import { listTabs } from '@/agent';
 import AgentPanel from '@/components/newtab/workflow/agent/AgentPanel.vue';
 import { useAgentHost } from '@/composable/agentHost';
 

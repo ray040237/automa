@@ -27,26 +27,8 @@
         v-else-if="state.sidebarPanel === 'agent'"
         class="relative flex min-h-0 flex-1 flex-col"
       >
-        <agent-panel
-          :events="agentHost.events"
-          :target-tab="agentHost.targetTab"
-          :config="agentHost.config"
-          :busy="agentHost.busy"
-          :list-tabs="listTabs"
-          :sessions="agentHost.sessions"
-          :current-session-id="agentHost.sessionId"
-          :usage="agentHost.usage"
-          :pending-confirm="agentHost.pendingConfirm"
-          @no-target="agentHost.noTarget"
-          @go-settings="agentHost.goToSettings"
-          @send="agentHost.send"
-          @pick-tab="agentHost.pickTab"
-          @select-session="agentHost.openSession"
-          @new-session="agentHost.newSession"
-          @delete-session="agentHost.deleteSession"
-          @confirm-answer="agentHost.answerConfirm"
-          @abort="agentHost.abort"
-        />
+        <!-- T-90：面板收单个 host 对象（useAgentHost 的返回值），绑定只此一行 -->
+        <agent-panel :host="agentHost" />
       </div>
       <workflow-details-card
         v-else
@@ -119,7 +101,7 @@
             style="margin-right: 6px"
             @click="toggleAgentPanel"
           >
-            <v-remixicon name="riSparklingLine" size="18" />
+            <v-remixicon name="riMagicLine" size="18" />
             <span class="ml-1">{{ t('workflow.agent.tab') }}</span>
           </button>
           <ui-tab value="editor">{{ t('common.editor') }}</ui-tab>
@@ -356,7 +338,6 @@ import WorkflowGlobalData from '@/components/newtab/workflow/WorkflowGlobalData.
 import WorkflowSettings from '@/components/newtab/workflow/WorkflowSettings.vue';
 import WorkflowShare from '@/components/newtab/workflow/WorkflowShare.vue';
 import WorkflowShareTeam from '@/components/newtab/workflow/WorkflowShareTeam.vue';
-import { listTabs } from '@/agent';
 import { useAgentHost } from '@/composable/agentHost';
 import { useCommandManager } from '@/composable/commandManager';
 import { useGroupTooltip } from '@/composable/groupTooltip';
@@ -627,9 +608,13 @@ const workflow = computed(() => {
  * onCanvasChanged 只标「未保存」：保存永远是用户自己的动作（G5）。
  */
 const agentHost = useAgentHost({
-  enabledGroups: haveEditAccess.value
-    ? ['page', 'context', 'tab', 'canvas']
-    : ['page', 'context', 'tab'],
+  // T-69：haveEditAccess 是异步加载的响应式权限，setup 期求值会把它冻结成
+  // 快照（团队用户页面刚打开时多半还没就绪 → 助手永久缺 canvas 组）。
+  // 传 getter，runtime 每次 send 求值，权限变化下一轮生效。
+  enabledGroups: () =>
+    haveEditAccess.value
+      ? ['page', 'context', 'tab', 'canvas']
+      : ['page', 'context', 'tab'],
   getWorkflowId: () => workflowId,
   sessionWorkflowId: workflowId,
   canvas: {

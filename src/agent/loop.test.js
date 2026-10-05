@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { createAgent, fromPiEvent, historyToPiMessages } from './loop';
 import { AGENT_EVENTS, ERROR_KIND, TOOL_STATUS } from './events';
 import { wrapUntrusted } from './untrusted';
+import { SUMMARIZATION_SYSTEM_PROMPT } from './compaction';
 
 /**
  * ── 迁移期说明（票 01，见 docs/agent-core-migration-tickets/loop-test-classification.md）──
@@ -116,6 +117,7 @@ const echoTool = {
   label: '回显参数',
   class: 'read',
   group: 'context',
+  ctx: [],
   description: '回显参数',
   parameters: { type: 'object', properties: {} },
   execute: async (args) => ({ payload: 'echo:' + JSON.stringify(args) }),
@@ -126,6 +128,8 @@ const writeTool = {
   label: '写东西',
   class: 'write',
   group: 'page',
+  ctx: [],
+  confirmDetail: () => ({ kind: 'generic', detail: '写页面' }),
   description: '写页面',
   parameters: { type: 'object', properties: { code: { type: 'string' } } },
   execute: async () => '已写入',
@@ -163,6 +167,8 @@ function makeAgent(turns, opts = {}) {
     toolCtx: opts.toolCtx || {},
     requestConfirmation:
       opts.requestConfirmation || (async () => ({ approved: true })),
+    systemPromptOverride: opts.systemPromptOverride,
+    contextWindow: opts.contextWindow,
     log: opts.log,
     preStepNotice: opts.preStepNotice,
     drainInstructions: opts.drainInstructions,
@@ -238,6 +244,34 @@ test('fromPiEvent 覆盖 pi 的全部事件类型', () => {
   );
 });
 
+test('回复被长度截断时发 SYSTEM_NOTICE，不再静默收尾（T-96②）', () => {
+  // pi 把 length 当正常收尾，不进 error 分支 —— 若不显式处理，用户看到的是
+  // 「话说到一半没了」而界面毫无提示（provider.js 记着「曾写死 4096」的坑）。
+  const ev = fromPiEvent({
+    type: 'message_end',
+    message: assistant('说了一半', { stopReason: 'length' }),
+  });
+  assert.equal(ev.kind, AGENT_EVENTS.SYSTEM_NOTICE);
+  assert.ok(ev.text.includes('截断'));
+  // 进 transcript 的契约：SYSTEM_NOTICE 必须带包装文本，否则投影层抛错
+  assert.ok(
+    ev.promptText && ev.promptText.startsWith('<untrusted_system_notice'),
+    'SYSTEM_NOTICE 必须带 untrusted 包装'
+  );
+});
+
+test('长度截断优先级高于工具调用：参数被截断时不发半截 TOOL_CALL', () => {
+  const ev = fromPiEvent({
+    type: 'message_end',
+    message: assistant(
+      [{ type: 'toolCall', id: 'i', name: 'click', arguments: {} }],
+      { stopReason: 'length' }
+    ),
+  });
+  // 参数可能是半截 JSON，按未截断处理会让工具拿着残缺参数执行
+  assert.equal(ev.kind, AGENT_EVENTS.SYSTEM_NOTICE);
+});
+
 test('fromPiEvent 对内部事件返回 emitsNothing，不产生 agent 事件', () => {
   // 这些事件 UI 不消费，但必须显式列出 —— 落到default 就会抛错
   for (const type of [
@@ -290,6 +324,7 @@ test('未知事件在真实事件流里变成 internal 错误事件，循环不�
     model: testModel,
     promptFacts: () => ({}),
     wrapUntrusted,
+    buildUserMessage: ({ userText }) => userText,
   });
   await agent.send({ userText: 'hi', onEvent: (e) => events.push(e) });
 
@@ -562,6 +597,7 @@ test('页面类工具结果用 untrusted_page_content 包装', async () => {
     label: '读页面',
     class: 'read',
     group: 'page',
+    ctx: [],
     description: '读页面',
     parameters: { type: 'object', properties: {} },
     execute: async () => ({ payload: '页面正文' }),
@@ -684,14 +720,6 @@ test('start 事件早于被拦的工具的 end —— UI 必须按 end.isError �
   );
 });
 
-test.skip('旧的页面快照在下一步被压成占位符（elide）', async () => {}, {
-  skip: 'B9 第 1 项：本次不做 token 预算，陈旧快照剔除随之不做',
-});
-
-test.skip('工具调用不无限循环（MAX_STEPS 兜底）', async () => {}, {
-  skip: 'B9 第 1 项：本次不做步数上限。pi 无内置等价物，若将来补用 finishTurn',
-});
-
 test('LLM 报错时发 ERROR 事件，且 send 返回 ERROR 而非 DONE', async () => {
   // 现状契约（loop-test-classification.md #18）：provider 报错时结束本轮，
   // 发 ERROR，**不发 DONE**。UI 靠「有没有 DONE」区分「正常收尾」与「出错收尾」。
@@ -717,6 +745,7 @@ test('LLM 报错时发 ERROR 事件，且 send 返回 ERROR 而非 DONE', async 
     promptFacts: () => ({}),
     tools: [],
     wrapUntrusted,
+    buildUserMessage: ({ userText }) => userText,
   });
   const ret = await agent.send({
     userText: 'hi',
@@ -808,6 +837,7 @@ test('promptFacts 抛错时降级为空事实，不炸掉整轮对话', async ()
     },
     tools: [],
     wrapUntrusted,
+    buildUserMessage: ({ userText }) => userText,
   });
 
   const events = [];
@@ -885,6 +915,7 @@ test('分片参数聚合后，工具拿到的是完整参数对象', async () =>
     label: 'Echo',
     class: 'read',
     group: 'context',
+    ctx: [],
     description: '回显',
     parameters: {
       type: 'object',
@@ -1255,6 +1286,7 @@ test('abort 走 DONE(aborted) 而不是 error（§5.4 回归）', async () => {
     promptFacts: () => ({}),
     tools: [],
     wrapUntrusted,
+    buildUserMessage: ({ userText }) => userText,
   });
 
   const p = agent.send({ userText: 'hi', onEvent: (e) => events.push(e) });
@@ -1323,9 +1355,6 @@ test('write 工具的确认门打点：confirm.ask / confirm.answer', async () =
     false,
     '拒绝也要打点，否则事后查不出卡在哪'
   );
-});
-test.skip('log 上下文预算打点：estimated / dropped', async () => {}, {
-  skip: 'B9 第 1 项：本次不做 token 预算裁剪，所以没有这个打点',
 });
 
 test('默认无日志时不炸：不传 log 照常跑完', async () => {
@@ -1436,6 +1465,7 @@ test('输出撞到 token 上限时工具不执行，模型收到「参数可能�
   let executed = false;
   const tool = {
     ...echoTool,
+    ctx: [],
     execute: async () => {
       executed = true;
       return 'should not run';
@@ -1487,6 +1517,19 @@ test('createAgent 缺 wrapUntrusted 直接抛（T-55 校验迁到消费点，T-6
         promptFacts: () => ({}),
       }),
     /缺 wrapUntrusted/
+  );
+});
+
+test('createAgent 缺 buildUserMessage 直接抛（T-84）——旧缺省兜底会静默丢 targetTab 元数据', () => {
+  assert.throws(
+    () =>
+      createAgent({
+        streamFn: async () => ({}),
+        model: testModel,
+        promptFacts: () => ({}),
+        wrapUntrusted,
+      }),
+    /缺 buildUserMessage/
   );
 });
 
@@ -1682,4 +1725,241 @@ test('重建：旧格式（一条事件装 calls[]）兼容展开，不再丢第
     ['c1', 'c2'],
     `旧记录的并行调用必须全部展开，实际 ${JSON.stringify(ids)}`
   );
+});
+
+/* ---------------- T-76 上下文压缩 ---------------- */
+
+const wrapUser = (t) => wrapUntrusted('untrusted_user_message', t);
+
+test('historyToPiMessages 投影 compaction：摘要之前的旧事件不再进 transcript（T-76）', () => {
+  const events = [
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧问题',
+      promptText: wrapUser('旧问题'),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '旧回答' },
+    {
+      kind: AGENT_EVENTS.COMPACTION,
+      summary: '## 任务目标\n做某事',
+      tokensBefore: 100,
+      summarizedTurns: 1,
+      createdAt: 1,
+    },
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '新问题',
+      promptText: wrapUser('新问题'),
+    },
+  ];
+  const msgs = historyToPiMessages(events);
+  // [compaction 摘要消息, 新问题]
+  assert.equal(msgs.length, 2);
+  assert.equal(msgs[0].role, 'user');
+  assert.ok(msgs[0].content.includes('已压缩为摘要'));
+  assert.ok(msgs[0].content.includes('<untrusted_compaction_summary>'));
+  assert.ok(msgs[0].content.includes('## 任务目标'));
+  assert.ok(
+    !msgs.some((m) => JSON.stringify(m).includes('旧问题')),
+    '被摘要掉的老轮次不得进 transcript'
+  );
+  assert.ok(msgs[1].content.includes('新问题'));
+});
+
+test('上下文估算超阈值：send 先发摘要请求，compaction 事件在 START 之前入史（T-76）', async () => {
+  // contextWindow 4096 → threshold 2048 / keep 1024。
+  // initialHistory：小轮 + 大轮（约 3900 token）→ 越过阈值，切点落在第二轮开头。
+  const initialHistory = [
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧一',
+      promptText: wrapUser('旧一'),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '好' },
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧二',
+      promptText: wrapUser('旧二'.repeat(650)),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '旧答'.repeat(650) },
+  ];
+  const h = makeAgent([piStream('这是摘要'), piStream('本轮回答')], {
+    contextWindow: 4096,
+    systemPromptOverride: 'sys',
+  });
+  const doneEv = await send(h, { initialHistory });
+
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE);
+  // 第 1 次调用是摘要请求，第 2 次才是主请求
+  assert.equal(h.streamFn.calls.length, 2);
+  assert.equal(
+    h.streamFn.calls[0].context.systemPrompt,
+    SUMMARIZATION_SYSTEM_PROMPT
+  );
+  assert.ok(
+    h.streamFn.calls[0].context.messages[0].content.includes('<conversation>'),
+    '摘要请求携带序列化后的对话'
+  );
+  assert.ok(h.streamFn.calls[0].options.maxTokens > 0, '摘要请求带输出上限');
+  assert.notEqual(
+    h.streamFn.calls[1].context.systemPrompt,
+    SUMMARIZATION_SYSTEM_PROMPT
+  );
+
+  // 压缩事件入史且在 START 之前；用户事件流可见
+  const hist = h.agent.getHistory();
+  const compIdx = hist.findIndex((e) => e.kind === AGENT_EVENTS.COMPACTION);
+  const startIdx = hist.findIndex((e) => e.kind === AGENT_EVENTS.START);
+  assert.ok(compIdx !== -1, 'compaction 事件必须入史');
+  assert.ok(startIdx !== -1 && compIdx < startIdx);
+  assert.ok(h.events.some((e) => e.kind === AGENT_EVENTS.COMPACTION));
+
+  // 主请求的 transcript：摘要进了；被摘要的第一轮没进；
+  // 第二轮在保留窗内（切口回退到它的轮首），原样保留
+  const mainMessages = JSON.stringify(h.streamFn.calls[1].context.messages);
+  assert.ok(mainMessages.includes('untrusted_compaction_summary'));
+  assert.ok(!mainMessages.includes('旧一'), '被摘要的旧轮不得再进 transcript');
+  assert.ok(mainMessages.includes('旧二'), '保留窗内的轮次原样保留');
+});
+
+test('摘要请求失败不杀轮：压缩跳过，主轮照常（T-76）', async () => {
+  const initialHistory = [
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧一',
+      promptText: wrapUser('旧一'),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '好' },
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧二',
+      promptText: wrapUser('旧二'.repeat(650)),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '旧答'.repeat(650) },
+  ];
+  const logCalls = [];
+  const log = (e) => logCalls.push(e);
+  log.warn = (e) => logCalls.push(e);
+  log.error = (e) => logCalls.push(e);
+  log.ring = [];
+  log.has = (e) => logCalls.includes(e);
+
+  const h = makeAgent(
+    [
+      // 摘要请求报错
+      piStream('x', { stopReason: 'error', errorMessage: '余额不足' }),
+      piStream('本轮回答'),
+    ],
+    { contextWindow: 4096, systemPromptOverride: 'sys', log }
+  );
+  const doneEv = await send(h, { initialHistory });
+
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE, '压缩失败不能把轮变成错误');
+  assert.equal(h.streamFn.calls.length, 2, '摘要失败后主请求照发');
+  assert.ok(logCalls.includes('compaction.skip'), '跳过压缩必须留痕');
+  assert.ok(
+    !h.agent.getHistory().some((e) => e.kind === AGENT_EVENTS.COMPACTION),
+    '失败的摘要绝不落库'
+  );
+});
+
+test('摘要输出被截断时日志带 summaryMaxTokens，否则排查不出是上限太大（T-93②）', async () => {
+  const initialHistory = [
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧一',
+      promptText: wrapUser('旧一'),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '好' },
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧二',
+      promptText: wrapUser('旧二'.repeat(650)),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '旧答'.repeat(650) },
+  ];
+  const warns = [];
+  const log = () => {};
+  log.warn = (e, d) => warns.push({ e, d });
+  log.error = () => {};
+  log.ring = [];
+  log.has = () => false;
+
+  const h = makeAgent(
+    [
+      // 摘要输出撞上 maxTokens：stopReason='length'
+      piStream('半截摘要', { stopReason: 'length' }),
+      piStream('本轮回答'),
+    ],
+    { contextWindow: 4096, systemPromptOverride: 'sys', log }
+  );
+  const doneEv = await send(h, { initialHistory });
+
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE, '摘要截断不能把轮变成错误');
+  const skip = warns.find((w) => w.e === 'compaction.skip');
+  assert.ok(skip, '跳过压缩必须留痕');
+  assert.ok(
+    skip.d.message.includes('summaryMaxTokens'),
+    '日志里看不出 maxTokens 就无法区分「上限过大」与「模型写太长」：' +
+      skip.d.message
+  );
+});
+
+test('主请求撞上下文上限：压缩 → continue 续跑 → 正常收尾（T-76）', async () => {
+  // initialHistory 约 1030 token：低于阈值（不触发预压缩）但超过保留窗 1024
+  // （溢出恢复的 force 压缩有切点可用）。systemPromptOverride 钉死 system 体积。
+  const initialHistory = [
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧一',
+      promptText: wrapUser('旧一'),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '好' },
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧二',
+      promptText: wrapUser('旧二'.repeat(300)),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '旧答'.repeat(300) },
+  ];
+  const h = makeAgent(
+    [
+      // 主请求：provider 报 context overflow
+      piStream('x', {
+        stopReason: 'error',
+        errorMessage: "This model's maximum context length is 4096 tokens",
+      }),
+      // 恢复路径的摘要请求
+      piStream('这是摘要'),
+      // continue() 续跑的回答
+      piStream('恢复后的回答'),
+    ],
+    { contextWindow: 4096, systemPromptOverride: 'sys' }
+  );
+  const doneEv = await send(h, { initialHistory });
+
+  assert.equal(
+    doneEv.kind,
+    AGENT_EVENTS.DONE,
+    '恢复成功必须正常收尾，不返回错误'
+  );
+  assert.equal(h.streamFn.calls.length, 3, '主请求 + 摘要 + continue 共三次');
+  assert.equal(
+    h.streamFn.calls[1].context.systemPrompt,
+    SUMMARIZATION_SYSTEM_PROMPT
+  );
+
+  // 恢复后的续跑请求：被摘要的第一轮已被摘要取代；
+  // 第二轮在保留窗内原样保留，尾巴是本轮 user 消息（continue 的前置条件）
+  const continueMessages = JSON.stringify(h.streamFn.calls[2].context.messages);
+  assert.ok(continueMessages.includes('untrusted_compaction_summary'));
+  assert.ok(
+    !continueMessages.includes('旧一'),
+    '被摘要的旧轮不得再进 transcript'
+  );
+  assert.ok(continueMessages.includes('旧二'), '保留窗内的轮次原样保留');
+
+  // 用户看得见：压缩事件 + 恢复通知
+  assert.ok(h.events.some((e) => e.kind === AGENT_EVENTS.COMPACTION));
+  assert.ok(h.events.some((e) => e.kind === AGENT_EVENTS.SYSTEM_NOTICE));
 });

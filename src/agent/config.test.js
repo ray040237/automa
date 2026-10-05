@@ -8,6 +8,7 @@ import {
   saveConfig,
   validateConfig,
   redactConfig,
+  resolveContextWindow,
 } from './config';
 
 /** 假 storage + 可逆的假加密（够验证调用关系，不必真的做密码学） */
@@ -157,4 +158,49 @@ test('预设里都有可用模型，避免用户还要自己想一个', () => {
       assert.ok(p.models.length > 0, p.id + ' 应至少给一个默认模型');
     }
   );
+});
+
+test('maxTokens：留空/0 = 不限制，填了必须够大（T-96）', () => {
+  const base = { ...good };
+  assert.equal(
+    validateConfig({ ...base, maxTokens: undefined }).config.maxTokens,
+    0
+  );
+  assert.equal(validateConfig({ ...base, maxTokens: '' }).config.maxTokens, 0);
+  assert.equal(validateConfig({ ...base, maxTokens: 0 }).config.maxTokens, 0);
+  assert.equal(
+    validateConfig({ ...base, maxTokens: 2048 }).config.maxTokens,
+    2048
+  );
+
+  // 太小的上限等于把「回答说到一半没了」变成常态，必须挡在保存前
+  const tooSmall = validateConfig({ ...base, maxTokens: 100 });
+  assert.equal(tooSmall.ok, false);
+  assert.ok(tooSmall.errors.some((e) => e.includes('maxTokens')));
+
+  const notNumber = validateConfig({ ...base, maxTokens: 'abc' });
+  assert.equal(notNumber.ok, false);
+});
+
+test('resolveContextWindow：按 provider 预填，查不到回落默认（T-94）', () => {
+  assert.equal(resolveContextWindow('openai', 'gpt-4o-mini'), 128000);
+  assert.equal(resolveContextWindow('deepseek', 'deepseek-chat'), 65536);
+  // openrouter / 自定义端点没有表可查 —— 回落默认，不假装知道
+  assert.equal(
+    resolveContextWindow('openrouter', 'whatever'),
+    DEFAULT_CONFIG.contextWindow
+  );
+  assert.equal(
+    resolveContextWindow('不存在的 provider', 'x'),
+    DEFAULT_CONFIG.contextWindow
+  );
+});
+
+test('contextWindow 建议值本身够大，不会让压缩被判为不可用', () => {
+  PROVIDERS.filter((p) => p.contextWindow).forEach((p) => {
+    assert.ok(
+      p.contextWindow >= 4096,
+      p.id + ' 的建议窗口 < 4096 会让压缩直接关闭'
+    );
+  });
 });

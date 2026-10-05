@@ -15,6 +15,7 @@ import assert from 'node:assert';
 import { toAgentTools, toToolResult } from './adapter';
 import { UNTRUSTED_WRAPPER_TAGS } from '../untrusted';
 import { TOOL_CLASSES } from './index';
+import { focusTabTool } from './tabs';
 
 /** 收集注册进来的 AgentTool，供断言形状用 */
 const registry = (tools, deps) => toAgentTools(tools, deps);
@@ -167,6 +168,7 @@ const sampleTools = () => [
     name: 'echo',
     class: 'read',
     group: 'context',
+    ctx: [],
     description: '回显参数',
     parameters: { type: 'object', properties: { a: { type: 'number' } } },
     execute: async (args) => ({ payload: 'echo:' + JSON.stringify(args) }),
@@ -175,6 +177,7 @@ const sampleTools = () => [
     name: 'boom',
     class: 'read',
     group: 'context',
+    ctx: [],
     description: '总是抛错',
     parameters: { type: 'object', properties: {} },
     execute: async () => {
@@ -185,6 +188,8 @@ const sampleTools = () => [
     name: 'do_write',
     class: 'write',
     group: 'canvas',
+    ctx: [],
+    confirmDetail: () => ({ kind: 'generic', detail: 'fake write' }),
     description: '写东西',
     parameters: { type: 'object', properties: {} },
     execute: async () => '已写入',
@@ -315,4 +320,55 @@ test('tools 参数不是数组时抛错，不回落全量TOOLS', () => {
   // 现状行为（T-45）：findTool/requiresConfirmation 都要求显式传 tools，
   // 默认回落全量会泄露画布工具给无画布的宿主。
   assert.throws(() => toAgentTools(null), /tools|数组|必填/);
+});
+
+test('声明的 ctx 键在 toolCtx 里不存在时装配期抛错，点名工具与键（T-71）', () => {
+  assert.throws(
+    () =>
+      registry([{ ...sampleTools()[0], ctx: ['targetTab', 'sendMessage'] }]),
+    /echo ← ctx\.targetTab/
+  );
+  // 多个缺失要一起报，不要修一个再撞下一个
+  assert.throws(
+    () =>
+      registry([
+        { ...sampleTools()[0], ctx: ['targetTab'] },
+        { ...sampleTools()[2], ctx: ['editor'] },
+      ]),
+    /echo ← ctx\.targetTab[\s\S]*do_write ← ctx\.editor/
+  );
+});
+
+test('T-70 回归：生产形状（JS getter + adapter spread）下 focus_tab 必须工作', async () => {
+  // T-70 实锤：tabs.js 曾要求 pins 是函数，而 index.js 的 toolCtx 提供的是
+  // JS getter，adapter spread 求值后是数组 —— focus_tab 在生产里 100% 失败，
+  // 而 tabs.test.js 的夹具按函数形态传所以全绿。这条测试复刻生产链路：
+  // getter 形状的 toolCtx 经 toAgentTools 的 spread，再执行真 focus_tab。
+  // 谁再把「getter」理解成函数、或不再 spread，这条就红。
+  const state = {
+    pins: [{ tabId: 1, origin: 'https://a.example.com', title: 'A页' }],
+  };
+  const toolCtx = {
+    get pins() {
+      return state.pins;
+    },
+    getTab: async () => ({
+      id: 2,
+      url: 'https://b.example.com/y',
+      title: 'B页',
+    }),
+    addPin: async (pin) => {
+      state.pins.push(pin);
+    },
+    focusTab: async (id) => ({
+      id,
+      url: 'https://b.example.com/y',
+      title: 'B页',
+    }),
+  };
+  const list = toAgentTools([focusTabTool], { toolCtx });
+  const r = await find(list, 'focus_tab').execute('c1', { tabId: 1 });
+
+  assert.equal(r.isError, false, r.content[0].text);
+  assert.ok(r.content[0].text.includes('已把操作焦点切到'), r.content[0].text);
 });

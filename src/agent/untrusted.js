@@ -32,6 +32,9 @@ export const UNTRUSTED_WRAPPER_TAGS = [
   'untrusted_tool_result',
   'untrusted_compacted_steps',
   'untrusted_system_notice',
+  // T-76：压缩摘要投影进 transcript 时的包装。摘要是从页面正文/工具返回/
+  // 用户输入派生的内容，按红线 2 保持不可信标记。
+  'untrusted_compaction_summary',
 ];
 
 // 零宽 / 不可见字符：U+200B..U+200F（零宽空格/ZWNJ/ZWJ/LRM/RLM）、U+2060（word joiner）、U+FEFF（BOM）

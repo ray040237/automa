@@ -57,7 +57,7 @@
             class="cursor-pointer"
             @click="openAgentTab()"
           >
-            <v-remixicon name="riSparklingLine" class="mr-2" />
+            <v-remixicon name="riMagicLine" class="mr-2" />
             {{ t('workflow.agent.tab') }}
           </ui-list-item>
         </ui-list>

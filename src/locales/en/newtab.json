@@ -354,8 +354,12 @@
       "clearKey": "Forget this key",
       "privacy": "When you use the assistant, the text and structure of the target page are sent to the endpoint above — a third-party service. Do not use pages containing personal or confidential information.",
       "saved": "Saved",
+      "modelParams": "Model parameters",
       "contextWindow": "Context window (tokens)",
-      "contextWindowHint": "Max tokens your model can read in one call. Older turns get trimmed past it; keep the default if unsure."
+      "contextWindowHint": "Max tokens your model can read in one call. Past it, earlier turns are compressed into a summary (never deleted — you can still scroll back). Switching provider fills in a suggested value; keep it if unsure.",
+      "maxTokens": "Max output tokens (per reply)",
+      "maxTokensPlaceholder": "Leave empty for no limit",
+      "maxTokensHint": "Cap on a single reply. Leave empty to use the endpoint default — a low cap cuts long replies off mid-sentence."
     }
   },
   "workflow": {
@@ -667,6 +671,7 @@
       "send": "Send",
       "thinking": "Thinking…",
       "thinkingResult": "Thought process",
+      "compacted": "Earlier conversation compacted ({n} turns)",
       "scrollToBottom": "Jump to latest",
       "placeholder": "Ask about the current page: where is the search box, how do I scrape this list…",
       "empty": "Ask me about the page you're looking at. I can read its real structure and write a selector or a block for you.",
@@ -728,7 +733,7 @@
         "delete": "Delete current chat",
         "placeholder": "Pick a past chat",
         "untitled": "Untitled chat",
-        "currentLabel": "{label} (current)",
+        "empty": "No conversations yet",
         "deleteConfirmTitle": "Delete this chat?",
         "deleteConfirmBody": "This permanently deletes \"{title}\" and every message in it. This can't be undone."
       }

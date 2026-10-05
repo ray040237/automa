@@ -12,8 +12,8 @@
  *    也没有用户 shell。凭据 resolve 失败会让 Models 拿不到 key，
  *    而失败是**静默**的（请求带空 Bearer，401 从 provider 侧才可见）。
  * 2. **contextWindow 来自用户配置，不是模型目录。** BYOK 场景枚举不到模型元数据，
- *    用户在设置页手填。pi 自己不做裁剪（见 B9 第 1 项），这个值只影响
- *    请求里的 max_tokens 上限提示与 `estimateTokens` 的诊断输出。
+ *    用户在设置页手填。它作为模型元数据喂给 pi；本版不做上下文裁剪
+ *    （B9 第 1 项），我们侧没有任何代码读它做预算。
  * 3. **temperature 由我们注入。** 实测 pi 的 Agent **不转发 temperature** ——
  *    `createLoopConfig()` 里没有这个字段，`streamFn` 收到的 options 也不带。
  *    不在这里注入，用户在设置页调的温度就是静默失效的。
@@ -77,8 +77,12 @@ export function buildModel(config) {
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     reasoning: false,
     contextWindow: config.contextWindow,
-    // 不设 maxTokens：端点的输出上限交给端点默认。写死一个数字（曾为 4096）
-    // 会让长回答被静默截断在半句（stopReason=length），且 spec 无此要求（T-64）。
+    // T-96：0 = 不设，把输出上限交给端点默认 —— 写死一个数字（曾为 4096）
+    // 会让长回答被静默截断在半句（stopReason=length）。用户显式填了才传，
+    // 且配套 T-96②：真截断时 fromPiEvent 会发 SYSTEM_NOTICE，不再无声无息。
+    // 摘要请求不走这里 —— 它用自己的 maxTokens（compaction.js 的
+    // summaryMaxTokens），不会因为用户填了个小值就让压缩整体跳过。
+    maxTokens: Number(config.maxTokens) || 0,
   };
 }
 

@@ -28,7 +28,11 @@ function ctx(over = {}) {
         id === 2
           ? { id: 2, url: 'https://b.example.com/y', title: 'B页' }
           : null,
-      pins: () => state.pins,
+      // T-70：契约是数组。生产里 index.js 用 JS getter、adapter spread 求值，
+      // 夹具必须复刻「工具最终收到数组」这个形状，不许再传函数。
+      get pins() {
+        return state.pins;
+      },
       focusTab: async (tabId) => {
         state.focused = tabId;
         return OK_TAB;

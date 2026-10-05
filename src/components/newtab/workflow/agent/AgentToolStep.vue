@@ -6,7 +6,7 @@
       @click="expanded = !expanded"
     >
       <v-remixicon
-        :name="expanded ? 'riArrowDownSLine' : 'riArrowRightSLine'"
+        :name="expanded ? 'riArrowDropDownLine' : 'riArrowRightLine'"
         class="shrink-0"
       />
       <span class="font-medium">{{ step.name }}</span>

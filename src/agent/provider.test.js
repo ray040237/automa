@@ -71,6 +71,14 @@ test('buildModel 的 cost 全 0 —— 编假单价会让 usage 面板显示错�
   }
 });
 
+test('buildModel 的 maxTokens：0 = 不设，填了才传（T-96）', () => {
+  // 默认不设 —— 把上限交给端点默认，写死会让长回答被截断在半句
+  assert.equal(buildModel(CONFIG).maxTokens, 0);
+  assert.equal(buildModel({ ...CONFIG, maxTokens: undefined }).maxTokens, 0);
+  assert.equal(buildModel({ ...CONFIG, maxTokens: 'x' }).maxTokens, 0);
+  assert.equal(buildModel({ ...CONFIG, maxTokens: 4096 }).maxTokens, 4096);
+});
+
 test('buildModel 在 provider 缺失时落到 custom，不留 undefined', () => {
   // 留undefined 会让 pi 按 provider 分组时拿到一个匿名项，
   // 日志与错误归类都对不上 —— 比错一个名字更难查。

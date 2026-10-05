@@ -446,10 +446,12 @@ export function createAgentRuntime(deps) {
     // utils/message 的 sendMessage（Firefox 下它会把载荷 stringify 成字符串），
     // 裸 runtime.sendMessage 在 Firefox 会让 background 的 JSON.parse 炸掉。
     sendMessage: toBackground,
-    // 工具执行时读到的是「这一刻」的目标页：
-    // 工具是直接读 ctx.targetTab 的，所以这里放的是快照而不是闭包，
-    // setTargetTab 必须同步把 toolCtx.targetTab 换掉，否则工具会一直用旧标签页。
-    targetTab,
+    // 工具执行时读到的是「这一刻」的目标页：getter 每次求值 —— adapter 每次
+    // execute 都重新 spread（tools/adapter.js），工具拿到的就是本步执行时刻的
+    // 快照。setTargetTab 只改闭包变量，不再需要手动回写 toolCtx（T-71）。
+    get targetTab() {
+      return targetTab;
+    },
 
     // —— P2 标签页定位（tabs.js 工具用）——
     // getter：focus_tab 改的是内部数组，工具要读到最新值
@@ -469,7 +471,6 @@ export function createAgentRuntime(deps) {
 
   const setTargetTab = (tab) => {
     targetTab = tab;
-    toolCtx.targetTab = tab;
 
     return targetTab;
   };
@@ -485,9 +486,6 @@ export function createAgentRuntime(deps) {
     }
     return fresh;
   };
-
-  // 初值也对齐一次，避免首次调用时 toolCtx.targetTab 是 undefined
-  toolCtx.targetTab = targetTab;
 
   /**
    * 每步预检（advisory，由 loop 在每步开头调用）：
@@ -635,8 +633,13 @@ export function createAgentRuntime(deps) {
     });
 
     // 按宿主声明过滤工具组：page/context/tab 通用，canvas 只在有画布的宿主启用
-    const activeTools = enabledGroups
-      ? guardedTools.filter((t) => enabledGroups.includes(t.group))
+    // enabledGroups 支持数组或 () => 数组（T-69/T-84）：函数形式每次 send
+    // 求值——团队权限（haveEditAccess）变化后下一轮生效，无需重建 runtime；
+    // promptFacts 本来就 per-send 重建，事实表的工具清单自动跟上。
+    const groups =
+      typeof enabledGroups === 'function' ? enabledGroups() : enabledGroups;
+    const activeTools = groups
+      ? guardedTools.filter((t) => groups.includes(t.group))
       : guardedTools;
 
     lastNoticeKey = '';
@@ -661,6 +664,8 @@ export function createAgentRuntime(deps) {
       preStepNotice,
       // busy 期间用户补充的指令，每步开工前送达模型（P3 插话队列）
       drainInstructions: () => instructionQueue.splice(0),
+      // T-76：上下文窗口驱动压缩阈值；用户在设置页按自己的模型调
+      contextWindow: config.contextWindow,
       log: agentLog,
     });
 

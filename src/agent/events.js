@@ -6,7 +6,6 @@
  */
 
 import { wrapUntrusted } from './untrusted';
-import { truncateObservation } from './window';
 
 /** 事件名 */
 export const AGENT_EVENTS = {
@@ -18,6 +17,9 @@ export const AGENT_EVENTS = {
   TOOL_RESULT: 'agent:tool-result',
   TARGET_TAB: 'agent:target-tab',
   SYSTEM_NOTICE: 'agent:system-notice',
+  // T-76 上下文压缩：历史摘要事件，append-only——它之前的老事件不进 transcript
+  // （historyToPiMessages 投影），也不被会话存储的 20 轮修剪裁掉（cropToTurns 锚点）。
+  COMPACTION: 'agent:compaction',
   DONE: 'agent:done',
   ERROR: 'agent:error',
 };
@@ -56,8 +58,8 @@ export const TOOL_STATUS = {
  *
  * AGENT_EVENTS 是 loop 与 UI 之间唯一的 seam，CONTEXT.md 明文写着「两边互不认识」。
  * 不认识的两边各写一套字段名，编译期不拦、测试期不拦、运行期静默丢信息 ——
- * 实测踩过：loop 里一处写 \`error:\`、一处写 \`message:\`，而 UI 只读
- * \`message\`，「事实表构建失败」的详情就永远显示不出来（只剩一句兜底文案）。
+ * 实测踩过：loop 里一处写 `error:`、一处写 `message:`，而 UI 只读
+ * `message`，「事实表构建失败」的详情就永远显示不出来（只剩一句兜底文案）。
  *
  * 规则：**错误事件只能从这里出**。想加字段就改这里，然后让契约测试盯着。
  *
@@ -76,6 +78,29 @@ export function errorEvent({ message, errorKind, httpStatus } = {}) {
   if (errorKind) ev.errorKind = errorKind;
   if (httpStatus !== undefined) ev.httpStatus = httpStatus;
   return ev;
+}
+
+/** 观察值硬截断上限（8K 字符）。原在 window.js，T-82 随死接口清理并入本文件。 */
+export const MAX_OBSERVATION_CHARS = 8000;
+
+/**
+ * 截断单个工具观察值。
+ *
+ * 只在本文件的 wrapObservation 里调用：截断必须发生在 untrusted 包装**之前**
+ * （先包装后截断会把闭合标签砍掉，剩下半个标签暴露出去）。
+ *
+ * @param {string} text
+ * @param {number=} maxChars
+ * @returns {{ text: string, truncated: boolean }}
+ */
+export function truncateObservation(text, maxChars = MAX_OBSERVATION_CHARS) {
+  const s = typeof text === 'string' ? text : String(text ?? '');
+  if (s.length <= maxChars) return { text: s, truncated: false };
+
+  return {
+    text: `${s.slice(0, maxChars)}\n[truncated: 超出 ${maxChars} 字符，已截断]`,
+    truncated: true,
+  };
 }
 
 /**

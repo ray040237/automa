@@ -4,7 +4,6 @@ import {
   TOOLS,
   TOOL_CLASSES,
   validateTools,
-  toWireTools,
   findTool,
   requiresConfirmation,
 } from './index';
@@ -20,6 +19,7 @@ const ok = (extra = {}) => ({
   name: 'x',
   class: 'read',
   group: 'g',
+  ctx: [],
   description: 'd',
   parameters: { type: 'object', properties: {} },
   execute: async () => 'ok',
@@ -39,6 +39,7 @@ test('真实工具表全部通过校验', () => {
       'highlight_selector',
       'test_js',
       'list_canvas',
+      'read_block',
       'add_block',
       'update_block',
       'list_tabs',
@@ -75,27 +76,77 @@ test('工具名重复抛错', () => {
   assert.throws(() => validateTools([ok(), ok()]), /工具名重复/);
 });
 
+test('缺 ctx 声明必须抛错 —— ctx 是工具与装配层的 interface 契约（T-71）', () => {
+  const bad = ok();
+  delete bad.ctx;
+  assert.throws(() => validateTools([bad]), /缺少 ctx 声明/);
+});
+
+test('ctx 声明必须是字符串数组（允许空数组 = 零依赖）', () => {
+  assert.throws(() => validateTools([ok({ ctx: 'targetTab' })]), /ctx 声明/);
+  assert.throws(() => validateTools([ok({ ctx: [1] })]), /ctx 声明/);
+  assert.throws(() => validateTools([ok({ ctx: [''] })]), /ctx 声明/);
+  assert.doesNotThrow(() => validateTools([ok({ ctx: [] })]));
+});
+
+test('每个真实工具的 ctx 声明与其实现用的键一一对应（T-71）', () => {
+  // 改任何工具的 ctx 依赖（或新增工具）都必须有意识地更新这张表 ——
+  // 它就是「工具声明什么、装配层给什么」这份契约的测试面。
+  const expected = {
+    read_page: ['readPage'],
+    find_text: ['findText'],
+    get_variables: ['getVariables'],
+    get_block_schema: ['getBlockSchema'],
+    query_elements: ['targetTab', 'sendMessage'],
+    highlight_selector: ['targetTab', 'sendMessage'],
+    test_js: ['targetTab', 'sendMessage'],
+    list_canvas: ['editor'],
+    read_block: ['editor'],
+    add_block: ['blocks', 'editor', 'newId', 'onCanvasChanged'],
+    update_block: ['editor', 'onCanvasChanged'],
+    list_tabs: ['listTabs'],
+    focus_tab: ['pins', 'getTab', 'addPin', 'focusTab'],
+    open_url: ['createTab', 'addPin', 'focusTab'],
+  };
+  TOOLS.forEach((t) => assert.deepEqual(t.ctx, expected[t.name], t.name));
+});
+
 test('TOOL_CLASSES 只有 read / write —— 新增分类必须显式讨论', () => {
   assert.deepEqual(TOOL_CLASSES, ['read', 'write']);
 });
 
-test('未知工具一律要确认（fail-closed）', () => {
+test('未知工具一律要确认（fail-closed）—— loop 的闸现在真的调它（T-83）', () => {
   assert.equal(requiresConfirmation('read_page', TOOLS), false);
   assert.equal(requiresConfirmation('totally_unknown', TOOLS), true);
   assert.equal(requiresConfirmation(undefined, TOOLS), true);
 });
 
-test('转 wire 定义时只暴露 OpenAI 认识的字段', () => {
-  const [w] = toWireTools(TOOLS);
-  assert.deepEqual(Object.keys(w), ['type', 'function']);
-  assert.deepEqual(Object.keys(w.function), [
-    'name',
-    'description',
-    'parameters',
-  ]);
-  assert.equal(w.type, 'function');
-  // 绝不能把 execute 函数漏进请求体
-  assert.equal(JSON.stringify(w).includes('execute'), false);
+test('write 类工具必须自带 confirmDetail，缺了加载期就抛（T-83）', () => {
+  const bad = ok({ class: 'write' });
+  delete bad.confirmDetail;
+  assert.throws(() => validateTools([bad]), /confirmDetail/);
+
+  // read 类没有此要求（不过闸）
+  assert.doesNotThrow(() => validateTools([ok()]));
+
+  // 真实注册表里的每个 write 工具都带了
+  TOOLS.filter((t) => t.class === 'write').forEach((t) => {
+    assert.equal(
+      typeof t.confirmDetail,
+      'function',
+      t.name + ' 缺 confirmDetail'
+    );
+  });
+});
+
+test('每个 write 工具的 confirmDetail 都能产出合法 kind', () => {
+  const KINDS = ['code', 'selector', 'url', 'canvas'];
+
+  TOOLS.filter((t) => t.class === 'write').forEach((t) => {
+    const mine = t.confirmDetail({});
+    assert.ok(KINDS.includes(mine.kind), t.name + ' 的 kind=' + mine.kind);
+    assert.equal(typeof mine.detail, 'string', t.name + ' 缺 detail');
+  });
 });
 
 test('findTool 找不到返回 null 而不是抛错', () => {

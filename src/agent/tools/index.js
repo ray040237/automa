@@ -14,7 +14,12 @@
 import { readPage, findText, getVariables, getBlockSchema } from './page';
 import { testJsTool, queryElementsTool } from './page-write';
 import { highlightSelector } from './highlight';
-import { addBlockTool, updateBlockTool, listCanvasTool } from './canvas';
+import {
+  addBlockTool,
+  updateBlockTool,
+  listCanvasTool,
+  readBlockTool,
+} from './canvas';
 import { listTabsTool, focusTabTool, openUrlTool } from './tabs';
 
 /** 所有允许的工具分类。新增分类必须同时想清楚「需不需要用户确认」。 */
@@ -25,6 +30,13 @@ export const highlightSelectorTool = {
   name: 'highlight_selector',
   class: 'write',
   group: 'page',
+  ctx: ['targetTab', 'sendMessage'],
+  confirmDetail(args) {
+    return {
+      kind: 'selector',
+      detail: args ? String(args.selector ?? '') : '',
+    };
+  },
   description:
     '在目标页上高亮某个选择器命中的元素，让用户肉眼确认模型有没有找错。' +
     '讨论具体某个元素时先调它，不要只给选择器让用户自己猜。',
@@ -51,6 +63,7 @@ export const TOOLS = [
   highlightSelectorTool,
   testJsTool,
   listCanvasTool,
+  readBlockTool,
   addBlockTool,
   updateBlockTool,
   listTabsTool,
@@ -118,29 +131,39 @@ export function validateTools(tools) {
     if (!tool.group) {
       throw new Error('工具 ' + tool.name + ' 缺少 group');
     }
+
+    if (!Array.isArray(tool.ctx)) {
+      throw new Error(
+        '工具 ' +
+          tool.name +
+          ' 缺少 ctx 声明。ctx 列出 execute 需要的 toolCtx 键，' +
+          '是工具与装配层的 interface 契约 —— 缺声明等于放弃装配期校验（T-71）。'
+      );
+    }
+
+    if (tool.ctx.some((k) => typeof k !== 'string' || !k)) {
+      throw new Error(
+        '工具 ' + tool.name + ' 的 ctx 声明必须是非空字符串数组。'
+      );
+    }
+
+    // T-83：写类工具必须自带「用户在放行什么」的事实。缺了确认卡会静默
+    // 落进 generic 摊开（不报错但文案丢失），所以在加载期就拦 —— 与
+    // 「缺 class 即 throw」同一哲学。read 工具不过闸，无此要求。
+    if (tool.class === 'write' && typeof tool.confirmDetail !== 'function') {
+      throw new Error(
+        '工具 ' +
+          tool.name +
+          ' 是 write 类但缺少 confirmDetail(args)。' +
+          '确认卡要展示用户到底在放行什么，这段事实必须由工具自带。'
+      );
+    }
   });
 
   return true;
 }
 
 validateTools(TOOLS);
-
-/**
- * 转成 OpenAI tool 定义。
- *
- * @param {Array<Object>} tools
- * @returns {Array<{type: string, function: Object}>}
- */
-export function toWireTools(tools) {
-  return tools.map((t) => ({
-    type: 'function',
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters,
-    },
-  }));
-}
 
 /**
  * 按名字找工具。

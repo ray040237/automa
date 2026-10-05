@@ -3,7 +3,17 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { addBlock, updateBlock, listCanvas } from './canvas';
+import {
+  addBlock,
+  updateBlock,
+  listCanvas,
+  readBlock,
+  normalizeReadBlockRange,
+  renderNode,
+  MAX_FIELD_CHARS,
+  MIN_FIELD_CHARS,
+  CODE_PREVIEW_CHARS,
+} from './canvas';
 import { TOOLS } from './index';
 import { stripComments } from '../stripComments';
 
@@ -160,6 +170,246 @@ describe('list_canvas', () => {
   });
 });
 
+/* ---------------- T-91：不许静默截断 ----------------
+ * 旧实现 `code.slice(0, 200)` 砍完不留任何标记，模型拿 200 字符当全文用，
+ * 改出来的 JS 是半截的。下面这组断言要钉死两件事：
+ *   1. 凡是没给全值的字段，必须写明「共 N 字符」并指路 read_block；
+ *   2. read_block 必须真能拿到全文，且单次输出不越过观察值硬上限 8000。 */
+
+describe('list_canvas：长字段只报长度 + 指路，绝不静默截断', () => {
+  const LONG_CODE = 'x'.repeat(1240);
+
+  test('超长 code 必须写明总字符数与「已截断」，并指出用 read_block 读全文', async () => {
+    const editor = fakeEditor([
+      { id: 'n9', label: 'javascript-code', data: { code: LONG_CODE } },
+    ]);
+
+    const r = await listCanvas(ctxFor(editor), {});
+
+    assert.match(r.payload, /共 1240 字符/);
+    assert.match(r.payload, /已截断/, '不带截断标记就是静默降级');
+    assert.match(r.payload, /read_block\(nodeId="n9", field="code"\)/);
+    // 摘要本身还是有限的：清单不该被一个块撑爆
+    assert.ok(
+      r.payload.length < 400,
+      `清单要短，实际 ${r.payload.length} 字符`
+    );
+  });
+
+  test('code 之外的大字段也要报长度，不能只报 code 和 description', async () => {
+    const editor = fakeEditor([
+      {
+        id: 'n1',
+        label: 'element-selector',
+        data: { selector: 'y'.repeat(300), timeout: 5000 },
+      },
+    ]);
+
+    const r = await listCanvas(ctxFor(editor), {});
+
+    assert.match(r.payload, /selector/, '旧实现只输出 code/description');
+    assert.match(r.payload, /共 300 字符/);
+    assert.match(r.payload, /timeout: 5000/, '短字段照原样给');
+  });
+
+  test('短字段原样给出，不被截断规则误伤', async () => {
+    const r = renderNode({
+      id: 'n1',
+      label: 'trigger',
+      data: { url: 'https://a.com', description: 'hi' },
+    });
+
+    assert.match(r, /url: https:\/\/a\.com/);
+    assert.match(r, /description: hi/);
+    assert.ok(!r.includes('已截断'));
+  });
+
+  test('没字段的节点要说清楚，不能渲染成 undefined', async () => {
+    const editor = fakeEditor([{ id: 'n1', label: 'trigger', data: {} }]);
+    const r = await listCanvas(ctxFor(editor), {});
+
+    assert.match(r.payload, /没有字段/);
+  });
+});
+
+describe('read_block', () => {
+  const LONG_CODE = 'a'.repeat(1240);
+
+  const editorWith = (data) =>
+    fakeEditor([{ id: 'n9', label: 'javascript-code', data }]);
+
+  test('指定 field 时必须拿到全文，一个字符都不能少', async () => {
+    const r = await readBlock(ctxFor(editorWith({ code: LONG_CODE })), {
+      nodeId: 'n9',
+      field: 'code',
+    });
+
+    assert.equal(r.status, 'ok');
+    // 全文在 payload 里：1240 个 a 连续出现
+    assert.ok(r.payload.includes(LONG_CODE), '必须包含完整代码');
+    assert.match(r.payload, /共 1240 字符/);
+    assert.match(
+      r.payload,
+      /到这里就是全文/,
+      '读完了要说清楚，别让模型再调一次'
+    );
+  });
+
+  test('超长字段分页：顺着回执给的 offset 一路读到底，能拼回原文', async () => {
+    const code = 'b'.repeat(15000);
+    const ctx = ctxFor(editorWith({ code }));
+    const body = (p) =>
+      p.slice(p.indexOf('\n\n') + 2).replace(/\n\[未读完[^\n]*$/, '');
+
+    let { payload } = await readBlock(ctx, { nodeId: 'n9', field: 'code' });
+    const collected = [];
+    let rounds = 0;
+
+    assert.match(payload, /共 15000 字符/);
+    assert.match(payload, /后面还有 \d+ 字符/, '第一次就得说清还剩多少');
+
+    // 顺着回执给的 offset 续读，直到没有续读提示为止（有上限防死循环）
+    while (rounds < 10) {
+      rounds += 1;
+      assert.ok(
+        payload.length < 8000,
+        `单次输出必须留在观察值硬上限内，第 ${rounds} 次实际 ${payload.length}`
+      );
+      collected.push(body(payload));
+
+      const m = payload.match(/offset=(\d+)/);
+      if (!m) break;
+
+      const next = await readBlock(ctx, {
+        nodeId: 'n9',
+        field: 'code',
+        offset: Number(m[1]),
+      });
+
+      assert.equal(next.status, 'ok');
+      payload = next.payload;
+    }
+
+    assert.ok(rounds >= 3, `15000 字符应分不止一次读完，实际 ${rounds} 次`);
+    assert.equal(collected.join(''), code, '所有分片拼起来必须等于原文');
+  });
+
+  test('不指定 field：给该节点的字段清单，而不是报错', async () => {
+    const r = await readBlock(ctxFor(editorWith({ code: LONG_CODE })), {
+      nodeId: 'n9',
+    });
+
+    assert.equal(r.status, 'ok');
+    assert.match(r.payload, /- n9 \[javascript-code\]/);
+    assert.match(r.payload, /共 1240 字符/);
+  });
+
+  test('字段不存在：报错并列出现有字段', async () => {
+    const r = await readBlock(ctxFor(editorWith({ code: 'x' })), {
+      nodeId: 'n9',
+      field: 'nope',
+    });
+
+    assert.equal(r.status, 'error');
+    assert.match(r.payload, /没有字段 nope/);
+    assert.match(r.payload, /code/);
+  });
+
+  test('节点不存在：列出现有节点', async () => {
+    const r = await readBlock(ctxFor(editorWith({ code: 'x' })), {
+      nodeId: 'ghost',
+      field: 'code',
+    });
+
+    assert.equal(r.status, 'error');
+    assert.match(r.payload, /现有节点：n9/);
+  });
+
+  test('limit 超范围报错，不静默夹取', async () => {
+    const ctx = ctxFor(editorWith({ code: LONG_CODE }));
+
+    const tooBig = await readBlock(ctx, {
+      nodeId: 'n9',
+      field: 'code',
+      limit: 99999,
+    });
+    assert.equal(tooBig.status, 'error');
+    assert.match(
+      tooBig.payload,
+      new RegExp(`${MIN_FIELD_CHARS}–${MAX_FIELD_CHARS}`)
+    );
+
+    const tooSmall = await readBlock(ctx, {
+      nodeId: 'n9',
+      field: 'code',
+      limit: 10,
+    });
+    assert.equal(tooSmall.status, 'error');
+    assert.match(tooSmall.payload, /limit 必须是/);
+  });
+
+  test('offset 超出字段长度要说明实情，不能返回空串装成功', async () => {
+    const r = await readBlock(ctxFor(editorWith({ code: 'x'.repeat(100) })), {
+      nodeId: 'n9',
+      field: 'code',
+      offset: 500,
+    });
+
+    assert.equal(r.status, 'error');
+    assert.match(r.payload, /只有 100 字符/);
+  });
+
+  test('normalizeReadBlockRange：默认取满上限，offset 默认 0', () => {
+    assert.deepEqual(normalizeReadBlockRange({}), {
+      offset: 0,
+      limit: MAX_FIELD_CHARS,
+    });
+    assert.deepEqual(normalizeReadBlockRange({ offset: 10, limit: 500 }), {
+      offset: 10,
+      limit: 500,
+    });
+    assert.ok(normalizeReadBlockRange({ offset: -1 }).error);
+    assert.ok(normalizeReadBlockRange({ offset: 1.5 }).error);
+  });
+
+  test('上限必须给 untrusted 包装与分页头留余量（低于观察值硬上限 8000）', () => {
+    assert.ok(
+      MAX_FIELD_CHARS < 8000,
+      `顶到 8000 会被 wrapObservation 二次截断，实际 ${MAX_FIELD_CHARS}`
+    );
+    assert.ok(CODE_PREVIEW_CHARS > 0 && MIN_FIELD_CHARS > 0);
+  });
+});
+
+describe('update_block 回执', () => {
+  test('写入长字符串后要报字符数，便于模型自核对', async () => {
+    const editor = fakeEditor([
+      { id: 'n1', label: 'javascript-code', data: { code: '' } },
+    ]);
+
+    const r = await updateBlock(ctxFor(editor), {
+      nodeId: 'n1',
+      data: { code: 'z'.repeat(900) },
+    });
+
+    assert.equal(r.status, 'ok');
+    assert.match(r.payload, /code 现在 900 字符/);
+  });
+
+  test('短字段不报字符数，别把回执撑成噪音', async () => {
+    const editor = fakeEditor([
+      { id: 'n1', label: 'trigger', data: { url: '' } },
+    ]);
+
+    const r = await updateBlock(ctxFor(editor), {
+      nodeId: 'n1',
+      data: { url: 'https://a.com' },
+    });
+
+    assert.ok(!/字符/.test(r.payload), '实际回执：' + r.payload);
+  });
+});
+
 describe('G5：agent 永远不能保存工作流', () => {
   function walk(dir) {
     return readdirSync(dir).flatMap((f) => {
@@ -204,7 +454,7 @@ describe('G5：agent 永远不能保存工作流', () => {
   test('画布写工具必须全部是 write 类（过确认门）', () => {
     const canvasTools = TOOLS.filter((t) => t.group === 'canvas');
 
-    assert.equal(canvasTools.length, 3);
+    assert.equal(canvasTools.length, 4);
 
     const writeNames = canvasTools
       .filter((t) => t.class === 'write')

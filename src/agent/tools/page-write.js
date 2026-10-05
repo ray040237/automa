@@ -8,6 +8,8 @@
  * 仍然不许做的：任何持久化。agent 永远不碰 workflowStore。
  */
 
+import { countLines } from '../confirm';
+
 /**
  * 试跑一段 JS。只在目标页的 MAIN world 里跑，跑完即弃。
  *
@@ -132,6 +134,12 @@ export const testJsTool = {
   name: 'test_js',
   class: 'write',
   group: 'page',
+  ctx: ['targetTab', 'sendMessage'],
+  confirmDetail(args) {
+    const code = args ? String(args.code ?? '') : '';
+
+    return { kind: 'code', lines: countLines(code), detail: code };
+  },
   description:
     '在目标页里试跑一段 JS 并回传结果。只读式的观察代码可以放心试；' +
     '不要用它点击、提交或导航。写完一段代码先用它验证，比直接写进工作流可靠。',
@@ -158,6 +166,7 @@ export const queryElementsTool = {
   name: 'query_elements',
   class: 'read',
   group: 'page',
+  ctx: ['targetTab', 'sendMessage'],
   description:
     '查一个 CSS selector 在目标页命中了几个、命中的是哪些元素（标签/类名/文本/可见性）。' +
     '写完 selector 先查一次，别直接写进工作流。',

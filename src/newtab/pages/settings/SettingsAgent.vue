@@ -25,35 +25,62 @@
         placeholder="https://api.openai.com/v1"
       />
 
-      <div>
-        <ui-input
-          v-model="form.model"
-          :label="t('settings.agent.model')"
-          :list="modelListId"
-          class="w-80"
-          autocomplete="off"
-          :placeholder="t('settings.agent.modelPlaceholder')"
-        />
-
-        <!-- 自由填写。预设模型只是提示，不是限制：
-             自建服务、反代、本地推理的模型名五花八门，下拉框根本列不完。 -->
-        <datalist :id="modelListId">
-          <option v-for="m in models" :key="m" :value="m" />
-        </datalist>
-      </div>
-
-      <div class="w-80">
-        <ui-input
-          v-model="form.contextWindow"
-          :label="t('settings.agent.contextWindow')"
-          type="number"
-          min="1024"
-          autocomplete="off"
-        />
-
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          {{ t('settings.agent.contextWindowHint') }}
+      <!-- 模型参数：这三个是一组 —— 换服务商时窗口按预设跟着变（T-94），
+           输出上限留空即不限制（T-96） -->
+      <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+        <p
+          class="mb-3 text-xs font-semibold uppercase text-gray-500 dark:text-gray-400"
+        >
+          {{ t('settings.agent.modelParams') }}
         </p>
+
+        <div class="flex flex-col gap-3">
+          <div>
+            <ui-input
+              v-model="form.model"
+              :label="t('settings.agent.model')"
+              :list="modelListId"
+              class="w-80"
+              autocomplete="off"
+              :placeholder="t('settings.agent.modelPlaceholder')"
+            />
+
+            <!-- 自由填写。预设模型只是提示，不是限制：
+                 自建服务、反代、本地推理的模型名五花八门，下拉框根本列不完。 -->
+            <datalist :id="modelListId">
+              <option v-for="m in models" :key="m" :value="m" />
+            </datalist>
+          </div>
+
+          <div class="w-80">
+            <ui-input
+              v-model="form.contextWindow"
+              :label="t('settings.agent.contextWindow')"
+              type="number"
+              min="1024"
+              autocomplete="off"
+            />
+
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('settings.agent.contextWindowHint') }}
+            </p>
+          </div>
+
+          <div class="w-80">
+            <ui-input
+              v-model="form.maxTokens"
+              :label="t('settings.agent.maxTokens')"
+              type="number"
+              min="256"
+              autocomplete="off"
+              :placeholder="t('settings.agent.maxTokensPlaceholder')"
+            />
+
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('settings.agent.maxTokensHint') }}
+            </p>
+          </div>
+        </div>
       </div>
 
       <!--
@@ -120,7 +147,13 @@ import { computed, onMounted, ref, shallowReactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useStore } from '@/stores/main';
 import { configIO } from '@/agent';
-import { clearApiKey, loadConfig, saveConfig, PROVIDERS } from '@/agent/config';
+import {
+  clearApiKey,
+  loadConfig,
+  saveConfig,
+  PROVIDERS,
+  resolveContextWindow,
+} from '@/agent/config';
 
 const { t } = useI18n();
 const store = useStore();
@@ -132,6 +165,9 @@ const form = shallowReactive({
   baseUrl: '',
   model: '',
   contextWindow: 32000,
+  // 空 = 不限制（交给端点默认）。用空串而不是 0，输入框里才不会显示一个 0
+  // 让人以为「上限是 0」。
+  maxTokens: '',
   apiKey: '',
 });
 
@@ -156,6 +192,7 @@ onMounted(async () => {
   form.baseUrl = c.baseUrl || '';
   form.model = c.model || '';
   form.contextWindow = c.contextWindow || 32000;
+  form.maxTokens = c.maxTokens ? String(c.maxTokens) : '';
 
   hasKey.value = Boolean(c.apiKey);
 });
@@ -164,6 +201,12 @@ function onProviderChange(id) {
   const found = PROVIDERS.find((x) => x.id === id);
 
   if (!found) return;
+
+  // 窗口跟着服务商走（T-94），但**只在用户没手动改过时**才覆盖：当前值若等于
+  // 上一处的建议值，说明他没动过这个数字。
+  const prevSuggested = resolveContextWindow(form.provider, form.model);
+  const untouchedWindow =
+    !form.contextWindow || form.contextWindow === prevSuggested;
 
   form.baseUrl = found.baseUrl;
 
@@ -174,6 +217,10 @@ function onProviderChange(id) {
   const untouched = !form.model || found.models.includes(form.model);
 
   if (first && untouched) form.model = first;
+
+  if (untouchedWindow) {
+    form.contextWindow = resolveContextWindow(id, form.model);
+  }
 }
 
 async function save() {
@@ -184,6 +231,8 @@ async function save() {
     baseUrl: form.baseUrl,
     model: form.model,
     contextWindow: Number(form.contextWindow) || undefined,
+    // 0 = 不限制。用户留空时就不往请求里带 maxTokens，端点用自己的默认
+    maxTokens: Number(form.maxTokens) || 0,
   };
 
   // 没动密钥就别把空串写回去，否则会把已存的密钥清掉

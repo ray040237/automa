@@ -2,9 +2,11 @@
  * 助手宿主共用接线。
  *
  * 两个宿主（主面板的独立助手页 / 工作流编辑器侧栏）面对的是同一个 runtime 契约
- * （src/agent/index.js 的 createAgentRuntime）和同一块面板（AgentPanel.vue），
- * 差别只有两处：开放哪些工具组、有没有画布句柄。宿主本身除了接线没有别的逻辑，
- * 所以接线放这里，避免两份各自漂移。
+ * （src/agent/index.js 的 createAgentRuntime）和同一块面板（AgentPanel.vue，
+ * 收单个 :host 对象 —— T-90）。实测依赖差分：独立页传 enabledGroups +
+ * getWorkflowId(=> null)；编辑器侧多传 sessionWorkflowId、canvas 四句柄，
+ * 且 enabledGroups 以 getter 传（T-69，响应式权限不被冻结）。宿主本身除了
+ * 接线没有别的逻辑，所以接线放这里，避免两份各自漂移。
  *
  * 三个陷阱，改这里之前先读：
  *
@@ -13,11 +15,12 @@
  * 2. 卸载前必须把挂着的确认门放行（否）：loop 那侧一直在 await 这个 promise，
  *    宿主没了它永远不会结束（CONTEXT.md「确认门」条）。见文件末尾。
  * 3. 会话级授权（test_js 的「本会话允许试跑代码」）只有三个失效点：abort、
- *    切会话（guardAgentSwitch）、面板卸载（随闭包消失）。想让它更早失效，
- *    改 `sessionAuth` 的赋值点，别去动 `src/agent/confirm.js` 的判定。
+ *    切会话/新建（planSwitch）、面板卸载。状态机在 `confirm.js` 的
+ *    `createSessionAuth`（T-90，纯函数、有测试），本文件只做副作用执行；
+ *    失效点全部走它的 invalidate / planSwitch，别在闭包里另设标志位。
  */
 
-import { onBeforeUnmount, reactive } from 'vue';
+import { markRaw, onBeforeUnmount, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { useToast } from 'vue-toastification';
@@ -26,21 +29,18 @@ import { useDialog } from '@/composable/dialog';
 import {
   configIO,
   createAgentRuntime,
+  listTabs,
   loadConfig,
   resolveTarget,
   sessionStore,
 } from '@/agent';
-import {
-  buildConfirmation,
-  nextSessionAuth,
-  normalizeAnswer,
-  shouldSkipConfirmation,
-} from '@/agent/confirm';
+import { buildConfirmation, createSessionAuth } from '@/agent/confirm';
 import { ERROR_KIND, errorEvent } from '@/agent/events';
 
 /**
  * @param {Object} deps
- * @param {Array<string>} deps.enabledGroups 该宿主开放的工具组
+ * @param {Array<string>|(() => Array<string>)} deps.enabledGroups 该宿主开放的工具组；
+ *   传函数时 runtime 每次 send 求值（T-69：响应式权限不被冻结）
  * @param {() => (string|null)} deps.getWorkflowId 会话归属的工作流 id；独立页恒为 null
  * @param {string=} deps.sessionWorkflowId 会话列表按哪个工作流过滤；不传就是全局列表
  * @param {Object=} deps.canvas 画布句柄，给了并且工具组里有 canvas，助手才能改画布
@@ -51,6 +51,25 @@ import { ERROR_KIND, errorEvent } from '@/agent/events';
  * @returns {Object} 面板直接绑在这个对象上
  */
 export function useAgentHost(deps) {
+  // T-84：装配期必填校验。漏传 enabledGroups 会被 runtime 按「未过滤」处理
+  // （canvas 组泄露给无画布宿主，T-45 同款事故）；漏传 getWorkflowId 会让
+  // 会话归属静默落成全局列表，按工作流过滤的宿主永远看不到自己的历史。
+  if (
+    !Array.isArray(deps.enabledGroups) &&
+    typeof deps.enabledGroups !== 'function'
+  ) {
+    throw new Error(
+      'useAgentHost: deps.enabledGroups 必填（数组或 () => 数组，' +
+        '后者供响应式权限用，见 T-69）。'
+    );
+  }
+  if (typeof deps.getWorkflowId !== 'function') {
+    throw new Error(
+      'useAgentHost: deps.getWorkflowId 必填（() => workflowId 或 ' +
+        '() => null）——缺了会话归属静默变全局，编辑器侧看不到自己的历史。'
+    );
+  }
+
   const { t } = useI18n();
   const toast = useToast();
   const router = useRouter();
@@ -69,12 +88,16 @@ export function useAgentHost(deps) {
   });
 
   /**
-   * 会话级授权：test_js 勾过「本会话允许试跑代码」后不再弹卡。
-   *
-   * 只在内存里，且有三个失效点（技术方案 §8.2）：abort、切会话、面板卸载。
-   * 不落盘 —— 「本会话」的意思就是面板还活着的这段时间。
+   * 会话级授权 + 挂起确认的状态机（T-90，confirm.js 纯函数，有测试）。
+   * 「本会话允许试跑代码」只在内存里，三个失效点见 createSessionAuth 注释。
    */
-  let sessionAuth = false;
+  const sessionAuth = createSessionAuth({
+    // 载荷在这里组装（targetTitle 是 agent 的知识）；状态机只管授权与挂起。
+    buildPayload: (req) =>
+      buildConfirmation(req, {
+        targetTitle: agent.targetTab ? agent.targetTab.title || '' : '',
+      }),
+  });
 
   /**
    * 写类工具的确认门。
@@ -87,24 +110,19 @@ export function useAgentHost(deps) {
    * 空的 —— 用户在盲批（docs/backlog.md T-27）。
    */
   function askAgentConfirmation(req) {
-    const name = (req && req.name) || '';
-
-    // 会话授权只对 test_js 生效；workflow 写操作无论授权状态都逐次问
-    if (shouldSkipConfirmation(name, sessionAuth)) {
+    // 已授权的 test_js 由状态机直接放行；其余挂起，载荷从状态机取
+    // （T-90：授权判定与记录都在 createSessionAuth，这里只挂 reactive）。
+    if (sessionAuth.ask(req).skip) {
       return Promise.resolve({ approved: true });
     }
 
     return new Promise((resolve) => {
       agent.pendingConfirm = {
-        ...buildConfirmation(req, {
-          targetTitle: agent.targetTab ? agent.targetTab.title || '' : '',
-        }),
+        ...sessionAuth.pending,
         resolve: (answer) => {
-          const normalized = normalizeAnswer(answer);
-
-          sessionAuth = nextSessionAuth(sessionAuth, name, normalized);
+          const out = sessionAuth.answer(answer);
           agent.pendingConfirm = null;
-          resolve({ approved: normalized.approved });
+          resolve(out);
         },
       };
     });
@@ -128,15 +146,14 @@ export function useAgentHost(deps) {
    * 否则旧会话的 loop 会永远 await 下去（确认门 promise 挂在 runtime 闭包上）。
    *
    * 顺带把会话级授权作废：授权的文案是「本会话允许」，换会话就不该还作数。
-   * 放在 resolve(false) 之后 —— resolve 内部会自己算一次 nextSessionAuth，
-   * 要是先置 false 会被那次写回覆盖。
+   * 动作与顺序由状态机的 planSwitch 给出（先拒挂起再失效，T-90），这里只执行。
    */
   function guardAgentSwitch() {
-    if (agent.busy) return false;
-    if (agent.pendingConfirm) {
-      agent.pendingConfirm.resolve(false);
-    }
-    sessionAuth = false;
+    const plan = sessionAuth.planSwitch({ busy: agent.busy });
+    if (!plan.allow) return false;
+
+    if (plan.rejectPending) agent.pendingConfirm.resolve(false);
+    sessionAuth.invalidate();
     return true;
   }
 
@@ -162,16 +179,20 @@ export function useAgentHost(deps) {
   }
 
   /**
-   * 删除当前会话。先过二次确认：按钮挨着「新建」、图标相似，而会话是唯一的
-   * 历史载体，一次误触就是整段对话与工具执行记录没了、且不可撤销。
+   * 删除会话。targetId 为空时删当前会话（列表每项带删除按钮后一般不再走这条）。
    *
-   * 弹窗期间可能又开跑了一轮（确认时再核一次 busy 与 id）：删在途会话会在收尾
-   * 时被那一轮 save 回写成「幽灵会话」，比不删更让人困惑。
+   * 二次确认不能省：会话是唯一的历史载体，一次误触就是整段对话与工具执行记录
+   * 没了、且不可撤销。弹窗正文回显标题，避免「删错了那条」。
+   *
+   * 确认回调里的复核是「该会话仍存在」而不是「仍是当前会话」：按项删除时用户
+   * 完全可以删一条非当前会话，拿「还是不是当前」去卡会把合法操作直接否掉。
+   * busy 仍然要卡 —— 删在途会话会在收尾时被那一轮 save 回写成「幽灵会话」，
+   * 比不删更让人困惑。
    */
-  function deleteAgentSession() {
-    if (!guardAgentSwitch() || !agent.runtime || !agent.sessionId) return;
+  function deleteAgentSession(targetId) {
+    const id = targetId || agent.sessionId;
+    if (!id || !guardAgentSwitch() || !agent.runtime) return;
 
-    const id = agent.sessionId;
     const entry = agent.sessions.find((s) => s.id === id);
     const title =
       (entry && entry.title) || t('workflow.agent.session.untitled');
@@ -183,12 +204,16 @@ export function useAgentHost(deps) {
       okVariant: 'danger',
       async: true,
       onConfirm: async () => {
-        if (agent.busy || agent.sessionId !== id) return false;
+        if (agent.busy) return false;
+        if (!agent.sessions.some((s) => s.id === id)) return false;
 
         await agent.runtime.deleteSession(id);
-        agent.sessionId = null;
-        agent.events = [];
-        agent.usage = null;
+        // 只有删掉的正是当前会话才回到新会话状态；删的是别的会话，当前上下文要留着
+        if (agent.sessionId === id) {
+          agent.sessionId = null;
+          agent.events = [];
+          agent.usage = null;
+        }
         await refreshAgentSessions();
 
         return true;
@@ -213,7 +238,7 @@ export function useAgentHost(deps) {
    */
   function abort() {
     if (agent.runtime) agent.runtime.abort();
-    sessionAuth = false;
+    sessionAuth.invalidate();
   }
 
   async function send(userText) {
@@ -292,19 +317,23 @@ export function useAgentHost(deps) {
 
     agent.targetTab = await resolveTarget({ windowId });
 
-    agent.runtime = createAgentRuntime({
-      getConfig: () => loadConfig(configIO),
-      targetTab: agent.targetTab,
-      enabledGroups: deps.enabledGroups,
-      sessionStore,
-      getWorkflowId: deps.getWorkflowId,
-      ...(deps.canvas || {}),
-      // LLM 标题异步生成完成后刷新面板上的会话列表
-      onSessionsChanged: () => {
-        refreshAgentSessions();
-      },
-      requestConfirmation: askAgentConfirmation,
-    });
+    // markRaw：runtime 是满是闭包/getter 的对象，塞进 reactive 会被深层代理
+    // —— 方法碰巧不被包装才没炸（T-90）。零成本保险。
+    agent.runtime = markRaw(
+      createAgentRuntime({
+        getConfig: () => loadConfig(configIO),
+        targetTab: agent.targetTab,
+        enabledGroups: deps.enabledGroups,
+        sessionStore,
+        getWorkflowId: deps.getWorkflowId,
+        ...(deps.canvas || {}),
+        // LLM 标题异步生成完成后刷新面板上的会话列表
+        onSessionsChanged: () => {
+          refreshAgentSessions();
+        },
+        requestConfirmation: askAgentConfirmation,
+      })
+    );
 
     // 打开最近的一个会话（没有就是新会话，首轮 send 后才落盘）
     await refreshAgentSessions();
@@ -325,6 +354,8 @@ export function useAgentHost(deps) {
     abort,
     pickTab: onPickTab,
     answerConfirm,
+    // 面板的标签页选择数据源（T-90：从两宿主各自的直连 import 收归 seam）
+    listTabs,
     noTarget: () => toast.error(t('workflow.agent.noTarget')),
     goToSettings: goToAgentSettings,
     openSession: openAgentSession,

@@ -25,6 +25,45 @@
 
 ## 待审核
 
+
+### T-90 — 架构文档 §12 称 COMPACTION「UI 不渲染」，实际面板有默认收起的折叠卡
+
+类型：bug（文档与代码不符）
+登记日期：2026-10-06
+来源：会话 2026-10-06「解释 agent-architecture.html 的压缩章节」，触发点 `docs/agent-architecture.html:1285` 表格 vs `src/components/newtab/workflow/agent/AgentTranscript.vue:68-90 / 183-190`
+现象：文档 §12 事件→槽位表写「COMPACTION — 无专属槽位，UI 不渲染（模型侧经投影进 transcript；用户可见的信号是恢复时那条 system-notice）」。代码里折叠层有 `item.type === 'compaction'` 分支：默认收起的折叠卡，按钮显示 `workflow.agent.compacted`（带轮数），展开后渲染摘要全文。
+证据：实测——读上述两个位置；文档行 1285 的表格原文与 vue 的 push({type:'compaction', raw, turns, open:false}) 对不上。
+影响：按文档改 UI 或写测试的人会以为不存在渲染路径（可能重复造或误删）；文档是理解「用户能不能看到摘要」的入口，错一行会误导行为判断。
+建议：改文档那一行，改为「默认收起的折叠卡，展开可见摘要全文」。
+状态：待审核
+
+
+### T-95 — 活轮次可用真实 usage 校准 token 估算，摆脱对「用户填 contextWindow」的依赖
+
+类型：改进（新功能方向，先讨论后定）
+登记日期：2026-10-06
+来源：会话 2026-10-06 用户提问「作为 agent 产品，需要设置 maxTokens 和 contextWindow 参数吗」；触发点 `src/agent/loop.js:514-522` harvestUsage、`src/agent/compaction.js:29`（不用 usage 的理由注释）、`src/agent/loop.js:124-130`（重放消息 usage 全 0）
+现象：`harvestUsage` 已经在读 `m.usage.input`——**活轮次内 piAgent.state.messages 里的 assistant 消息带真实 usage**，也就是「当前上下文的真实 token 数」是可得的。现在完全没用它，全靠字符估算。
+证据：静态确认（上述三处）。关键约束：跨轮续接时历史由 `historyToPiMessages` 重放、usage 一律记 0（`loop.js:124-130` 注释明写），所以**只有活轮次能用 usage，跨轮首轮仍须退回估算**——这正是当初「不用 usage 记账」注释成立的真正原因（多请求轮 usage 累加值语义不对，且重放消息没有 usage）。
+影响：能显著提升阈值判断精度（不再依赖用户填的 contextWindow 与字符估算的双重误差），填错 contextWindow 的后果进一步收敛。代价：需要把「最后一条带真实 usage 的 assistant 消息」映射回事件历史下标才能知道哪些事件已被 usage 覆盖，事件↔消息不是 1:1，映射本身有复杂度与出错面。
+建议：先做 T-94（预设带默认值，半天）观察效果，本条作为后续；若做，建议只用于「校准估算系数」（真实/估算 比值滑动平均）而不是直接替换阈值判断，风险更可控。
+状态：待审核
+
+
+
+
+### T-89 — C4 架构候选落地：装配缝定向校验（含 T-69 修复）
+
+类型：改进（架构评审 C4 候选；grilling 四项决策由用户拍板「按推荐」，其中 Q1 明确收缩——报告原方案的「deps 四分组搬迁」不做：C1 的 ctx 声明+键绑定校验已覆盖最大静默失效面，分组是纯形状搬迁不新增行为，删码测试不过关。原登记号 T-84 被并行会话的同日 UI 条目占用且原条目在其文件重写中丢失，改用 T-89）
+登记日期：2026-10-06
+来源：会话 2026-10-05 架构评审报告候选 4，触发点 `src/agent/loop.js` createAgent 缺省兜底、`src/agent/index.js` send 内 activeTools、`src/composable/agentHost.js` useAgentHost、`[id].vue` enabledGroups
+现象（四件定向修复的对象）：① `createAgent` 的 `buildUserMessage` 缺省兜底 `({userText}) => userText` 会静默丢 targetTab/workflowContext（模型失去目标页锚点），漏注入无任何报警；② T-69：`[id].vue` 的 enabledGroups 在 setup 期对 `haveEditAccess.value` 求值成快照，团队权限异步加载未就绪时永久缺 canvas 组，runtime 不随权限变化重建；③ loop 传给 preStepNotice 的 `{step}` 是死参数（index.js 实现用内容键判重，从不读 step），`stepCounter` 与「它按 step 判重」注释同病；④ `useAgentHost` 的 deps 无必填校验——漏传 getWorkflowId 会让会话静默落成全局列表（编辑器侧按 workflowId 过滤永远看不到自己的历史）、漏传 enabledGroups 会按未过滤处理（canvas 组泄露给无画布宿主，T-45 同款事故）。
+决策（grilling 定案）：① buildUserMessage 缺注入即 throw（T-55 对 wrapUntrusted 同款）；② enabledGroups 支持数组或 () => 数组，runtime **每次 send 求值**（权限变化下一轮生效，promptFacts 本就 per-send 重建自动跟上），[id].vue 改传 getter；③ 删 {step} 死参数与 stepCounter；④ useAgentHost 装配期校验 enabledGroups/getWorkflowId 必填；⑤ onEvent 子项降级为文档（唯一调用方 agentHost 恒传，loop 层可选是库的合理设计），只在 send JSDoc 写明契约。
+证据：静态确认（上述四处代码）；loop.test.js 的 preStepNotice 用例无断言 {step}，删参不牵动测试。
+影响：漏注入从静默退化变装配期报错；团队用户「让助手把块搭到画布上」不再静默不可用（T-69 随本条修复归档）。
+状态：进行中（2026-10-06）
+
+
 ### T-01 — countBlocks 把「块数」算成「属性数之和」，prompt 事实表报 715
 
 类型：bug
@@ -155,7 +194,28 @@
 证据：**代码位置，推断，未实测** —— `AgentPanel.vue:27-73`、`AgentTabPicker.vue:3`（`w-[32rem]`）、`:95-99`（`id === 1 ? 主窗口 : 窗口 {n}`）、`agentHost.js:78-80`（`listIndex` 未带时间展示字段的消费）。
 影响：会话多了以后找历史对话只能靠猜；标签页一多（几十个）没有搜索只能滚动翻；窗口编号是实现细节泄漏。
 建议：会话改 popover 列表（标题 + 相对时间 + 当前项勾选），行高让给事件流；弹窗宽度改 `min(32rem, 90vw)`，顶部加搜索框按 title/url 过滤，窗口分组改用「窗口 N · 主窗口 / n 个标签页」这类可读文案。
-状态：待审核
+
+**2026-10-05 补充（会话 2026-10-05，用户原话「header 上展示了 pin 住标签的标题和选择页面按钮，按钮点击弹窗选择 agent 读取的 tab（这部分做成下拉直接选择会不会更好？）」「对话管理做在输入框上方的位置略显割裂，我觉得最好还是和选择标签的功能一起做在 header 上」）**：
+
+- 用户就本条明确了两个设计决定：① **标签页选择也走下拉**（不再用 modal）；② **会话管理并入 header**。方案见 `docs/agent-panel-ui-proposal.md`（待审核），该文另附业界取证（VS Code / Cursor / Claude / ChatGPT）与量化空间预算。
+- 空间账（本轮按类名推算，**推断未实测**）：侧栏内容区实为 **320px**（`[id].vue:10` `w-80` + inline `padding:20px`，`sidebarCss.width` 默认 360 → 320），而 `AgentTabPicker.vue:5` 的 `w-[32rem]` 是 **512px** —— **modal 比宿主还宽，说明用 modal 是被逼的而非设计选择**。当前固定 chrome 约 **220px**（目标页行 56 + 会话行 52 + 输入 form 112；`UiButton.vue:5` 硬编码 `h-10` 是行高主因）。
+- 业界一致做法（本轮直连厂商文档取证）：**破坏性删除一律 2 步以上，且从不与「切换」共用一次点击**（VS Code 悬停=置顶/归档、右键=删除；ChatGPT/Claude 走每行 ⋮）。删除的二次确认 `dialog.confirm` **已在 `agentHost.js:179-196` 接好**，改造时直接沿用。
+- 待用户拍板：会话与页面上下文**是否都放 header**。调研推荐「会话占 header + 页面上下文做成输入框上方可移除 chip」（Cursor 的 Listening pill 即此形），用户倾向「两者都在 header」。见方案文 §4。
+**2026-10-05 用户拍板 + 实施结果（按推荐的方案 C 落地）**：用户选定「会话占 header + 页面上下文做成输入框上方的 chip」，**本条的分隔与容器部分已做完**，剩两小项仍挂着。
+
+已做：
+- 会话选择从「事件流与输入框之间的整行原生 `<select>`」搬进 **header**，行高让给事件流（固定 chrome 约 220px → 180px，推算值）。会话列表复��� `sessions.js` 的 `sessionOptionLabel`（已有单测钉住，产出「标题 · 相对时间」），当前项改用勾选图标，不再往标题里塞「（当前）」后缀（那个字符串拼装连同 `session.currentLabel` key 一起删除）。
+- 删除会话收进 header 的「⋯」菜单，**不再是常驻裸图标按钮** —— 落实上面那条业界共识；二次确认沿用 `agentHost.js:179-196` 已有的 `dialog.confirm`，零改动。
+- 标签页选择从 `w-[32rem]`（512px）的 `ui-modal` 换成 `ui-popover`（列表本身抽成无容器的 `AgentTabList.vue`，`ui-modal` 整条删除）。
+- token 用量角标一并搬进「⋯」菜单，输入区只剩输入框。
+- 新增 `AgentSessionList.vue`；`panelUi.test.js` 加了 2 条布局守卫（会话入口必须在 header、chip 必须排在 `<form>` 之前、512px 弹窗不得复活）。
+- ⚠️ **芯片上没做「✕ 解除」**：`resolveTargetTab` 永远会解析出一个目标页（pinned → lastAccessed → 当前窗口 → 其他窗口），运行时**不存在**「无目标」这个状态，硬加解除按钮等于造一个底层不支持的假状态。若将来真要「不绑定任何页」，得先改 `tab.js` 的解析策略，那是独立决策。
+
+仍挂着（本轮**范围外**，按 AGENTS.md 不顺手做）：
+- 标签页列表加**搜索/过滤输入框**（「几十个标签页只能滚动翻」）。
+- 窗口分组标题改可读文案（现在仍是「主窗口 / 窗口 {n}」，把内部 `windowId` 泄漏给用户）。
+
+状态：部分完成（分隔与容器已改；搜索框与窗口文案仍待做）
 
 ### T-16 — 只能复制代码块，复制不了整条回答
 
@@ -358,9 +418,134 @@ TOOL_CALL 事件里带 args 的数量: 0 / 1
 建议：两条路。① 在 `fromPiEvent` 的 `tool_execution_start` 映射处检查 toolCallId，缺失时打点并在 DONE 里附一句（不改pi 的行为，只让我们看得见）。② 什么都不做，等真出问题再补。代价：①约 5 行 + 一条测试。
 状态：待审核
 
+### T-63 — 活轮次用户消息裸发直达模型：包装版与 tab 元数据只活在重放里（迁移回归）
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 架构评审（improve-codebase-architecture），触发点 `src/agent/loop.js:744`
+现象：`agent.prompt(userText)` 送的是裸原文；同一消息入史的 `promptText` 却是 `buildUserMessage` 产物（`untrusted_tab_metadata` + `untrusted_user_message` 包装，`loop.js:699-707`）。下一轮把 initialHistory 重放进 transcript 时（`loop.js:120-124` 走 `promptTextOf`）用的是包装版 —— 同一条用户消息，模型当场看到裸文本、续接轮看到包装+元数据；目标页 url/title 元数据在活轮次从未送达。迁移前不是这样：`git show 894ec164:src/agent/loop.js` 实测 `:343-352` 把 userEv（含 `wire: buildUserMessage(...)`）push 进 history，`:410-411` 的活轮次请求由 `applyTokenBudget(elideStaleObservations(buildWireMessages(history,...)))` 现算 —— 活轮次同样吃到包装版与元数据。
+证据：**实测** —— 上述四处代码位置 + 基线 commit 的 git show 对照。
+影响：① 首轮模型不知道目标页 URL/标题（「你正在看的是 X 页」这层锚点失效，只能靠 read_page 间接得知）；② 活轮次与重放轮形状漂移，长会话里同一句话两种形态；③ 红线第 2 条「用户输入回显必须包装」在「活消息算不算回显」上出现两可 —— 修哪边都要先拍板。
+建议：两个方向二选一。(a) 活轮次也发 `userEv.promptText`（一致、恢复元数据；须同步改系统提示安全声明的「用户历史输入的回显」措辞，否则模型可能把当场指令当数据）；(b) 明确「活消息不包装」为设计，重放侧不再经 buildUserMessage 补元数据（元数据改走 preStepNotice/事实表），红线表述同步收窄。**不要两个都做一半。**
+状态：待审核
+
+### T-64 — 系统提示向模型承诺不存在的「read_page 快照压缩」，window.js 的 elide/预算是零调用死接口（迁移回归）
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 架构评审，触发点 `src/agent/prompt.js:105-109`
+现象：系统提示明文承诺「read_page 的历史快照会被压缩成一行占位（只保留最近一次）」。迁移前这是真的（`894ec164:loop.js:410-411` 每步都跑 elide）；票 08 删 wire 层后，`elideStaleObservations`/`applyTokenBudget`/`estimateTokens` 生产代码零调用，接口形状还是旧 wire 消息（`role:'tool'`、字符串 content），与 pi 的 content-block 现状不匹配。`config.js:66-68` 注释同样声称 contextWindow 决定裁剪节奏。
+证据：**实测** —— `grep -rn "elideStaleObservations|applyTokenBudget" src/`（排除测试）仅命中 `window.js:106/143` 定义处；生产调用只剩 `events.js:9` 的 `truncateObservation`。
+影响：模型基于假前提行动（被要求「把 selector 复述进方案以防被压缩」——这条行为碰巧有益，但前提是假的）；更重要的是僵尸接口误导维护者：真到 B9 第 1 项翻案那天，这套面向旧 wire 形状的实现也不能直接用。
+建议：window.js 收缩为只剩 truncateObservation（可并入 events.js），elide/预算删除；prompt.js:105-109 与 config.js:66-68 改为实况。B9 翻案时另写面向 pi 形状的新实现，不复活这份。
+状态：待审核
+
+### T-65 — adapter 对「预折 AgentToolResult」原样放行：绕过 untrusted 包装与截断的暗门
+
+类型：bug（潜在，当前无生产者）
+登记日期：2026-10-05
+来源：会话 2026-10-05 架构评审，触发点 `src/agent/tools/adapter.js:40-47`
+现象：`toToolResult` 遇到「含 content 数组 + details 键」的对象时原样返回（注释：其他适配器或后续票产出），不做 escape、不截断、不补 untrusted 标签，isError 只认显式 true。
+证据：**实测** —— adapter.js:40-47 代码；`grep -rn "content: \[" src/agent/tools/` 仅命中 adapter 自身，当前仓库无生产者。
+影响：任何工具将来直接返回折叠形状，就会静默跳过红线第 2 条：无包装、无截断、无逃逸，内容对模型裸奔且无任何测试报警（测的都是注入后的路径）。
+建议：删掉该分支；确要支持预折形状，放行前强制补 `wrapObservation` 或至少断言 content 文本以 `<untrusted_` 开头。
+状态：待审核
+
+### T-66 — provider.js 头注声称 config「已过 validateConfig」，运行时路径 loadConfig 并不校验
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 架构评审，触发点 `src/agent/provider.js:62`、`src/agent/config.js:158-171`
+现象：`loadConfig` 只合并默认值 + 解密，不跑 `validateConfig`（只有 `saveConfig` 校验）。`runtime.send` 只挡 apiKey 为空（`index.js:596-600`）。存量/旧形状/手改的存储配置（缺 baseUrl/model）会一路走进 `buildModel` → pi 请求层。
+证据：**静态确认**（三处代码位置）；损坏配置的实际报错文案未实测。
+影响：用户看到的是一句指不到真因的 provider 报错，而不是「配置不完整」，与 T-40「错误要能定位」的方向相悖。
+建议：loadConfig 读回后跑一次 validateConfig，不合规时降级 DEFAULT_CONFIG 并打点（或抛带字段的错误）。
+状态：待审核
+
+### T-67 — agentHost.send 的插话分支缺 `!agent.runtime` 判空，init 未完成时点发送会炸
+
+类型：bug（低危）
+登记日期：2026-10-05
+来源：会话 2026-10-05 架构评审，触发点 `src/composable/agentHost.js:219-230`
+现象：openAgentSession/newAgentSession/deleteSession 都判 `!agent.runtime`（`:146/:156/:172`），唯独 send 没判：busy 插话分支在 try 之外直接 `agent.runtime.enqueueInstruction`（TypeError 未捕获）；非 busy 分支的 `agent.runtime.send` TypeError 被 catch 包成 error 事件，文案是一句栈话。
+证据：**静态确认**（代码位置）；busy 只在 send 内置 true，风险窗口 = init() 未完成（编辑器侧惰性 init / loadConfig 慢）时用户先发消息。未实测复现。
+影响：低频但体验差：用户看到「Cannot read properties of null」而非「助手还在初始化」。
+建议：send 开头补 `!agent.runtime` 的显式提示，或把发送排队到 init 完成之后。
+状态：待审核
+
+### T-68 — AgentTabList 把主窗口写死为 `id === 1`（原 AgentTabPicker，UI 改造后迁移）
+
+类型：bug（纯显示）
+登记日期：2026-10-05
+来源：会话 2026-10-05 架构评审，触发点 `src/components/newtab/workflow/agent/AgentTabList.vue:75-77`（窗口分组逻辑随并行会话的面板改造从 AgentTabPicker.vue 迁来，缺陷原样保留）
+现象：`windowLabel(id)` 以 `id === 1` 判「主窗口」。Chrome 的窗口 id 不保证为 1（会话恢复、先开后关都可能让主窗口拿到别的 id）。
+证据：**静态确认**（grep 实测 `AgentTabList.vue:76`）；未实测触发。
+影响：窗口分组标签偶尔标错；纯显示问题。
+建议：与 `browser.windows` 的真实主窗口 id 比对，或去掉特判只显示「窗口 N」。
+状态：待审核
+
+### T-77 — 插话迁移到 pi 原生 steer/followUp 队列（评估项）
+
+类型：改进
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 功能面调研；对照票 06 的 transformContext 插话。
+现象：pi Agent 原生 `steer()`/`followUp()`（pi/packages/agent/src/agent.ts:299-305）在工具批结束/本要停的时刻注入，带 all / one-at-a-time 队列模式与清队、窥视 API；我们现走 transformContext 注入（票 06），语义等价于「下次请求前注入」。
+证据：代码核对（上行号）；src/agent 无 steer/followUp 调用（grep 实测）。当前未发现现机制的时序故障。
+影响：暂无实际影响；差异在工具批边界与逐条消费语义。
+建议：暂不动工作代码。重开条件：插话在工具批边界产生时序问题，或需要「一次只递一条/排队可见」时再迁移（迁移时插话仍要同步入事件历史供跨会话重建）。
+状态：驳回（2026-10-05，用户拍板本轮不做）
+
+### T-78 — 截图/图片输入进对话
+
+类型：新功能
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 功能面调研（Agent.prompt 支持 images：pi/packages/agent/src/agent.ts:371-373、419-433；ImageContent：pi/packages/ai/src/types.ts:413-417）。
+现象：助手只能读页面文本（read_page），用户无法把视觉问题指给模型；扩展侧截图能力现成（chrome.tabs.captureVisibleTab、automa 截图块）。
+证据：代码核对（上行号）；src/agent 无图片路径（grep ImageContent/base64 无命中，实测）。
+影响：样式错乱、元素重叠类问题用户只能口述，沟通成本高。
+建议：输入框支持粘贴/截图 → user 事件存 base64（压 jpeg、限张数防存储爆炸）→ prompt() 带 images；vision 门控依赖 B3 模型元数据，无元数据默认不启用。约 1 天含 UI。
+状态：驳回（2026-10-05，用户拍板本轮不做）
+
+### T-79 — thinking 推理档位接线（先探针）
+
+类型：新功能
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 功能面调研（pi-ai SimpleStreamOptions.reasoning minimal~max：pi/packages/ai/src/types.ts:355；Agent thinkingLevel/thinkingBudgets：pi/packages/agent/src/agent.ts:137、221-222）。
+现象：pi 支持按档位传 reasoning 参数，我们 streamFn 侧完全没接；所接 BYOK 端点（ModelScope 等）对 reasoning 参数的支持程度未知。
+证据：代码核对（上行号）；**透传行为推断，未实测**——openai-completions adapter 是否把档位映射成请求参数，需 onPayload 探针确认。
+影响：不支持则零影响；支持则复杂画布任务可开高档、简单任务省 token。
+建议：先半天探针（onPayload 抓真实 payload），确认有参数透出再上 UI（面板切换 + config 持久化）。
+状态：驳回（2026-10-05，用户拍板本轮不做）
+
+### T-80 — prompt cache 会话亲和 sessionId（先探针）
+
+类型：改进
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 功能面调研（Agent option sessionId「传给 provider 的会话 ID（prompt-cache 后端用）」：pi/packages/agent/src/agent.ts:136、219-220；pi-ai StreamOptions.sessionId / OpenAI prompt_cache_key / 会话亲和头：pi/packages/ai/src/types.ts:226、855-858）。
+现象：我们从未传 sessionId；BYOK 端点是否吃该字段未知。
+证据：代码核对（上行号）；**效果推断，未实测**——openai-completions adapter 是否发出 prompt_cache_key 需探针。
+影响：端点支持 prompt cache 时会话亲和可提高命中率，长会话省钱提速；不支持则零影响。
+建议：半天探针确认字段透出再决定常驻；顺带把 usage 的 cacheRead/cacheWrite 展示出来（记账已有可挂）。
+状态：驳回（2026-10-05，用户拍板本轮不做）
+
+---
 ## 已批准（待排期）
 
-（暂无）
+### T-81 — Skills 系统 / prompt 模板 / 自定义指令加载（借鉴 pi 的两级注入）
+
+类型：新功能
+登记日期：2026-10-05
+来源：会话 2026-10-05 pi 功能面调研；用户拍板「把 skills 系统 / prompt 模板 / AGENTS.md 加载这部分功能加入到待实现里面我有空来做」。
+内容（借鉴 pi coding-agent 的机制，`pi/packages/coding-agent/src/core/skills.ts`、`resource-loader.ts`、`system-prompt.ts`，代码不搬、按机制自建）：
+- **skills 两级注入**：技能 = 名称 + 描述 + 正文（SKILL.md 形态）。system prompt 只放索引（`<available_skills>` 块：名称/描述/路径），指示模型「任务匹配时用 read 工具读全文」；正文按需加载。浏览器形态：技能清单存 storage.local（或远程 JSON），正文 fetch/storage 惰性取。
+- **prompt 模板**：Markdown 文件即命令（`/review` 形态），frontmatter description + `$1`/`$@` 参数替换；浏览器形态：存 storage.local，输入框 `/` 前缀触发选择。
+- **自定义指令（AGENTS.md 等价物）**：用户级持久指令，进 system prompt 的独立 section；浏览器形态：设置页文本框，拼接进 buildSystemPrompt。
+证据：pi 机制位置 —— skills.ts:355-380（formatSkillsForPrompt 两级注入）、resource-loader.ts:184-203（指令文件优先级链）、system-prompt.ts:164-179（结构化 sections）。均为代码核对，非实测。
+影响：用户可给助手固化「本机习惯/常用操作/输出规范」，不再每轮口述。
+建议：分三步交付（指令 → 模板 → skills），指令最便宜（半天）、skills 最重（2 天+UI）。实施时注意 system prompt 体积与 facts.js 的关系（别把索引撑爆）。
+状态：已批准（待排期，2026-10-05 用户认领自做）
+
+（暂无其他）
 
 ---
 
@@ -436,7 +621,7 @@ TOOL_CALL 事件里带 args 的数量: 0 / 1
 
 ## 已清 → `docs/backlog-done.md`
 
-44 条已解决条目（T-02、T-05、T-06、T-17~T-25、T-26~T-34、T-35~T-43、T-44、T-45、T-47、T-48，以及 B1、B5）已移入 **`docs/backlog-done.md`**（2026-10-05）。
+已解决条目全部在 **`docs/backlog-done.md`**（计数以该文件实物为准，并行会话同日多轮追加）：2026-10-05 拆出 44 条（T-02、T-05、T-06、T-17~T-25、T-26~T-34、T-35~T-43、T-44、T-45、T-47、T-48、B1、B5）；之后各轮：T-61、T-62 与面板 UI 系列（并行会话），T-70、T-71（架构评审 C1），T-82（C3），T-83（C2），T-89 及随其修复的 T-69（C4），T-75、T-76（pi 功能面调研轮：步数上限决策与上下文压缩，2026-10-06），T-91（`list_canvas` 静默截断 200 字符，2026-10-06）。
 
 要看「某个坑当初是怎么被实测出来的」，去那个文件；要看「现在该做什么」，留在本文件。
 

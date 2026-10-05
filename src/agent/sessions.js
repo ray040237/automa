@@ -56,6 +56,10 @@ export function titleFromEvents(events) {
  * 必须按整轮切（从某条 user-message 事件起）——从中间切会把一轮的
  * tool-result 和它的 tool-call 拆开，wire 配对净化也救不回语义。
  *
+ * T-76：切口永不越过最后一条 agent:compaction——摘要是模型唯一的历史记忆，
+ * 被存储修剪裁掉等于白压。它之前的老事件照常修剪（那是 UI 层的损失，模型侧
+ * 已经由摘要顶上）。
+ *
  * @param {Array<Object>} events
  * @param {number=} maxTurns
  * @returns {Array<Object>}
@@ -67,7 +71,14 @@ export function cropToTurns(events, maxTurns = MAX_SESSION_TURNS) {
     if (ev && ev.kind === AGENT_EVENTS.USER_MESSAGE) turnStarts.push(i);
   });
   if (turnStarts.length <= maxTurns) return list;
-  return list.slice(turnStarts[turnStarts.length - maxTurns]);
+
+  let cut = turnStarts[turnStarts.length - maxTurns];
+  const lastCompaction = list.reduce(
+    (acc, ev, i) => (ev && ev.kind === AGENT_EVENTS.COMPACTION ? i : acc),
+    -1
+  );
+  if (lastCompaction !== -1 && lastCompaction < cut) cut = lastCompaction;
+  return list.slice(cut);
 }
 
 /**

@@ -134,6 +134,6 @@ test('wrapUntrusted 拒绝未知标签（防止打错标签后内容裸奔）', 
   );
 });
 
-test('标签清单就是文档约定的 7 个（含 system_notice）', () => {
-  assert.equal(UNTRUSTED_WRAPPER_TAGS.length, 7);
+test('标签清单就是文档约定的 8 个（含 system_notice 与 compaction_summary）', () => {
+  assert.equal(UNTRUSTED_WRAPPER_TAGS.length, 8);
 });

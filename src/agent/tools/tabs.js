@@ -61,9 +61,10 @@ export async function listTabs(ctx) {
  * 不然面对「页开着但没 pin」的场景模型只能 open_url 开重复页。
  *
  * @param {Object} ctx
- * @param {() => Array<{tabId: number, origin: string, title?: string}>} ctx.pins
- *   T-43 ③：固定契约——pins 永远是 getter，调用方每次调它取最新数组。
- *   运行时（index.js toolCtx）与测试夹具都按这个形状传，不再兼容「直接传数组」。
+ * @param {Array<{tabId: number, origin: string, title?: string}>} ctx.pins
+ *   T-70 修正：契约是**数组**。index.js 的 toolCtx 用 JS getter 提供，
+ *   adapter 每次 execute spread 时求值 —— 工具拿到的就是本步执行时刻的快照。
+ *   不再要求函数形态：「getter」一词曾在两侧各说各话，focus_tab 生产全挂。
  * @param {Function} ctx.addPin (pin) => Promise<void>
  * @param {Function} ctx.focusTab (tabId) => Promise<tab>
  */
@@ -77,13 +78,14 @@ export async function focusTab(ctx, params) {
     };
   }
 
-  if (typeof ctx.pins !== 'function') {
+  if (!Array.isArray(ctx.pins)) {
     return {
       status: 'error',
-      payload: 'ctx.pins 契约错误：必须是 () => pins 的 getter。',
+      payload:
+        'ctx.pins 契约错误：必须是数组（index.js 的 JS getter 经 adapter spread 后的形状）。',
     };
   }
-  const pins = ctx.pins() || [];
+  const { pins } = ctx;
 
   try {
     // 不在 pin 里就先收进来 —— addPin 之后 focusTab 才有身份可比对
@@ -179,6 +181,7 @@ export const listTabsTool = {
   name: 'list_tabs',
   class: 'read',
   group: 'tab',
+  ctx: ['listTabs'],
   description:
     '列出当前所有可作为目标页的标签页（按窗口分组，含 tabId/标题/URL）。' +
     '要切到别的页之前先用它拿 tabId。',
@@ -193,6 +196,7 @@ export const focusTabTool = {
   // 只改 agent 内部指针（用户浏览器视图不动），所以是 read 不是 write
   class: 'read',
   group: 'tab',
+  ctx: ['pins', 'getTab', 'addPin', 'focusTab'],
   description:
     '把你的操作焦点切到某个标签页（tabId 来自 list_tabs）。目标页不在会话 pin 里时' +
     '会自动收进 pin。只影响你后续的 read_page / query_elements 等调用，不会打断用户。' +
@@ -213,6 +217,10 @@ export const openUrlTool = {
   name: 'open_url',
   class: 'write',
   group: 'tab',
+  ctx: ['createTab', 'addPin', 'focusTab'],
+  confirmDetail(args) {
+    return { kind: 'url', detail: args ? String(args.url ?? '') : '' };
+  },
   description:
     '打开一个 http/https 网页作为新的标签页（不会抢用户当前窗口焦点），' +
     '它自动加入本会话 pin 并切换焦点过去。用于任务需要访问别的新页面时。',

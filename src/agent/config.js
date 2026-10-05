@@ -10,13 +10,21 @@
 
 export const STORAGE_KEY = 'automaAgentConfig';
 
-/** 支持的 provider。都是 OpenAI 兼容端点，走同一个 provider 实现。 */
+/**
+ * 支持的 provider。都是 OpenAI 兼容端点，走同一个 provider 实现。
+ *
+ * `contextWindow` 是**建议值**（T-94）：BYOK 场景下 OpenAI 兼容协议不暴露模型
+ * 窗口，只能按官方公开标称值预填，用户随时可改；同一 provider 下个别模型不同
+ * 时用 `modelWindows` 覆盖。填小了提前压缩（多花一次摘要请求），填大了压缩不
+ * 触发、只剩溢出恢复兜底 —— 两个方向都不致命，所以敢预填。
+ */
 export const PROVIDERS = [
   {
     id: 'openai',
     label: 'OpenAI',
     baseUrl: 'https://api.openai.com/v1',
     models: ['gpt-4o-mini', 'gpt-4o'],
+    contextWindow: 128000,
   },
   {
     id: 'modelscope',
@@ -24,32 +32,38 @@ export const PROVIDERS = [
     baseUrl: 'https://api-inference.modelscope.cn/v1',
     // 免费额度限流很紧，429 是常态 —— 所以默认给个小模型先跑通
     models: ['Qwen/Qwen2.5-7B-Instruct', 'Qwen/Qwen2.5-72B-Instruct'],
+    contextWindow: 32768,
   },
   {
     id: 'deepseek',
     label: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/v1',
     models: ['deepseek-chat'],
+    contextWindow: 65536,
   },
   {
     id: 'moonshot',
     label: 'Moonshot',
     baseUrl: 'https://api.moonshot.cn/v1',
     models: ['moonshot-v1-32k'],
+    contextWindow: 32768,
   },
   {
     id: 'zhipu',
     label: '智谱 GLM',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     models: ['glm-4-flash', 'glm-4-plus'],
+    contextWindow: 131072,
   },
   {
     id: 'aliyun',
     label: '阿里百炼',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     models: ['qwen-plus', 'qwen-turbo'],
+    contextWindow: 131072,
   },
   {
+    // 模型名由用户自填，没有表可查 —— 不预填，回落默认
     id: 'openrouter',
     label: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
@@ -63,13 +77,36 @@ export const DEFAULT_CONFIG = {
   baseUrl: 'https://api.openai.com/v1',
   model: 'gpt-4o-mini',
   temperature: 0.2,
-  // BYOK 模型窗口五花八门，按 window.js 的保守默认；多会话历史变长后，
-  // 这个值直接决定旧轮次多快被裁掉，用户要能按自己的模型调大
+  // 驱动 T-76 压缩阈值（compaction.js 的 compactionThresholds）：阈值 =
+  // contextWindow - reserve。设置页按 provider/model 预填建议值（见下面
+  // resolveContextWindow），用户可改；< 4096 视为压缩不可用。
   contextWindow: 32000,
+  // 单次回复的输出上限（T-96）。0 = 不传，交给端点默认 —— 写死一个数字会让
+  // 长回答被静默截断在半句（provider.js 里记着「曾为 4096」的教训）。
+  maxTokens: 0,
   apiKey: '',
 };
 
 const byId = (id) => PROVIDERS.find((p) => p.id === id);
+
+/**
+ * 按 provider/model 取上下文窗口的**建议值**（T-94）。
+ *
+ * 只是预填用的建议，不是真相：同一模型不同版本/账号档位窗口可能不同，用户
+ * 随时能在设置页改。查不到（openrouter / 自定义端点 / 手填模型名）就回落
+ * DEFAULT_CONFIG.contextWindow —— 宁可按保守值提前压缩，也不要假装有数。
+ *
+ * @param {string} providerId
+ * @param {string=} model
+ * @returns {number}
+ */
+export function resolveContextWindow(providerId, model) {
+  const preset = byId(providerId);
+  if (!preset) return DEFAULT_CONFIG.contextWindow;
+  const perModel =
+    preset.modelWindows && model ? preset.modelWindows[model] : undefined;
+  return perModel || preset.contextWindow || DEFAULT_CONFIG.contextWindow;
+}
 
 /**
  * 校验并补全配置。
@@ -120,6 +157,24 @@ export function validateConfig(input) {
     }
   }
 
+  // maxTokens：留空 / 0 = 不限制（把上限交给端点默认）。一旦填了就要是个
+  // 像样的数 —— 太小的上限等于把「回答说到一半没了」变成常态（配套 T-96②：
+  // 真截断时 loop 会发 SYSTEM_NOTICE，用户看得见，不是静默）。
+  let { maxTokens } = raw;
+  if (
+    maxTokens === undefined ||
+    maxTokens === null ||
+    maxTokens === '' ||
+    maxTokens === 0
+  ) {
+    maxTokens = DEFAULT_CONFIG.maxTokens;
+  } else {
+    maxTokens = Number(maxTokens);
+    if (!Number.isFinite(maxTokens) || maxTokens < 256) {
+      errors.push('maxTokens 必须是不小于 256 的数字，留空表示不限制');
+    }
+  }
+
   return {
     ok: errors.length === 0,
     errors,
@@ -129,6 +184,7 @@ export function validateConfig(input) {
       model,
       temperature,
       contextWindow,
+      maxTokens,
       apiKey,
     },
   };

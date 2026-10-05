@@ -103,6 +103,7 @@ export const readPage = {
   name: 'read_page',
   class: 'read',
   group: 'page',
+  ctx: ['readPage'],
   description:
     '读取目标页的结构地址：列表模式（容器/单项/字段/取值方式/样例）、可操作元素索引' +
     '（导航已折叠）、表格与页面请求过的接口。默认 detail=addresses（约几百 token），' +
@@ -156,6 +157,7 @@ export const findText = {
   name: 'find_text',
   class: 'read',
   group: 'page',
+  ctx: ['findText'],
   description:
     '在目标页里按文本关键词找元素（字面匹配、忽略大小写，不支持正则）。' +
     '命中即返回可落盘的 CSS selector、所在容器与前后文片段。' +
@@ -203,6 +205,7 @@ export const getVariables = {
   name: 'get_variables',
   class: 'read',
   group: 'context',
+  ctx: ['getVariables'],
   description:
     '读取当前工作流已定义的变量与全局变量（含值与类型）。' +
     '写 JS 或讲模板引用前应先看，避免引用不存在的变量名。',
@@ -247,6 +250,7 @@ export const getBlockSchema = {
   name: 'get_block_schema',
   class: 'read',
   group: 'context',
+  ctx: ['getBlockSchema'],
   description:
     '查某个工作流块的字段定义（块 name 或 id）。写工作流 JSON 前用它确认字段名，' +
     '不要凭记忆猜。块名不存在时会返回本版全部可用块名。',

@@ -1,113 +1,98 @@
 <template>
-  <ui-modal
-    :model-value="visible"
-    :title="t('workflow.agent.pickTab.title')"
-    content-class="w-[32rem]"
-    @close="close"
-  >
-    <div class="max-h-[60vh] overflow-y-auto">
-      <div v-if="loading" class="py-8 text-center text-sm text-gray-500">
-        {{ t('workflow.agent.pickTab.loading') }}
-      </div>
-
-      <p
-        v-else-if="groups.length === 0"
-        class="py-8 text-center text-sm text-gray-500"
+  <!-- side="top"：chip 贴着面板底部，往下展开在矮窗口里会被视口截断 -->
+  <agent-dropdown v-model="open" align="left" side="top" width="w-72">
+    <template #trigger>
+      <button
+        type="button"
+        class="bg-box-transparent hover:bg-opacity-10 flex max-w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
+        :title="t('workflow.agent.pickTab.title')"
       >
-        {{ t('workflow.agent.pickTab.empty') }}
-      </p>
+        <v-remixicon name="riEarthLine" class="shrink-0 text-gray-400" />
+        <span class="truncate text-xs" :class="{ 'text-gray-400': !targetTab }">
+          {{ label }}
+        </span>
+        <v-remixicon name="riArrowDownSLine" class="shrink-0 text-gray-400" />
+      </button>
+    </template>
 
-      <template v-else>
-        <div v-for="g in groups" :key="g.windowId" class="mb-3">
-          <div class="mb-1 px-2 text-xs uppercase text-gray-400">
-            {{ windowLabel(g.windowId) }}
-          </div>
-          <button
-            v-for="tab in g.tabs"
-            :key="tab.id"
-            type="button"
-            class="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
-            :class="{
-              'bg-accent/15': currentId === tab.id,
-            }"
-            @click="pick(tab)"
-          >
-            <v-remixicon name="riEarthLine" class="shrink-0 text-gray-400" />
-            <span class="min-w-0 flex-1">
-              <span class="block truncate font-medium">{{
-                tab.title || tab.url
-              }}</span>
-              <span class="block truncate text-xs text-gray-400">{{
-                tab.url
-              }}</span>
-            </span>
-            <v-remixicon
-              v-if="currentId === tab.id"
-              name="riCheckLine"
-              class="shrink-0 text-accent"
-            />
-          </button>
-        </div>
-      </template>
-    </div>
-  </ui-modal>
+    <agent-tab-list
+      :groups="groups"
+      :current-tab="targetTab"
+      :loading="loading"
+      @pick="onPick"
+    />
+  </agent-dropdown>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import AgentDropdown from './AgentDropdown.vue';
+import AgentTabList from './AgentTabList.vue';
 
+/**
+ * 目标页 chip：显示当前助手在读哪一页，点开是一份标签页列表。
+ *
+ * 这一格以前是「标题 + 一个按钮，按钮点开一个 512px 宽的 ui-modal」。
+ * 而它在编辑器侧栏里的可用宽度只有 320px（`sidebarCss.width` 360 − padding 40）——
+ * 弹窗比宿主还宽，所以「用弹窗」从来不是设计选择，是被逼的。
+ *
+ * 中间试过用项目现成的 `ui-popover`，实测三条症状：下拉顶出侧栏、压到 header
+ * 的按钮、在输入区点开会把面板撑开（tippy 把内容挂到 body 上定位，脱离本列）。
+ * 现在改用本文件夹里的 AgentDropdown（留在本列、absolute）。
+ *
+ * chip 不做「✕ 解除」：`resolveTargetTab` 永远会解析出一个目标页
+ * （pinned → lastAccessed → 当前窗口 → 其他窗口），没有「无目标」这个状态可表达，
+ * 硬塞一个解除按钮会造出运行时不支持的假状态。
+ */
 const props = defineProps({
-  visible: { type: Boolean, default: false },
-  currentTab: { type: Object, default: null },
-  // 由父组件注入，这样组件本身不必知道 browser API，也便于单测
+  targetTab: { type: Object, default: null },
+  // 由父组件注入，组件本身不必知道 browser API，也便于单测
   listTabs: { type: Function, required: true },
 });
 
-const emit = defineEmits(['close', 'pick']);
+const emit = defineEmits(['pick', 'no-target']);
 
 const { t } = useI18n();
 
 const groups = ref([]);
 const loading = ref(false);
+const open = ref(false);
 
-// 模板里直接用这个值，不需要再包一层函数
-const currentId = computed(() => (props.currentTab ? props.currentTab.id : -1));
-
-watch(
-  () => props.visible,
-  async (v) => {
-    if (!v) return;
-
-    loading.value = true;
-
-    try {
-      groups.value = await props.listTabs();
-    } catch (e) {
-      groups.value = [];
-    } finally {
-      loading.value = false;
-    }
-  },
-  { immediate: true }
+const label = computed(() =>
+  props.targetTab
+    ? props.targetTab.title || props.targetTab.url
+    : t('workflow.agent.noTarget')
 );
 
-function windowLabel(id) {
-  return id === 1
-    ? t('workflow.agent.pickTab.mainWindow')
-    : t('workflow.agent.pickTab.window', { n: id });
+/**
+ * 每次打开才拉一次。
+ *
+ * 一个可读页面都没有时照样把空列表显示出来（列表自带更具体的解释），
+ * 同时发 no-target 让宿主弹 toast —— 原来那条路径是「先预检、为空就不开弹窗」，
+ * 换成下拉之后已经开了，藏起来反而更别扭。
+ */
+async function load() {
+  loading.value = true;
+
+  try {
+    groups.value = await props.listTabs();
+    if (groups.value.length === 0) emit('no-target');
+  } catch (e) {
+    groups.value = [];
+    emit('no-target');
+  } finally {
+    loading.value = false;
+  }
 }
 
-function close() {
-  emit('close');
-}
+// 打开时才拉一次。面板可能开着放很久，标签页状态随时会变
+watch(open, (v) => {
+  if (v) load();
+});
 
-function pick(tab) {
-  emit('pick', {
-    id: tab.id,
-    url: tab.url,
-    title: tab.title || tab.url,
-    windowId: tab.windowId,
-  });
+function onPick(tab) {
+  open.value = false;
+  emit('pick', tab);
 }
 </script>

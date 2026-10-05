@@ -1,76 +1,64 @@
 <template>
   <div class="flex h-full flex-col">
-    <!-- 目标页：这一栏很重要，用户必须知道模型看的是哪个标签页 -->
-    <div
-      class="flex items-center gap-2 border-b border-gray-200 px-3 py-2 text-xs dark:border-gray-700"
-    >
-      <v-remixicon name="riEarthLine" class="shrink-0" />
-      <span class="truncate" :title="targetTab ? targetTab.url : ''">
-        {{
-          targetTab
-            ? targetTab.title || targetTab.url
-            : t('workflow.agent.noTarget')
-        }}
-      </span>
-      <ui-button
-        variant="text"
-        class="ml-auto shrink-0 text-xs"
-        @click="openPicker"
-      >
-        {{ t('workflow.agent.pickTab.title') }}
-      </ui-button>
-    </div>
+    <!--
+      header 只有两个控件：会话 chip（点开 = 切换 / 用量 / 删除当前）与新建。
+      页面上下文不在这里 —— 它在下面的输入区顶上，见 §chip。
 
-    <agent-transcript class="flex-1" :events="events" :busy="busy" />
-
-    <!-- 会话切换：同一工作流的多轮对话。切换由宿主把关（busy / 待确认时拦下） -->
-    <div
-      class="flex items-center gap-1 border-b border-gray-200 px-3 py-1.5 text-xs dark:border-gray-700"
-    >
-      <v-remixicon name="riChatHistoryLine" class="shrink-0 text-gray-400" />
-      <ui-select
-        :model-value="currentSessionId || ''"
-        :disabled="busy"
+      两个控件都带 bg-box-transparent（项目通用的「这是个可点的盒子」底色，
+      工作流块、Autocomplete、Packages 等 46+ 处在用）。只有 hover 而没有底色的
+      控件会和面板背景糊在一起，用户看不出哪里能点。
+    -->
+    <div class="flex items-center gap-1.5 px-2 py-1.5">
+      <!-- w-72 = 288px < 侧栏内容区 320px，右侧仍留 12px -->
+      <agent-dropdown
+        v-model="sessionMenuOpen"
+        align="left"
+        side="bottom"
+        width="w-72"
         class="min-w-0 flex-1"
-        @change="onSelectSession"
       >
-        <option v-if="!currentSessionId" value="">
-          {{ t('workflow.agent.session.placeholder') }}
-        </option>
-        <option v-for="s in sessions" :key="s.id" :value="s.id">
-          {{ sessionOptionText(s) }}
-        </option>
-      </ui-select>
+        <template #trigger>
+          <button
+            type="button"
+            class="bg-box-transparent hover:bg-opacity-10 flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
+            :title="t('workflow.agent.session.placeholder')"
+          >
+            <v-remixicon
+              name="riChatHistoryLine"
+              class="shrink-0 text-gray-500 dark:text-gray-400"
+            />
+            <span class="min-w-0 flex-1 truncate text-sm">
+              {{ sessionLabel }}
+            </span>
+            <v-remixicon
+              name="riArrowDownSLine"
+              class="shrink-0 text-gray-500 dark:text-gray-400"
+            />
+          </button>
+        </template>
 
-      <!-- 会话 token 用量（网关回传 usage 才有数） -->
-      <span
-        v-if="usage"
-        class="shrink-0 text-[10px] text-gray-400"
-        :title="
-          t('workflow.agent.usage', { in: usage.input, out: usage.output })
-        "
-      >
-        {{ fmtTokens(usage.input) }}/{{ fmtTokens(usage.output) }}
-      </span>
-      <ui-button
-        variant="text"
-        class="shrink-0 text-xs"
-        :disabled="busy"
+        <agent-session-list
+          :sessions="host.sessions"
+          :current-session-id="host.sessionId"
+          :usage="host.usage"
+          :disabled="host.busy"
+          @select="onSelectSession"
+          @delete="onDeleteSession"
+        />
+      </agent-dropdown>
+
+      <button
+        type="button"
+        class="bg-box-transparent hover:bg-opacity-10 shrink-0 rounded-md px-2 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+        :disabled="host.busy"
         :title="t('workflow.agent.session.new')"
-        @click="emit('new-session')"
+        @click="host.newSession()"
       >
         <v-remixicon name="riAddLine" class="shrink-0" />
-      </ui-button>
-      <ui-button
-        variant="text"
-        class="shrink-0 text-xs"
-        :disabled="busy || !currentSessionId"
-        :title="t('workflow.agent.session.delete')"
-        @click="emit('delete-session')"
-      >
-        <v-remixicon name="riDeleteBinLine" class="shrink-0" />
-      </ui-button>
+      </button>
     </div>
+
+    <agent-transcript class="flex-1" :events="host.events" :busy="host.busy" />
 
     <!-- 没配 API Key 时把入口摆在正中：
          这个状态下发消息只会回一句「请先配置」，让人以为功能坏了。 -->
@@ -88,16 +76,27 @@
          浮层会盖住输入区与发送按钮，往回翻历史时还一直悬着（T-06）。
          这里是文档流，面板高度不够时压缩的是 transcript，输入框永远点得到。 -->
     <agent-confirm-card
-      v-if="pendingConfirm"
+      v-if="host.pendingConfirm"
       class="mx-3 mb-3"
-      :confirm="pendingConfirm"
-      @answer="emit('confirm-answer', $event)"
+      :confirm="host.pendingConfirm"
+      @answer="host.answerConfirm($event)"
     />
 
-    <form
-      class="flex items-end gap-2 border-t border-gray-200 p-3 dark:border-gray-700"
-      @submit.prevent="send"
-    >
+    <!--
+      chip：助手正在读哪一页。
+      放在输入区顶上而不是 header，是因为这里正是「我正要问这个页面」这个决定发生的地方
+      —— Cursor 的 Listening pill 与 VS Code 的 chat-input 配置行都是这个位置。
+      它紧贴输入框，中间不留缝，读起来是输入区的一部分而不是浮在上面的控件。
+    -->
+    <agent-tab-picker
+      class="mx-2 mb-1"
+      :target-tab="host.targetTab"
+      :list-tabs="host.listTabs"
+      @pick="host.pickTab($event)"
+      @no-target="host.noTarget()"
+    />
+
+    <form class="flex items-end gap-2 p-2 pt-0" @submit.prevent="send">
       <ui-textarea
         v-model="draft"
         class="flex-1"
@@ -106,11 +105,11 @@
         @keydown.enter.exact.prevent="send"
       />
       <ui-button
-        v-if="busy"
+        v-if="host.busy"
         variant="default"
         type="button"
         :title="t('workflow.agent.stop')"
-        @click="emit('abort')"
+        @click="host.abort()"
       >
         <v-remixicon name="riStopLine" class="shrink-0" />
       </ui-button>
@@ -120,17 +119,11 @@
         type="submit"
         :disabled="!draft.trim() || !configured"
       >
-        {{ busy ? t('workflow.agent.interject') : t('workflow.agent.send') }}
+        {{
+          host.busy ? t('workflow.agent.interject') : t('workflow.agent.send')
+        }}
       </ui-button>
     </form>
-
-    <agent-tab-picker
-      :visible="pickerVisible"
-      :current-tab="targetTab"
-      :list-tabs="listTabs"
-      @close="pickerVisible = false"
-      @pick="onPick"
-    />
   </div>
 </template>
 
@@ -140,40 +133,51 @@ import { useI18n } from 'vue-i18n';
 import { sessionOptionLabel } from '@/agent/sessions';
 import AgentTranscript from './AgentTranscript.vue';
 import AgentTabPicker from './AgentTabPicker.vue';
+import AgentSessionList from './AgentSessionList.vue';
+import AgentDropdown from './AgentDropdown.vue';
 import AgentConfirmCard from './AgentConfirmCard.vue';
 
+/**
+ * 面板收单个 `host` 对象 prop（T-90）—— 就是 useAgentHost 返回的那个
+ * reactive agent：状态（events / busy / pendingConfirm / …）与方法（send /
+ * pickTab / answerConfirm / …）都在它身上，面板直调方法，不再走 9 个 emits。
+ *
+ * 为什么收整对象而不是逐个 props + emits：两个宿主页面原本逐字重复 20 行绑定，
+ * 加一个绑定要改 3 处；host 对象由 agentHost 组装，加绑定只改 agentHost 一处
+ * —— 删码测试过关（删掉这层，复杂度不在任何调用点重新长出来）。
+ *
+ * 响应式：host 就是 reactive 对象，模板里 host.busy 等照常追踪。
+ */
 const props = defineProps({
-  events: { type: Array, default: () => [] },
-  targetTab: { type: Object, default: null },
-  config: { type: Object, default: () => ({}) },
-  busy: { type: Boolean, default: false },
-  listTabs: { type: Function, required: true },
-  sessions: { type: Array, default: () => [] },
-  currentSessionId: { type: String, default: null },
-  usage: { type: Object, default: null },
-  pendingConfirm: { type: Object, default: null },
+  host: { type: Object, required: true },
 });
-
-const emit = defineEmits([
-  'send',
-  'pick-tab',
-  'no-target',
-  'go-settings',
-  'select-session',
-  'new-session',
-  'delete-session',
-  'confirm-answer',
-  'abort',
-]);
 
 const { t } = useI18n();
 
 const draft = ref('');
-const pickerVisible = ref(false);
+
+// header 只剩这一个下拉（切换 / 用量 / 删除都在里面）
+const sessionMenuOpen = ref(false);
 
 // 只有存在 apiKey 才算配好了。没配就发消息，用户只会收到一句「请先配置」，
 // 看起来像功能坏了 —— 所以入口要显眼，发送按钮直接禁用。
-const configured = computed(() => Boolean(props.config && props.config.apiKey));
+const configured = computed(() =>
+  Boolean(props.host.config && props.host.config.apiKey)
+);
+
+/**
+ * header 上那个 chip 显示什么。
+ *
+ * 与列表共用 sessions.js 的 sessionOptionLabel，所以 chip 与列表里的文案一致，
+ * 不会出现「上面写 A、下面写 B」。
+ */
+const sessionLabel = computed(() => {
+  const entry = props.host.sessions.find((s) => s.id === props.host.sessionId);
+
+  if (!entry) return t('workflow.agent.session.placeholder');
+
+  return sessionOptionLabel(entry, t('workflow.agent.session.untitled'));
+});
 
 /**
  * 面板被卸载前，先把挂着的确认门拒掉（backlog T-02）。
@@ -189,79 +193,44 @@ const configured = computed(() => Boolean(props.config && props.config.apiKey));
  * loop 拿到「用户拒绝」的 error 观察值照常收尾。
  */
 onBeforeUnmount(() => {
-  if (props.pendingConfirm) emit('confirm-answer', false);
+  if (props.host.pendingConfirm) props.host.answerConfirm(false);
 });
 
 // 设置放在项目的设置页里，不在面板上就地改：
 // 一个 API Key 是全局的，不属于某一个工作流。
 function goSettings() {
-  emit('go-settings');
+  props.host.goToSettings();
 }
 
 /**
- * 会话下拉选中一项。
+ * 会话列表里选中一项。
  *
  * UiSelect 的 change emit 出去的是字符串 value，不是原生 DOM 事件 ——
  * 早先这里写 `$event.target.value`，取到 undefined 再读 .value 直接抛
  * TypeError，用户点了没有任何反应（切换入口等于不存在）。
- * 空串是那个「选择历史会话」占位项，不算一次切换。
+ * 现在列表项 emit 的就是 id 本身，但空值仍然要挡掉。
  */
-function onSelectSession(value) {
-  if (!value) return;
-  emit('select-session', value);
+function onSelectSession(id) {
+  if (!id) return;
+  sessionMenuOpen.value = false;
+  props.host.openSession(id);
 }
 
 /**
- * 选项文案：标题 · 最后访问时间；当前会话再套一层「（当前）」，
- * 下拉收起时显示的就是这一行，用户能直接看出自己停在哪个会话。
+ * 删除指定会话。先收起下拉，否则确认弹窗叠在一个还开着的浮层上。
+ * id 由列表每行的删除按钮带上来（不是「当前会话」）—— 见 AgentSessionList 注释。
  */
-function sessionOptionText(entry) {
-  const label = sessionOptionLabel(entry, t('workflow.agent.session.untitled'));
-
-  return entry.id === props.currentSessionId
-    ? t('workflow.agent.session.currentLabel', { label })
-    : label;
-}
-
-/**
- * 打开弹窗前先扫一遍有没有可注入的页面：一个都没有的话，
- * 与其让用户点进去看一个空列表，不如直接告诉他为什么。
- */
-async function openPicker() {
-  try {
-    const groups = await props.listTabs();
-    const n = groups.reduce((m, g) => m + g.tabs.length, 0);
-
-    if (n === 0) {
-      emit('no-target');
-
-      return;
-    }
-  } catch (e) {
-    emit('no-target');
-
-    return;
-  }
-
-  pickerVisible.value = true;
-}
-
-function onPick(tab) {
-  pickerVisible.value = false;
-  emit('pick-tab', tab);
+function onDeleteSession(id) {
+  if (!id) return;
+  sessionMenuOpen.value = false;
+  props.host.deleteSession(id);
 }
 
 function send() {
   const text = draft.value.trim();
   if (!text || !configured.value) return;
   // busy 时也放行 —— 宿主会把它送进插话队列（P3）
-  emit('send', text);
+  props.host.send(text);
   draft.value = '';
-}
-
-/** token 数缩写：1234 -> 1.2k */
-function fmtTokens(n) {
-  const v = Number(n) || 0;
-  return v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v);
 }
 </script>

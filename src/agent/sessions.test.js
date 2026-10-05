@@ -60,6 +60,36 @@ test('cropToTurns 轮数不足时原样返回', () => {
   assert.equal(cropToTurns(events, 20), events);
 });
 
+test('cropToTurns：切口永不越过最后一条 compaction 锚点（T-76）', () => {
+  // 25 轮，第 3 轮之后（index 6）插一条 compaction。
+  // 正常 20 轮切口在 index 10 —— 会把 compaction 裁掉；锚定后切口必须提前到 6。
+  const events = [];
+  for (let i = 0; i < 25; i += 1) {
+    events.push(userMsg(`问${i}`), delta(`答${i}`));
+  }
+  events.splice(6, 0, {
+    kind: AGENT_EVENTS.COMPACTION,
+    summary: '摘要',
+    tokensBefore: 1,
+    summarizedTurns: 3,
+    createdAt: 1,
+  });
+
+  const cropped = cropToTurns(events, 20);
+  assert.equal(cropped[0].kind, AGENT_EVENTS.COMPACTION, '摘要必须活过修剪');
+  assert.ok(cropped.includes(events[6]));
+  assert.equal(cropped.length, events.length - 6);
+
+  // 没有 compaction 时行为与旧实现一致：仍按最近 20 轮切
+  const plain = events.filter((e) => e.kind !== AGENT_EVENTS.COMPACTION);
+  const croppedPlain = cropToTurns(plain, 20);
+  assert.equal(croppedPlain[0].kind, AGENT_EVENTS.USER_MESSAGE);
+  assert.equal(
+    croppedPlain.filter((e) => e.kind === AGENT_EVENTS.USER_MESSAGE).length,
+    20
+  );
+});
+
 test('indexEntryFromSession 不带 events', () => {
   const entry = indexEntryFromSession({
     id: 's1',

@@ -29,14 +29,44 @@ import {
   wrapObservation,
 } from './events';
 import { toAgentTools } from './tools/adapter';
+import { findTool, requiresConfirmation } from './tools';
 // fromPiEvent 是无 deps 的纯导出函数，pi 自产结果的补包装（T-70）只能走模块级
 // import；createAgent 里那份是注入的 deps.wrapUntrusted，两者是同一个实现但
 // 生命周期不同，别名以免遮蔽。
 import { wrapUntrusted as wrapUntrustedTag } from './untrusted';
 import { noopLog } from './log';
+// T-76 上下文压缩：机制与切点规则见 compaction.js 头注与 docs/agent-compaction-spec.md。
+// 纯函数在这里做投影（historyToPiMessages）与规划（runCompaction），
+// LLM 调用走本文件的 streamFnWithRetry——compaction.js 自己不碰 streamFn。
+import {
+  SUMMARIZATION_SYSTEM_PROMPT,
+  buildCompactionEvent,
+  buildSummaryUserPrompt,
+  dropTrailingPartialAssistant,
+  estimateHistoryTokens,
+  isContextOverflowMessage,
+  planCompaction,
+  projectAfterLastCompaction,
+  serializeForSummary,
+  shouldCompact,
+} from './compaction';
 
-/** 一轮里最多来回多少次工具调用，防止模型卡在工具循环里。 */
-export const MAX_STEPS = 12;
+/** 溢出恢复时给用户与模型的说明（T-76）。进事件流（用户可见）也进 transcript。 */
+const RECOVERY_NOTICE =
+  '上下文超出模型窗口：早期对话已自动压缩为摘要，正在从未完成的进度继续。';
+
+/**
+ * 回复被输出长度上限截断时的说明（T-96②）。
+ *
+ * 为什么必须有它：pi 把 length 当成正常收尾（不是 error），fromPiEvent 原本
+ * 对它 emitsNothing —— 于是「回答说到一半没了」在界面上完全无声，这正是
+ * provider.js 里记着的那个坑（曾写死 maxTokens=4096 导致静默截断）。既然
+ * 允许用户设 maxTokens（T-96），截断就必须看得见，否则等于把静默降级开放
+ * 出去。走 SYSTEM_NOTICE：UI 是琥珀色提示条，且进 transcript 让模型知道
+ * 上一次是被截断的。
+ */
+const TRUNCATED_NOTICE =
+  '本次回复达到输出长度上限被截断。若设置了单次回复上限（maxTokens），可调大或留空；否则是模型自身的输出上限。';
 
 /**
  * 把**agent 事件历史**（我们的持久格式）还原成 pi 的消息 transcript。
@@ -52,6 +82,11 @@ export const MAX_STEPS = 12;
  * - TOOL_CALL 事件先攒着，等 TOOL_RESULT 一起发成一条 assistant（含 toolCall 块）
  *   + 一条 toolResult，因为 pi 要求工具调用与结果成对。
  * - SYSTEM_NOTICE / 插话走 role:'user'（红线第 1 条）。
+ * - COMPACTION（T-76）投影为一条 user 消息：摘要是页面正文/工具返回/用户输入
+ *   的派生物，包 untrusted_compaction_summary（红线 2），「这是背景摘要」的
+ *   语义由外面那句可信前缀传达。
+ * - 投影只认**最后一条** COMPACTION：它之前的老事件已被摘要取代，不再进 transcript
+ *   （原始事件留在历史里给 UI，append-only）。
  * - ERROR / DONE / START / TARGET_TAB 不入 transcript（它们是事件信号，不是内容）。
  *
  * @param {Array<Object>} events
@@ -59,6 +94,7 @@ export const MAX_STEPS = 12;
  */
 export function historyToPiMessages(events) {
   const out = [];
+  const source = projectAfterLastCompaction(events);
 
   // 攒一个 assistant 消息：连续 TEXT_DELTA 归并，TOOL_CALL 暂存到同一消息的 toolCall 块里
   let textParts = [];
@@ -113,7 +149,7 @@ export function historyToPiMessages(events) {
     toolCalls = [];
   };
 
-  for (const ev of events || []) {
+  for (const ev of source) {
     switch (ev && ev.kind) {
       case AGENT_EVENTS.USER_MESSAGE:
         flushAssistant();
@@ -182,6 +218,17 @@ export function historyToPiMessages(events) {
           isError:
             ev.status === TOOL_STATUS.ERROR ||
             ev.status === TOOL_STATUS.REJECTED,
+          timestamp: Date.now(),
+        });
+        break;
+
+      case AGENT_EVENTS.COMPACTION:
+        flushAssistant();
+        out.push({
+          role: 'user',
+          content:
+            '[此前对话已压缩为摘要，更早的消息不再逐条出现]\n' +
+            wrapUntrustedTag('untrusted_compaction_summary', ev.summary || ''),
           timestamp: Date.now(),
         });
         break;
@@ -299,6 +346,20 @@ export function fromPiEvent(event) {
       }
       if (message.stopReason === 'aborted') return { emitsNothing: true };
 
+      // 长度截断：pi 当正常收尾，但对用户是「话说到一半没了」——必须留痕
+      // （T-96②）。包 untrusted 是为了满足 SYSTEM_NOTICE 进 transcript 的
+      // 契约（promptTextOf 缺包装就抛错），与 RECOVERY_NOTICE 同款处理。
+      if (message.stopReason === 'length') {
+        return {
+          kind: AGENT_EVENTS.SYSTEM_NOTICE,
+          text: TRUNCATED_NOTICE,
+          promptText: wrapUntrustedTag(
+            'untrusted_system_notice',
+            TRUNCATED_NOTICE
+          ),
+        };
+      }
+
       // 工具调用在 message_end 时才拿到完整参数（票 02 才有工具可执行，
       // 现在只发事件让 UI 显示「模型要调什么」）
       const calls = (message.content || []).filter(
@@ -382,7 +443,7 @@ export function fromPiEvent(event) {
  * @param {Array<Object>=} deps.tools 票 02 才真正注册给pi
  * @param {Function=} deps.wrapUntrusted 缺省**不提供** —— 见 migration ADR：
  *   缺注入必须抛错而不是静默用一个不逃逸的版本（T-55）。
- * @param {Function=} deps.buildUserMessage
+ * @param {Function} deps.buildUserMessage 必填（prompt.js 的，缺了装配期抛，T-84）
  * @param {Function=} deps.requestConfirmation 票 04 才接线
  * @param {Object=} deps.toolCtx 票 02 才接线
  * @param {Function=} deps.preStepNotice 票 06 才接线
@@ -399,7 +460,10 @@ export function createAgent(deps) {
     // wrapUntrusted 由装配层注入（import 自 untrusted.js）。
     // 迁移期若未注入，工具路径会因缺它而抛错 —— 这正是想要的行为（见 T-55）。
     wrapUntrusted,
-    buildUserMessage = ({ userText }) => userText,
+    // T-84：buildUserMessage 不再有缺省兜底——旧默认 ({userText}) => userText
+    // 会静默丢 targetTab/workflowContext（模型失去目标页锚点），与 T-55 的
+    // wrapUntrusted 同哲学：缺注入直接炸，不给静默降级留门。
+    buildUserMessage,
     // 票 04：写类/未知工具的确认门，默认拒绝（得显式调用方放行才过）
     requestConfirmation = async () => ({ approved: false }),
     toolCtx = {},
@@ -408,6 +472,9 @@ export function createAgent(deps) {
     preStepNotice,
     drainInstructions,
     systemPromptOverride,
+    // T-76：上下文窗口（config.contextWindow）。0/缺省 = 压缩关闭，
+    // 纯估算超阈值才会触发压缩，不影响任何既有路径。
+    contextWindow = 0,
     log = noopLog,
   } = deps;
 
@@ -431,6 +498,13 @@ export function createAgent(deps) {
         '包装 —— 不要传兜底实现，直接抛。'
     );
   }
+  if (typeof buildUserMessage !== 'function') {
+    // T-84：与 wrapUntrusted 同款校验。缺省兜底会静默丢 targetTab 元数据。
+    throw new Error(
+      'createAgent: 缺 buildUserMessage。用户消息的包装与目标页元数据由' +
+        '装配层组装（prompt.js 的 buildUserMessage）—— 不要传兜底实现，直接抛。'
+    );
+  }
 
   // 票 05：重试显式开启。pi 的 Agent 不转发 maxRetries（provider-retry 里
   // 默认 `options.maxRetries ?? 0`，即完全不重试），所以把 streamFn 包一层
@@ -445,8 +519,6 @@ export function createAgent(deps) {
   let history = [];
   /** 本轮中止控制器 */
   let controller = null;
-  /** 本轮的请求序号，喂给 preStepNotice（它按 step 判重） */
-  let stepCounter = 0;
 
   /**
    * 被确认门拒绝的工具调用：toolCallId -> 拒绝原因。
@@ -462,6 +534,21 @@ export function createAgent(deps) {
   /** 本轮的事件回调。pi 的 subscribe 在Agent 构造时绑定，所以用闭包变量传。 */
   let currentEmit = null;
 
+  // T-76：usage 收割的全局去重集。piAgent 跨轮复用、transcript 累积（无
+  // initialHistory 时上一轮消息原样留着），每轮只准收割**新出现的** assistant
+  // 消息——按消息对象身份记账，跨轮持久。
+  const countedUsage = new Set();
+  /** 把 piAgent 里还没计过费的 assistant 消息收进 target。 */
+  const harvestUsage = (target) => {
+    for (const m of piAgent ? piAgent.state.messages : []) {
+      if (m && m.role === 'assistant' && m.usage && !countedUsage.has(m)) {
+        countedUsage.add(m);
+        target.input += m.usage.input || 0;
+        target.output += m.usage.output || 0;
+      }
+    }
+  };
+
   /**
    * 「入史 + 发外」的单一入口（T-72）：事件历史与 UI 看到的必须是同一份，
    * 新增事件发射点只准走这里 —— 漏一半（只入史 UI 缺行 / 只发外续接丢数据）
@@ -470,6 +557,98 @@ export function createAgent(deps) {
   const emitAndRecord = (ev) => {
     history.push(ev);
     if (currentEmit) currentEmit(ev);
+  };
+
+  /**
+   * 同上，但事件**插队**到指定下标而不是 push 到尾（T-76 专用）：压缩摘要
+   * 事件必须落在切点处——它上面的老事件归摘要管，下面的保留窗原样进
+   * transcript。追加到尾部会让投影把保留窗一起「摘要掉」。
+   */
+  const emitAndRecordAt = (ev, index) => {
+    history.splice(index, 0, ev);
+    if (currentEmit) currentEmit(ev);
+  };
+
+  /**
+   * T-76：独立小请求生成摘要（与 index.js generateTitleAsync 同一条路径形状）。
+   * 失败 / 输出被 maxTokens 截断 / 输出为空一律抛错——失败的摘要绝不落库
+   * （pi 同款：宁可没摘要，不要错的摘要），由调用方决定降级方式。
+   */
+  const requestSummary = async ({ serialized, previousSummary, maxTokens }) => {
+    // streamFn 允许异步实现（测试桩是 async）：await 一个非 Promise 是零代价，
+    // 不 await 的话异步实现会拿到 Promise 本体，stream.result 直接不存在。
+    const stream = await streamFnWithRetry(
+      model,
+      {
+        systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: buildSummaryUserPrompt({ serialized, previousSummary }),
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      { maxTokens }
+    );
+    const result = await stream.result();
+    if (result.stopReason === 'error') {
+      throw new Error(result.errorMessage || '摘要请求失败');
+    }
+    if (result.stopReason === 'length') {
+      throw new Error('摘要输出被 maxTokens 截断');
+    }
+    const text = (result.content || [])
+      .filter((c) => c && c.type === 'text')
+      .map((c) => c.text)
+      .join('')
+      .trim();
+    if (!text) throw new Error('摘要输出为空');
+    return text;
+  };
+
+  /**
+   * T-76：执行一次压缩，返回 `{ev, insertAt}`（ev 插到 history[insertAt]），
+   * 或 null（不该压）。history 是闭包状态——调用前必须已填好（send 在重置
+   * history 之后调用）。force=true（溢出恢复）跳过阈值判断，只看切点。
+   */
+  const runCompaction = async ({ systemPrompt, force = false }) => {
+    if (!contextWindow) return null;
+
+    const estimated = estimateHistoryTokens({
+      events: history,
+      systemPrompt,
+      tools,
+    });
+    if (!force && !shouldCompact(estimated, contextWindow)) return null;
+
+    const plan = planCompaction(history, contextWindow);
+    if (!plan) return null;
+
+    // 带上 maxTokens 再抛（T-93②）：调用方只 log.warn 一句 message，没有它
+    // 就分不清「摘要 maxTokens 超过了模型输出上限」和「模型真的写太长」。
+    let summary;
+    try {
+      summary = await requestSummary({
+        serialized: serializeForSummary(history.slice(0, plan.cutIndex)),
+        previousSummary: plan.previousSummary,
+        maxTokens: plan.summaryMaxTokens,
+      });
+    } catch (err) {
+      const reason = err && err.message ? err.message : String(err);
+      throw new Error(
+        `摘要请求失败（summaryMaxTokens=${plan.summaryMaxTokens}，估算 ${estimated} token）：${reason}`
+      );
+    }
+
+    return {
+      ev: buildCompactionEvent({
+        summary,
+        tokensBefore: estimated,
+        summarizedTurns: plan.summarizedTurns,
+      }),
+      insertAt: plan.cutIndex,
+    };
   };
 
   function handlePiEvent(event) {
@@ -558,14 +737,13 @@ export function createAgent(deps) {
       // pi 在 OpenAI 兼容端点上默认把后续 system 消息并进 system prompt 首部，
       // 那会把不可信内容永久提升为可信系统指令。
       transformContext: async (messages) => {
-        const step = stepCounter;
-        stepCounter += 1;
-
         const extra = [];
 
         if (preStepNotice) {
           try {
-            const notice = await preStepNotice({ step });
+            // T-84：不再传 {step}——实现侧（index.js）用内容键判重，从不读
+            // step，这个参数从第一天起就是死的。
+            const notice = await preStepNotice();
             if (notice) {
               const wrapped = wrapUntrusted('untrusted_system_notice', notice);
               const ev = {
@@ -615,17 +793,21 @@ export function createAgent(deps) {
       },
       beforeToolCall: async ({ toolCall, args }) => {
         // 红线第 3 条（ADR 0002 的闸）：class 决定要不要用户裁决。
-        // read 免确认，write 一律要确认。
-        // （未知工具 pi 内部走短路，不会到这 —— 已知退化，见票 04 完成记录）
-        const tool = tools.find((t) => t.name === toolCall.name);
-        if (tool && tool.class === 'read') return undefined;
+        // read 免确认，write 一律要确认。判定收在 requiresConfirmation ——
+        // ADR 0002 点名的执行者，未知工具保守确认（实际到不了：pi 对未知
+        // 工具内部短路，B9 第 4 项）。
+        const tool = findTool(toolCall.name, tools);
+        if (!requiresConfirmation(toolCall.name, tools)) return undefined;
 
         log('tool.confirm.ask', { name: toolCall.name, args });
         let approved = false;
         try {
+          // tool 随载荷带给宿主 → confirm.js 的 buildConfirmation 调工具
+          // 自带的 confirmDetail 取「用户在放行什么」（T-83）。
           const answer = await requestConfirmation({
             name: toolCall.name,
             args,
+            tool,
           });
           approved = Boolean(answer && answer.approved);
         } catch {
@@ -659,6 +841,10 @@ export function createAgent(deps) {
     /**
      * 发一轮对话。
      *
+     * onEvent 可选（headless 使用不被排除），但宿主必须传：focus_tab 改目标页
+     * 的 UI 同步（agent:target-tab 事件）只走它，缺了就静默丢（T-84 评估结论：
+     * 行为保留，契约写明）。
+     *
      * @param {{userText: string, system?: string, targetTab?: Object,
      *          workflowContext?: string, onEvent?: Function,
      *          initialHistory?: Array<Object>=}} params
@@ -691,7 +877,21 @@ export function createAgent(deps) {
       // initialHistory 里可能带着上一轮落盘的旧 ERROR（T-61），扫全量会把
       // 本轮的成功误判成失败、不发 DONE。
       const turnHistoryStart = history.length;
-      stepCounter = 0;
+
+      // T-76 预压缩：提交前估算，越过阈值先把保留窗外的老轮次压成摘要。
+      // 摘要事件插在切点处（上面的归摘要、下面的保留窗原样进 transcript）。
+      // 压缩失败不杀轮——摘要只是优化，真撞上限还有溢出恢复兜底（不静默：
+      // log.warn 如实记）。
+      try {
+        const compaction = await runCompaction({ systemPrompt: system });
+        if (compaction) emitAndRecordAt(compaction.ev, compaction.insertAt);
+      } catch (err) {
+        log.warn('compaction.skip', {
+          message: err && err.message ? err.message : String(err),
+        });
+      }
+      // transcript 重建用这份快照：含刚插入的压缩事件、不含本轮的 START/USER
+      const carryOverEvents = history.slice();
 
       const startEv = { kind: AGENT_EVENTS.START };
       emitAndRecord(startEv);
@@ -712,11 +912,12 @@ export function createAgent(deps) {
       }
 
       const agent = await ensurePiAgent(system);
-      // 续接：把上轮的 agent 事件历史还原成 pi 的 transcript。
+      // 续接：把上轮的 agent 事件历史还原成 pi 的 transcript（含刚插入的
+      // 压缩事件——投影后旧轮原文被摘要取代，保留窗原样保留）。
       // 之前是 filter((ev) => ev.piMessage) —— 但我们从没在事件上存过 piMessage，
       // 等于永远拿不到历史，「重开会话」实际变成「只传本轮 user 消息过去」。
-      if (params.initialHistory && params.initialHistory.length > 0) {
-        const piMessages = historyToPiMessages(params.initialHistory);
+      if (carryOverEvents.length > 0) {
+        const piMessages = historyToPiMessages(carryOverEvents);
         if (piMessages.length > 0) {
           // pi 的 transcript 首条是 system（由 initialState.systemPrompt 种入）。
           // 我们重建的 transcript 没有 system，必须把现有那条补回最前，
@@ -730,10 +931,6 @@ export function createAgent(deps) {
         }
       }
 
-      // 本轮 transcript 的起点。piAgent 跨轮复用、transcript 累积，usage 只准
-      // 累加这之后产生的 assistant 消息（T-62）—— 起点必须在 prompt 之前取。
-      const turnTranscriptStart = agent.state.messages.length;
-
       let stopped = false;
       const usage = { input: 0, output: 0 };
       /** 本轮的错误事件（若有）。pi 把失败编码成 assistant 消息的 stopReason，
@@ -746,17 +943,7 @@ export function createAgent(deps) {
         // usage 累加**本轮全部**带 usage 的 assistant 消息：一个工具轮有 N 次
         // LLM 请求就有 N 条 assistant 消息，只取最后一条会把前 N-1 次的用量
         // 全部丢掉。pi 会为 user 消息也发 message_end，所以只认 assistant。
-        for (
-          let i = turnTranscriptStart;
-          i < agent.state.messages.length;
-          i += 1
-        ) {
-          const m = agent.state.messages[i];
-          if (m.role === 'assistant' && m.usage) {
-            usage.input += m.usage.input || 0;
-            usage.output += m.usage.output || 0;
-          }
-        }
+        harvestUsage(usage);
       } catch (err) {
         // 中止不是错误（技术方案 §5.4）：用户点停止后走正常收尾。
         if (!controller.signal.aborted) {
@@ -776,6 +963,65 @@ export function createAgent(deps) {
           .slice(turnHistoryStart)
           .find((e) => e.kind === AGENT_EVENTS.ERROR) ||
         null;
+
+      // T-76 溢出恢复：撞上下文上限时压缩一次再续跑本轮，只试一次。
+      // 前置条件：pi 的 continue() 在 assistant 尾上会 throw，所以先用
+      // dropTrailingPartialAssistant 剪掉失败尝试的残缺尾部——请求失败发生在
+      // 「要下一条 assistant 消息」的时刻，剪完尾巴必然是 toolResult 或 user。
+      if (
+        errorEv &&
+        !controller.signal.aborted &&
+        isContextOverflowMessage(errorEv.message)
+      ) {
+        let recovered = false;
+        try {
+          const compaction = await runCompaction({
+            systemPrompt: system,
+            force: true,
+          });
+          if (compaction) {
+            emitAndRecordAt(compaction.ev, compaction.insertAt);
+            emitAndRecord({
+              kind: AGENT_EVENTS.SYSTEM_NOTICE,
+              text: RECOVERY_NOTICE,
+              promptText: wrapUntrusted(
+                'untrusted_system_notice',
+                RECOVERY_NOTICE
+              ),
+            });
+            const rebuilt = historyToPiMessages(
+              dropTrailingPartialAssistant(history)
+            );
+            if (rebuilt.length > 0) {
+              const existingSystem = agent.state.messages.find(
+                (m) => m.role === 'system'
+              );
+              agent.state.messages = existingSystem
+                ? [existingSystem, ...rebuilt]
+                : rebuilt;
+            }
+            // 只认恢复点之后的错误：旧 ERROR 已随压缩消化，不能拿它否定恢复
+            const recoveryScanStart = history.length;
+            await agent.continue();
+            harvestUsage(usage);
+            stopped = true;
+            errorEv =
+              history
+                .slice(recoveryScanStart)
+                .find((e) => e.kind === AGENT_EVENTS.ERROR) || null;
+            recovered = !errorEv;
+          }
+        } catch (err) {
+          if (!controller.signal.aborted) {
+            log.warn('compaction.recover.fail', {
+              message: err && err.message ? err.message : String(err),
+            });
+          }
+        }
+        if (controller.signal.aborted) errorEv = null; // 恢复期间被中止 → 走 aborted 收尾
+        if (recovered) errorEv = null;
+      }
+
       if (errorEv) {
         stopped = false;
         log.error('turn.error', {
