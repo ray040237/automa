@@ -22,7 +22,7 @@ import { buildFacts } from './facts';
 import { createAgent } from './loop';
 import { AGENT_EVENTS } from './events';
 import { TOOLS } from './tools';
-import { streamChat } from './llm/providers/openai-compat';
+import { createPiProvider, toPiContext } from './provider';
 import { wrapUntrusted } from './untrusted';
 import { buildUserMessage } from './prompt';
 import {
@@ -92,20 +92,26 @@ async function generateTitleAsync(config, userText, events) {
     .map((ev) => ev.text || '')
     .join('');
 
-  let title = null;
-  for await (const chunk of streamChat({
-    messages: buildTitleMessages(userText, reply),
-    config: {
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
-      model: config.model,
-      temperature: 0.3,
-    },
-  })) {
-    if (chunk.type === 'text-delta') {
-      title = (title || '') + chunk.text;
-    }
-  }
+  // 标题请求用固定的低温度，与主循环的 config.temperature 分开 ——
+  // 主循环那个是给 agent 推理调的，0.2 对「起个标题」偏随机。
+  const titleConfig = { ...config, temperature: 0.3 };
+  const { model, streamFn } = await createPiProvider(titleConfig);
+
+  const stream = streamFn(
+    model,
+    toPiContext(buildTitleMessages(userText, reply))
+  );
+  const result = await stream.result();
+
+  // errorMessage 优先于正文：出错时 result.content 通常是空的，
+  // 直接取会得到「标题为空」这个假象，掩盖真实原因。
+  const title =
+    result.stopReason === 'error'
+      ? null
+      : (result.content || [])
+          .filter((c) => c.type === 'text')
+          .map((c) => c.text)
+          .join('');
 
   const cleaned = cleanTitle(title);
   if (!cleaned) return null;
@@ -638,19 +644,13 @@ export function createAgentRuntime(deps) {
     fpCheckPending = Boolean(lastRead);
     currentOnEvent = onEvent || null;
 
+    // 票 08：provider 层交给 pi。这里只把 config 翻成 pi 的 Model + streamFn，
+    // 请求参数（messages / tools / temperature / 重试）此后全部由 pi 生成。
+    const { model, streamFn } = await createPiProvider(config);
+
     const agent = createAgent({
-      model: config.model,
-      contextWindow: config.contextWindow,
-      streamChat: (params) =>
-        streamChat({
-          ...params,
-          config: {
-            baseUrl: config.baseUrl,
-            apiKey: config.apiKey,
-            model: config.model,
-            temperature: config.temperature,
-          },
-        }),
+      model,
+      streamFn,
       promptFacts: () => collectPromptFacts(activeTools),
       tools: activeTools,
       toolCtx,

@@ -1,11 +1,6 @@
 ﻿import test from 'node:test';
 import assert from 'node:assert';
-import {
-  createAgent,
-  fromPiEvent,
-  historyToPiMessages,
-  classifyPiErrorMessage,
-} from './loop';
+import { createAgent, fromPiEvent, historyToPiMessages } from './loop';
 import { AGENT_EVENTS, ERROR_KIND, TOOL_STATUS } from './events';
 import { wrapUntrusted } from './untrusted';
 
@@ -55,6 +50,18 @@ function piStream(content, extra = {}) {
 /** 一轮「模型要求调工具」的流 —— content 传数组表示只有 toolCall 块 */
 const toolCallStream = (name, args) =>
   piStream([{ type: 'toolCall', id: 'call-1', name, arguments: args }], {
+    stopReason: 'toolUse',
+  });
+
+/** 同上，但 toolCall 块**不带 id**（真实 provider 偶尔产出这种空转块） */
+const toolCallStreamNoId = (name, args) =>
+  piStream([{ type: 'toolCall', name, arguments: args }], {
+    stopReason: 'toolUse',
+  });
+
+/** 一轮「参数是半截 JSON 字符串」的流 */
+const toolCallStreamRawArgs = (name, rawArgs) =>
+  piStream([{ type: 'toolCall', id: 'call-1', name, arguments: rawArgs }], {
     stopReason: 'toolUse',
   });
 
@@ -730,8 +737,29 @@ test('LLM 报错时发 ERROR 事件，且 send 返回 ERROR 而非 DONE', async 
   );
 });
 
-test.skip('没有 toolCallId 的空转块被跳过', async () => {}, {
-  skip: '票 02：由pi 处理',
+test('toolCall 块缺 id 时 pi 不崩，工具照常执行', async () => {
+  // 迁移前 wire.js 会跳过没有 toolCallId 的空转块。pi 的行为**不同**：
+  // 实测（探针，见票 08 完成记录）它不跳过，直接把 id 当undefined 传下去，
+  // assistant 块与 toolResult 两边的 id 都是 undefined，仍然配对。
+  //
+  // 这条钉的是「不炸整轮」这个契约。⚠️ 配对靠的是两边都 undefined ——
+  // 真发到 provider 时会不会被拒未实测（夹具层看不到请求）。
+  const h = makeAgent([
+    toolCallStreamNoId('echo', { msg: 'x' }),
+    piStream('好的'),
+  ]);
+  const doneEv = await send(h);
+
+  const toolMsg = h.streamFn.calls[1].context.messages.find(
+    (m) => m.role === 'toolResult'
+  );
+  assert.ok(toolMsg, '缺 id 也要产出工具结果');
+  assert.equal(toolMsg.isError, false, '缺 id 不是工具的错');
+  assert.ok(
+    toolMsg.content[0].text.includes('echo:'),
+    `工具应照常执行，实际 ${toolMsg.content[0].text}`
+  );
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE, '缺 id 不终止整轮');
 });
 
 test('显式传入 system 时不被覆盖', async () => {
@@ -811,28 +839,41 @@ test.skip(
   'provider 报 429 时用户看得到服务端限流与 Retry-After',
   async () => {},
   {
-    skip: '票 05：错误分类降级与重试接线。当前 pi 对 4xx 不暴露结构化信息',
+    // 票 05 已完成，但这条**做不到**：Retry-After 是响应头，pi 在 OpenAI 兼容
+    // 路径上 `onResponse` 对 4xx 一次都不触发，headers 拿不到。
+    // 降级后的能力是「提取到 429 状态码」（票 05 的两条测试钉住那个）。
+    skip: 'B9 第 2 项：Retry-After 头在 pi 的 openai-compat 路径上不可得',
   }
 );
 
 /* ---------------- 参数完整性 ---------------- */
 
-test.skip(
-  'provider 发来半截参数 JSON 时转成 error 观察值，不炸整轮',
-  async () => {},
-  {
-    skip: '票 02：由 pi 的参数校验负责。夹具必须换成 pi 真实产出的形状，不能沿用手写 chunk',
-  }
-);
+test('provider 发来半截参数 JSON 时转成 error 观察值，不炸整轮', async () => {
+  // 迁移前由 openai-compat 的 JSON.parse try/catch 兜住。pi 的参数校验接手了
+  // 这件事 —— 实测产出：`Validation failed for tool "echo": - root: must be object`，
+  // isError 为真，且带原样回显的 arguments（模型据此自我纠正）。
+  const h = makeAgent([
+    toolCallStreamRawArgs('echo', '{"msg":'),
+    piStream('好的'),
+  ]);
+  const doneEv = await send(h);
 
-test.skip(
-  '端到端回归：分片 args 经真实 provider 聚合后工具拿到完整参数',
-  async () => {},
-  {
-    skip: '票 08：随 llm/ 一起删除。替代断言见下方「工具拿到完整参数」',
-  }
-);
+  const toolMsg = h.streamFn.calls[1].context.messages.find(
+    (m) => m.role === 'toolResult'
+  );
+  assert.ok(toolMsg, '坏参数也要有结果消息');
+  assert.equal(toolMsg.isError, true, '参数坏掉是错误观察值');
+  assert.match(
+    toolMsg.content[0].text,
+    /Validation failed|must be object/i,
+    `错误信息要指明是参数问题，实际 ${toolMsg.content[0].text}`
+  );
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE, '坏参数不终止整轮');
+});
 
+// 原「端到端回归：分片 args 经真实 provider 聚合」一条已在票 08 随 llm/ 删除，
+// 真实 provider 的分片聚合现在由 pi 负责。替代断言是下面这条 —— 断言的是**行为**
+// （工具最终拿到完整对象），不关心它经了几片。
 test('分片参数聚合后，工具拿到的是完整参数对象', async () => {
   // 替代上面那条端到端回归（票 08 会删掉它）。断言的是**行为**：
   // 无论参数怎么分片到达，工具最终收到的是一个完整的对象。
@@ -1247,15 +1288,40 @@ test('log 至少打点轮次起止，工具打点等票 02', async () => {
 });
 
 test.skip('log 工具调用与结果打点，含参数摘要', async () => {}, {
-  skip: '票 02',
+  // ⚠️ 这不是迁移造成的缺口：迁移前的 loop.js **也没有**这两个打点
+  // （基线快照只有 turn.error 与 turn.end）。已登记为 T-59。
+  skip: 'T-59：迁移前就缺，票 08 明确不做「顺手改别的」',
 });
-test.skip(
-  'write 工具的确认门打点：confirm.ask / confirm.answer',
-  async () => {},
-  {
-    skip: '票 04',
-  }
-);
+
+test('write 工具的确认门打点：confirm.ask / confirm.answer', async () => {
+  const entries = [];
+  const log = (event, data) => entries.push({ event, data });
+  log.warn = (event, data) => entries.push({ event, data });
+  log.error = log.warn;
+
+  const h = makeAgent(
+    [toolCallStream('do_write', { code: '1 + 1' }), piStream('好的')],
+    {
+      tools: [writeTool],
+      log,
+      requestConfirmation: async () => ({ approved: false }),
+    }
+  );
+  await send(h);
+
+  const ask = entries.find((e) => e.event === 'tool.confirm.ask');
+  assert.ok(ask, '缺 tool.confirm.ask 打点');
+  assert.equal(ask.data.name, 'do_write');
+  assert.deepEqual(ask.data.args, { code: '1 + 1' }, '打点要带参数摘要');
+
+  const answer = entries.find((e) => e.event === 'tool.confirm.answer');
+  assert.ok(answer, '缺 tool.confirm.answer 打点');
+  assert.equal(
+    answer.data.approved,
+    false,
+    '拒绝也要打点，否则事后查不出卡在哪'
+  );
+});
 test.skip('log 上下文预算打点：estimated / dropped', async () => {}, {
   skip: 'B9 第 1 项：本次不做 token 预算裁剪，所以没有这个打点',
 });

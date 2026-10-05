@@ -1,8 +1,19 @@
 # 0003 — SSE 分帧采用 eventsource-parser,不手搓状态机
 
 日期:2026-10-03(决策实际发生在 openai-compat.js 首版,本 ADR 追认)
-状态:已实施(未提交)
-关联:src/agent/llm/sse.js、docs/agent-assist-tech-design.md §5.3(被部分偏离)
+状态:**已被 ADR 0004 推翻（2026-10-05）** —— 曾实施,现已随`src/agent/llm/` 一并删除
+关联:~~`src/agent/llm/sse.js`~~（已删）、docs/agent-assist-tech-design.md §5.3（已失效）
+
+> **本 ADR 作废,但文件保留。** 按本仓库惯例,已落地的决策保留可追溯。
+>
+> **为什么被推翻**：本 ADR 的全部前提是「我们自己实现 provider 层」。迁移到
+> `@earendil-works/pi-agent-core`（[ADR 0004](0004-pi-agent-core-migration.md)）后，
+> SSE 分帧由 pi-ai 的 provider 层负责 —— `openai-completions.js` 直接用 openai SDK，
+> 它的流解析在 SDK 内部，`sse.js` 与 `eventsource-parser` 这个依赖都没有存在的位置了。
+>
+> **决策本身没有错**：它当时的判断（「分帧的每个边界漏掉都只静默丢消息，不报错」）
+> 今天依然成立，只是这个风险转移给了上游，本仓库不再自己承担。**推翻的原因是
+> 「不再需要自己实现」，不是「当初判断错了」。**
 
 ## 背景
 

@@ -71,6 +71,10 @@
   .warn{border-left-color:var(--warn);background:rgba(255,166,87,.08)}
   .danger{border-left-color:var(--danger);background:rgba(255,123,114,.08)}
   .note{border-left-color:var(--accent2);background:rgba(126,231,135,.07)}
+  .banner{
+    margin:0 0 26px;padding:16px 22px;border-left:3px solid var(--warn);
+    background:rgba(255,166,87,.09);border-radius:0 8px 8px 0;color:var(--fg)
+  }
   .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin:20px 0}
   .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:16px;margin:20px 0}
   .grid2 .card{margin:0}
@@ -136,12 +140,26 @@
 
 <div class="wrap">
 
+<div class="banner">
+  <strong>⚠️ 本文档部分内容已过时（2026-10-05，ADR 0004 落地后）。</strong>
+  agent 内核与 provider 层已从自研实现换成 <code>@earendil-works/pi-agent-core</code>。
+  下列内容<strong>已从仓库删除，本页仍在描述它们</strong>：<code>wire.js</code>（事件历史现算成
+  OpenAI chat messages）、<code>llm/sse.js</code>、<code>llm/providers/openai-compat.js</code>、
+  「三层事件模型」（现在只有 provider 事件与 agent 事件两层）、以及 §provider「Provider 层与网关方言」
+  里关于自研流解析与方言兼容的全部描述。<br>
+  <strong>仍然有效的部分</strong>：设计目标、工具目录与分级、确认门、目标页定位、安全模型、
+  会话与持久化、两个宿主、渲染管线。<br>
+  现行架构以 <code>src/agent/*.js</code> 的文件头注释、<code>CONTEXT.md</code>、
+  <code>docs/adr/0004-pi-agent-core-migration.md</code> 为准。相关退化记在
+  <code>docs/backlog.md</code> 的 B9。
+</div>
+
 <div class="toc">
   <strong style="font-size:.95rem">目录</strong>
   <ol>
     <li><a href="#overview">设计目标与约束</a></li>
     <li><a href="#layers">分层架构</a></li>
-    <li><a href="#events">三层事件模型</a></li>
+    <li><a href="#events">事件模型（原三层，现两层）</a></li>
     <li><a href="#tools">工具目录与分级</a></li>
     <li><a href="#hosts">两个宿主</a></li>
     <li><a href="#flow">用户流程逐步拆解</a></li>
@@ -198,8 +216,10 @@
 
 <table>
 <tr><th>文件</th><th>职责</th><th>关键导出</th></tr>
-<tr><td><span class="path">loop.js</span></td><td>ReAct 主循环，最多 12 步；维护唯一事件历史</td><td><code>createAgent</code> <code>MAX_STEPS</code> <code>toAgentEvent</code></td></tr>
-<tr><td><span class="path">wire.js</span></td><td>把事件历史<strong>现算</strong>成 OpenAI chat messages；配对净化</td><td><code>buildWireMessages</code></td></tr>
+<tr><td><span class="path">loop.js</span></td><td>ReAct 主循环（<strong>现已由 pi-agent-core 驱动</strong>，本文件是事件映射层）；维护唯一事件历史</td><td><code>createAgent</code> <code>fromPiEvent</code> <code>historyToPiMessages</code></td></tr>
+<tr><td><span class="path">tools/adapter.js</span></td><td>把 13 个工具定义翻译成 pi 的 <code>AgentTool</code>；不可信包装与 <code>isError</code> 的红线落点</td><td><code>toAgentTools</code> <code>toToolResult</code></td></tr>
+<tr><td><span class="path">provider.js</span></td><td>BYOK 配置 → pi 的 <code>Model</code> + <code>streamFn</code>（含 temperature 与 maxRetries 注入）</td><td><code>createPiProvider</code> <code>buildModel</code> <code>toPiContext</code></td></tr>
+<tr><td><span class="path">wire.js</span></td><td colspan="2"><strong class="tag-read" style="background:rgba(255,123,114,.15);color:var(--danger);border:1px solid rgba(255,123,114,.35)">已删除</strong> ADR 0004：provider 参数改由 pi 从 transcript 生成，不再现算。</td></tr>
 <tr><td><span class="path">events.js</span></td><td>事件常量、观察值包装（截断 + untrusted）</td><td><code>AGENT_EVENTS</code> <code>TOOL_STATUS</code> <code>wrapObservation</code></td></tr>
 <tr><td><span class="path">prompt.js</span></td><td>系统提示构建 + 每轮用户消息组装</td><td><code>buildSystemPrompt</code> <code>buildUserMessage</code></td></tr>
 <tr><td><span class="path">untrusted.js</span></td><td>防注入转义：洗掉所有「像闭合标签」的字面量</td><td><code>wrapUntrusted</code> <code>escapeUntrustedWrappers</code></td></tr>
@@ -211,7 +231,7 @@
 <tr><td><span class="path">title.js</span></td><td>LLM 会话标题生成与清洗</td><td><code>buildTitleMessages</code> <code>cleanTitle</code></td></tr>
 <tr><td><span class="path">markdown.js</span></td><td>零依赖 markdown 渲染器（先转义再做行内替换）</td><td><code>markdownToBlocks</code></td></tr>
 <tr><td><span class="path">tools/*.js</span></td><td>13 个工具的定义 + 纯执行逻辑</td><td><code>TOOLS</code> <code>validateTools</code> <code>requiresConfirmation</code></td></tr>
-<tr><td><span class="path">llm/providers/openai-compat.js</span></td><td>SSE 流解析 + 方言兼容</td><td><code>streamChat</code> <code>buildEndpoint</code> <code>errorChunk</code></td></tr>
+<tr><td><span class="path">llm/sse.js</span> + <span class="path">llm/providers/openai-compat.js</span></td><td colspan="2"><strong class="tag-read" style="background:rgba(255,123,114,.15);color:var(--danger);border:1px solid rgba(255,123,114,.35)">已删除</strong> ADR 0004：provider 层交给 pi-ai，本仓库不再自己实现 SSE 分帧与方言兼容。</td></tr>
 </table>
 
 <h3>第 2 层：装配层（<code>src/agent/index.js</code>）</h3>
@@ -259,17 +279,19 @@
          └─▶ src/background/index.js:576/629/694  message.on('agent:run-js', …)
                └─▶ runInPage → browser.scripting.executeScript({world:'MAIN'})</div>
 
-<h2 id="events"><span class="n">03</span>三层事件模型<span class="anchor">#events</span></h2>
+<h2 id="events"><span class="n">03</span>事件模型<span class="anchor">#events</span></h2>
 
-<p>这是整个设计里<strong>最容易搞混、也最关键</strong>的一个概念。三个层次的东西名字接近、流转方向不同，绝对不能混用。</p>
+<p>这是整个设计里<strong>最容易搞混、也最关键</strong>的一个概念。层次的东西名字接近、流转方向不同，绝对不能混用。</p>
+
+<blockquote class="warn"><strong>本节原有第三层「wire 消息」，2026-10-05 起已删除</strong>（ADR 0004 + 票 08）。<code>wire.js</code> 曾把事件历史<strong>现算</strong>成 OpenAI chat messages；现在 provider 参数由 pi 从它自己的 transcript 生成，我们不再有这一层。下面的表格保留两行有效的，wire 那一行标出它去了哪里。跨轮续接改由 <code>loop.js</code> 的 <code>historyToPiMessages()</code> 把事件历史翻译成 pi 的 transcript。</blockquote>
 
 <table>
 <tr><th>层</th><th>谁产出</th><th>形态</th><th>流到哪</th><th>能持久化吗</th></tr>
 <tr>
   <td><strong>provider 事件</strong></td>
-  <td><code>openai-compat.js</code></td>
-  <td><code>{type:'text-delta'}</code> 等</td>
-  <td>只在 llm/ ↔ loop.js 之间</td>
+  <td>pi-ai（<code>streamFn</code> 的流）</td>
+  <td><code>{type:'text_delta'}</code>、<code>tool_execution_start</code> 等</td>
+  <td>只在 streamFn ↔ loop.js 之间，由 <code>fromPiEvent</code> 翻译</td>
   <td>不能</td>
 </tr>
 <tr>
@@ -281,32 +303,28 @@
 </tr>
 <tr>
   <td><strong>wire 消息</strong></td>
-  <td><code>wire.js</code> 现算</td>
-  <td><code>{role, content, tool_calls}</code></td>
-  <td>只为发给模型</td>
-  <td><strong>不能</strong></td>
+  <td colspan="4"><strong class="tag-read" style="background:rgba(255,123,114,.15);color:var(--danger);border:1px solid rgba(255,123,114,.35)">已删除</strong> ADR 0004 / 票 08。</td>
 </tr>
 </table>
 
 <h3>单源记账不变式</h3>
-<p><code>loop.js</code> 只维护<strong>一份</strong>事件历史 <code>history</code>。UI 靠它渲染，wire 消息由 <code>buildWireMessages(history)</code> 现算，<strong>不重复记账</strong>：</p>
-<pre><code><span class="cm">// src/agent/loop.js:9-13（文件头注释原文）</span>
-<span class="cm">*   三层东西不要混：</span>
-<span class="cm">*   provider 事件 —— openai-compat 产出的 {type:'text-delta'} 等，流内部用；</span>
-<span class="cm">*   agent 事件    —— {kind:'agent:text-delta'}，既给 UI 消费，也是唯一的记账；</span>
-<span class="cm">*   wire 消息     —— 由 wire.js 从事件历史现算，只为发给模型。</span>
-<span class="cm">* 本文件只维护一份事件历史（history），UI 与 wire 都从它派生，不重复记账。</span></code></pre>
+<p><code>loop.js</code> 只维护<strong>一份</strong>事件历史 <code>history</code>。UI 靠它渲染，<strong>不重复记账</strong>；发给模型的请求由 pi 从它自己的 transcript 生成：</p>
+<pre><code><span class="cm">// src/agent/loop.js:9-13（文件头注释，2026-10-05 更新后）</span>
+<span class="cm">*   provider 事件 —— pi-ai 产出的流内部事件，只在 streamFn 与本文件之间流动；</span>
+<span class="cm">*   agent 事件    —— {kind:'agent:*'} 事件，既给 UI 消费，也是唯一的记账；</span>
+<span class="cm">*   transcript    —— pi 的对话状态，由 pi 持有；我们不 own 一份。</span>
+<span class="cm">* 本文件只维护一份事件历史（history），UI 从它派生，不重复记账。</span></code></pre>
 
 <div class="flowline">                    ┌──────────────────────────────────────┐
                     │        history: agent 事件数组          │
                     │  （loop.js 唯一维护，落盘进会话记录）      │
                     └───────────┬──────────────────┬───────────┘
                                 │                  │
-                  AgentTranscript.vue          wire.js
-                  （UI 渲染槽位）              （现算 OpenAI messages）
+                  AgentTranscript.vue    historyToPiMessages()
+                  （UI 渲染槽位）          （仅跨轮续接时翻译）
                                 │                  │
                                 ▼                  ▼
-                        用户看到的对话          发给模型的请求</div>
+                        用户看到的对话        pi 的 transcript → 发给模型</div>
 
 <h4>10 种 agent 事件</h4>
 <pre><code><span class="cm">// src/agent/events.js:12-23</span>
@@ -323,7 +341,9 @@
   <span class="str">ERROR</span>:         <span class="str">'agent:error'</span>,
 };</code></pre>
 
-<h4>wire 层的配对规则（OpenAI 硬约束）</h4>
+<blockquote class="warn"><strong>本小节描述的 <code>wire.js</code> 已删除（ADR 0004 / 票 08）。</strong>下面保留原文是为了说明「OpenAI 对 tool_calls 的三条硬约束」本身仍然成立 —— 只是现在由 pi-ai 的 <code>transform-messages.ts</code> 承担，而且它的净化<strong>更完善</strong>：会为孤儿调用插入合成结果，还会把夹在中间的 system 消息暂存到结果之后。我们自己的 <code>historyToPiMessages()</code> 只负责忠实翻译事件历史，配对净化交给 pi。</blockquote>
+
+<h4>wire 层的配对规则（OpenAI 硬约束）<span class="tag-read" style="background:rgba(255,123,114,.15);color:var(--danger);border:1px solid rgba(255,123,114,.35)">已删除</span></h4>
 <p><code>wire.js</code> 的存在理由是：历史里存的是 agent 事件，而 OpenAI 有三条硬性要求必须重建 —</p>
 <pre><code><span class="cm">// src/agent/wire.js:9-12</span>
 <span class="cm">* 这里按 OpenAI 的硬约束重建：</span>
@@ -429,6 +449,8 @@
 <h2 id="flow"><span class="n">06</span>用户流程逐步拆解<span class="anchor">#flow</span></h2>
 
 <p>下面按时间顺序走一遍<strong>用户从打开面板到拿到回答的完整 8 步</strong>。这一节是本文档的重点。</p>
+
+<blockquote class="warn"><strong>第 3 步里的代码片段是迁移前的 <code>loop.js</code> 原文（2026-10-05 前）。</strong>ADR 0004 之后主循环由 pi-agent-core 驱动，这一段的「现算 wire → 发请求 → JSON.parse 分片」全部换成了「pi 从 transcript 生成请求」。<strong>用户可见的流程没变</strong>（事件序列、确认门时机、落盘时机都一样），所以这一节仍然可读；但里面的实现描述与行号不再对应现行代码。</blockquote>
 
 <div class="step">
   <div class="hd"><div class="stepnum">0</div><div class="steptitle">进入面板：init() 惰性装配</div><div class="stepmeta">agentHost.js:220-258</div></div>
@@ -1009,6 +1031,8 @@ canvas: {
 
 <h2 id="budget"><span class="n">10</span>上下文窗口管理<span class="anchor">#budget</span></h2>
 
+<blockquote class="warn"><strong>⚠️ 本节描述的裁剪现在<strong>没有接线</strong>（ADR 0004 / B9 第 1 项）。</strong>pi-agent-core 没有内置 token 预算裁剪，也没有步数上限，所以 <code>applyTokenBudget</code> 与 <code>elideStaleObservations</code> 目前<strong>生产链路上没有任何调用者</strong>（只剩 <code>window.test.js</code> 在测它们）。后果是长对话会直接撞 provider 的 context 上限。这是有意的退化决策，不是漏做 —— 记在 <code>docs/backlog.md</code> 的 B9 第 1 项。下面三把刀的说明保留，是为了将来补回时有个起点。</blockquote>
+
 <p>一次 ReAct 跑 12 步，每步都往历史里塞页面快照，很容易撑爆窗口。<code>window.js</code> 用三把刀处理。</p>
 
 <h3>刀 1：单观察值 8K 硬截断</h3>
@@ -1102,6 +1126,8 @@ canvas: {
 <p><code>sessionOptionLabel()</code>（sessions.js:105-123）拼装下拉文案「标题 · MM-DD HH:mm」，当前项再套一层「（当前）」。它被抽成纯函数是因为「面板是 SFC，本仓没有组件测试基建，写在模板里的展示逻辑等于测不到」。</p>
 
 <h2 id="provider"><span class="n">12</span>Provider 层与网关方言<span class="anchor">#provider</span></h2>
+
+<blockquote class="warn"><strong>本节描述的自研 provider 层已删除（ADR 0004 / 票 08）。</strong>下面的 4 条方言 quirk 原文保留，作为「OpenAI 兼容端点确实有这些坑」的记录 —— 坑还在，只是不由我们踩：现在由 pi-ai 的 <code>openai-completions.js</code>（底层是 openai SDK）处理。<strong>我们现在的 provider 面只剩一个文件</strong>：<code>src/agent/provider.js</code>，它只做「BYOK 配置 → pi 的 <code>Model</code> + <code>streamFn</code>」的形状翻译，不含任何流解析。</blockquote>
 
 <p>只注册了一个 provider（全部走 OpenAI 兼容端点），但兼容≠简单。文件头记了 4 条<strong>有真实网关触发</strong>的方言 quirk：</p>
 
@@ -1348,14 +1374,14 @@ REJECTED: Unhandled Background Error: TypeError: Cannot read properties of undef
 <tr><td>熔断式降级</td><td><code>promptFacts</code> 失败 → 空事实表 + ERROR 事件；预检失败 → 跳过</td><td>「模型少知道一点，但还能继续对话」比整个功能死掉好</td></tr>
 <tr><td>advisory 而非 gate</td><td>预检产 system-notice，不硬停任务</td><td>良性重定向链会误杀；由模型自决去留</td></tr>
 <tr><td>错误即观察值</td><td>工具抛错 → status:'error' 喂回模型</td><td>模型能自纠；抛栈只会让它原地打转</td></tr>
-<tr><td>先剔除再裁剪</td><td><code>elideStaleObservations</code> → <code>applyTokenBudget</code></td><td>反过来的话，12 步单轮整组法一条都丢不掉</td></tr>
+<tr><td>先剔除再裁剪 <span class="tag-read" style="background:rgba(255,123,114,.15);color:var(--danger);border:1px solid rgba(255,123,114,.35)">当前未接线</span></td><td><code>elideStaleObservations</code> → <code>applyTokenBudget</code></td><td>反过来的话，12 步单轮整组法一条都丢不掉。B9 第 1 项裁剪整体不做，顺序知识随之失效</td></tr>
 <tr><td>截断在包装之前</td><td><code>truncateObservation</code> → <code>wrapUntrusted</code></td><td>否则砍掉一半的闭合标签会让半个标签暴露</td></tr>
 <tr><td>token 估算偏保守</td><td>1.5 / 0.7（原实现 2.5 / 1.2）</td><td>低估让压缩触发太晚（请求直接失败）；高估只是多压一次</td></tr>
-<tr><td>保守的权限默认值</td><td>未知工具 → 需确认；缺 class → 加载期 throw</td><td>「权限判定上的不确定，一律往更保守的方向倒」</td></tr>
+<tr><td>保守的权限默认值</td><td>缺 class → 加载期 throw</td><td>「权限判定上的不确定，一律往更保守的方向倒」。⚠️ <strong>「未知工具 → 需确认」这一半在迁移后失效</strong>：pi 在内部短路未知工具，不经过确认门（B9 第 4 项）</td></tr>
 <tr><td>锁不是安全边界</td><td><code>tabLocks</code> 只在跑一轮时持有</td><td>「UX 防误伤，不是安全边界：双方都是同一个用户的 BYOK 扩展」</td></tr>
-<tr><td>SSE 用外部依赖</td><td><code>eventsource-parser</code></td><td>手搓分帧漏掉边界「不报错，只是静默丢消息」</td></tr>
+<tr><td>SSE 用外部依赖 <span class="tag-read" style="background:rgba(255,123,114,.15);color:var(--danger);border:1px solid rgba(255,123,114,.35)">已作废</span></td><td><code>eventsource-parser</code></td><td>手搓分帧漏掉边界「不报错，只是静默丢消息」。ADR 0003 已被 0004 推翻，风险转移给 pi-ai</td></tr>
 <tr><td>绕开 fetchApi</td><td>两处都用原生 fetch</td><td>BYOK 不是 Automa 云端，离线版应当可用</td></tr>
-<tr><td>thinking 不进 wire</td><td><code>wire.js:80-83</code> 直接 break</td><td>多数兼容端点不认 reasoning 字段，混进去会被当正文展示给用户</td></tr>
+<tr><td>thinking 不进 transcript <span class="tag-read" style="background:rgba(255,123,114,.15);color:var(--danger);border:1px solid rgba(255,123,114,.35)">实现已换</span></td><td>原 <code>wire.js:80-83</code> 直接 break</td><td>多数兼容端点不认 reasoning 字段，混进去会被当正文展示给用户。迁移后由 pi-ai 的 adapter 处理（我们不设 thinkingLevel）</td></tr>
 <tr><td>索引不带 events</td><td><code>agent_session_index</code> 独立</td><td>画一个会话下拉框不该把全部历史读进内存</td></tr>
 <tr><td>展示逻辑抽成纯函数</td><td><code>sessionOptionLabel</code> 在 sessions.js 而非模板里</td><td>「面板是 SFC，本仓没有组件测试基建，写在模板里的展示逻辑等于测不到」</td></tr>
 </table>

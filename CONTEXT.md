@@ -8,7 +8,7 @@
 
 | 想找什么 | 去哪 | 状态 |
 | --- | --- | --- |
-| 术语、禁用词、三层事件的区别 | 本文件 + `AGENTS.md` | **现行** |
+| 术语、禁用词、事件层的区别 | 本文件 + `AGENTS.md` | **现行** |
 | 有意的架构决策与被拒备选 | `docs/adr/0001~0004` | **现行** |
 | 工程流水线的配置（issue tracker / triage 标签 / 领域文档） | `docs/agents/` | **现行** |
 | 模块怎么协作、事件在哪产生 | `docs/agent-architecture.html` | **现行**（页脚标最后核对日期） |
@@ -22,23 +22,24 @@
 `agent-multi-session-plan.md`（`4a573976`）、`agent-readpage-trace.md` 与
 `agent-context-discussion-2026-10-04.md`（`a27f93de`）—— 均为实施前计划，已被 ADR 与实测取代。
 
-## Agent 事件流(三层,绝不可混用)
+## Agent 事件流(迁移后剩两层)
 
 **provider 事件**:
-`openai-compat.js` 产出的流内部事件(`text-delta` / `tool-call-delta` / `done` / `error` / `usage`)。只在 `llm/` 与 `loop.js` 之间流动。
-_Avoid_: agent 事件(那是下一层)、chunk(口语可指它,但持久命名不用)。
+pi-ai 产出的流内部事件(`text_delta` / `tool_execution_start` / `done` / `error`)。只在 `streamFn` 与 `loop.js` 之间流动,由 `fromPiEvent` 翻译成 agent 事件。
+_Avoid_: agent 事件(那是下一层)、chunk。
 
 **agent 事件**:
-loop 产出的 `{ kind: 'agent:*' }` 事件(`AGENT_EVENTS`)。既是 UI 的唯一消费来源,也是**唯一的事件历史(history)**——UI 与 wire 都从它派生,不重复记账。
+loop 产出的 `{ kind: 'agent:*' }` 事件(`AGENT_EVENTS`)。既是 UI 的唯一消费来源,也是**唯一的事件历史(history)**,不重复记账。
 _Avoid_: transcript(该词已废弃,见下)、log、message。
 
-**wire 消息**:
-`wire.js` 从事件历史**现算**的 OpenAI chat messages(`role`/`content`/`tool_calls`)。只为发给模型,不可持久化、不可直接渲染。
-_Avoid_: 把 wire 消息称为 "history"(见下)。
-
 **历史(history)**:
-一次会话内累积的 agent 事件数组,由 loop 维护、runtime 在 send 收尾持久化进会话记录。跨轮续接 = 把它作为 `initialHistory` 传回。
-_Avoid_: "history" 不指展示消息、不指 wire。
+一次会话内累积的 agent 事件数组,由 loop 维护、runtime 在 send 收尾持久化进会话记录。跨轮续接 = 把它作为 `initialHistory` 传回,`loop.js` 的 `historyToPiMessages()` 负责翻译成 pi 的 transcript。
+_Avoid_: "history" 不指展示消息。
+
+> **2026-10-05 变更（ADR 0004 落地）**：第三层「wire 消息」**已删除**。`wire.js`、
+> `llm/sse.js`、`llm/providers/openai-compat.js` 随票 08 从仓库消失。provider 参数
+> （messages / tools / temperature / 重试）现在由 pi 从它自己的 transcript 生成,
+> 我们不再现算。`AGENT.md` 里的「三层事件」表述同步改为两层。
 
 **transcript**:
 **已废弃**。曾指给 UI 折展示行的中间层(transcript.js,已删除);展示折叠现在内联在各宿主的渲染层。任何新代码不得再引入 "transcript" 命名。
@@ -59,7 +60,8 @@ _Avoid_: chat(口语可用,持久命名不用)、conversation。
 _Avoid_: 用"会话"指一轮。
 
 **步(step)**:
-一轮内的 ReAct 迭代(`MAX_STEPS=12` 封顶)。一步 = 一次模型调用 + 可能的工具执行。
+一轮内的 ReAct 迭代。一步 = 一次模型调用 + 可能的工具执行。
+⚠️ `loop.js` 里仍导出 `MAX_STEPS = 12`,但**迁移后没有任何地方读它** —— pi 无内置步数上限,这道护栏按 B9 第 1 项被接受为退化(见 `docs/backlog.md`)。这个常量现在是死代码,别误以为它在生效。
 _Avoid_: 用"轮"指一步。
 
 **插话(instruction)**:

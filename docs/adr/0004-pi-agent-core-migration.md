@@ -1,9 +1,9 @@
 # 0004 — 用 pi-agent-core 替换自研 agent 内核
 
-状态：进行中
+状态：**已实施**（2026-10-05，票 01~08 全部完成）
 日期：2026-10-05
-取代：无
-相关：`docs/adr/0002-tool-confirmation-classes.md`（确认门分级，本次重构须完整保住）、`docs/adr/0003-sse-parser-external-dep.md`（SSE 解析器，本次可能被推翻）
+取代：[ADR 0003](0003-sse-parser-external-dep.md)（SSE 解析器 —— 随 `src/agent/llm/` 一并删除）
+相关：`docs/adr/0002-tool-confirmation-classes.md`（确认门分级，已完整保住）
 
 ## 背景
 
@@ -71,6 +71,23 @@ pi 在 `openai-completions.ts:1414-1417` 把 toolResult 内容 `join("\n")`。�
 3. **user 消息的 `content` 是内容块数组**（`types.ts:542-546`，也允许字符串）。`window.js:114/125` 的 `m.content.trimStart().startsWith('<untrusted_page_content')` 前缀判定在块数组下必然失效。
 4. **pi 无内置步数上限**，得自己用 `finishTurn` 兜（本项目按 B9 不做）。
 5. **`beforeToolCall` 的 block 路径产出 error 工具结果**（`agent-loop.js:508`），不是「用户拒绝」这种结构化状态。`TOOL_STATUS.REJECTED` 需在适配层自己编码。
+6. **`Agent` 不转发 `temperature` 与 `maxRetries`**（`agent.js:303-339` 的 `createLoopConfig()` 里两个字段都没有）。不显式注入就是「设置页调了没用」与「完全不重试」，两条都是静默失效。已在 `loop.js`（`streamFnWithRetry`）与 `provider.js`（`streamFn` 包一层）各自补上。
+7. **未知工具在 pi 内部短路**，不经过 `beforeToolCall`。所以**未知工具名不再过确认门** —— 用户不会看到「要不要允许调用不存在的工具」的卡片。这是有意的降级（不存在的工具本来也执行不了），但它与 ADR 0002 的「写类必过确认门」在字面上有落差，记在 B9 第 4 项。
+8. **`transformContext` 不写回 `state.messages`**（票 06 实测选定）。预检通知与插话因此只在当次请求可见，不进持久历史 —— 与迁移前「通知进 wire 不进 transcript」语义一致。
+
+## 落地后的真实体积（2026-10-05 实测）
+
+`npm run build` 之后按标记字符串定位到两个异步 chunk：
+
+| chunk | 内容 | min | gzip |
+| --- | --- | --- | --- |
+| `3099.bundle.js` | pi-agent-core 内核（`loop.js` 引入的部分） | 153.6 KB | 40.4 KB |
+| `5384.bundle.js` | pi-ai provider 层 + openai SDK（`provider.js` 引入的部分） | 309.7 KB | 77.8 KB |
+| **合计** | | **463.3 KB** | **118.2 KB** |
+
+对比 PoC 预估（内核 165 KB min / 43.8 KB gzip，完整栈 596.6 KB min）：内核实测更小，完整栈实测更小 —— 因为 `provider.js` 只 import `/models` 与 `api/openai-completions.lazy` 两个子路径，没有走 pi-ai 的 index入口。**这是刻意的**（index 会把 typebox、faux provider 等全家桶拖进来）。
+
+两个 chunk 都是**异步**的（动态 import），只有真正发起对话时才加载。
 
 ## 回滚
 

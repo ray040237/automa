@@ -659,7 +659,7 @@ describe('配置读写往返（走 credentialUtil）', () => {
  * （currentSessionId 变 null → 落出 agent_session_null 幽灵会话），也可能
  * 已经发出了第二轮（整记录 save 把首轮 events 快照盖回去）。
  *
- * generateTitleAsync 直接吃模块级 streamChat、不吃 deps 注入，本仓没有能把
+ * generateTitleAsync 直接吃模块级 provider 接线、不吃 deps 注入，本仓没有能把
  * 这条回调跑到 resolve 的测试基建 —— 所以退而钉住源码接线（同 T-02 的做法）：
  * id 在发起时捕获、回写走 patchTitle、then 里不许再出现拿外层 id 的整记录 save。
  */

@@ -1,5 +1,5 @@
 /**
- * Agent 主循环 —— 基于 pi-agent-core（迁移中，票 01~08，见 docs/agent-core-migration-spec.md）。
+ * Agent 主循环 —— 基于 pi-agent-core（票 01~08 已完成，见 docs/agent-core-migration-spec.md）。
  *
  * 不变式（方案 G5）：本文件与 tools/* 只能 import src/agent 下的纯模块，
  * 一律通过 deps 拿浏览器能力；不碰 webextension-polyfill、不碰 @/ 别名，
@@ -12,9 +12,8 @@
  *   transcript    —— pi 的对话状态，由 pi 持有；我们不own 一份。
  * 本文件只维护一份事件历史（history），UI 从它派生，不重复记账。
  *
- * ── 迁移期状态 ────────────────────────────────────────────────
- * 票 01：pi 运行时骨架，纯文本路径已通；工具/确认门/插话路径尚未接线，
- * 相应断言在 loop.test.js 里标skip 等后续票。**这个文件处于中间态。**
+ * provider 参数（messages / tools / temperature / 重试）全部由 pi 从 transcript
+ * 生成，我们不再有 wire 消息这一层 —— 旧的三层机制已在票 08 删除。
  */
 
 import { buildSystemPrompt } from './prompt';
@@ -360,8 +359,8 @@ export function createAgent(deps) {
 
   if (!streamFn) {
     throw new Error(
-      'createAgent: 缺streamFn。迁移后provider 层由 pi 提供，' +
-        'streamFn 是唯一必需的依赖（不再是可选的 streamChat）。'
+      'createAgent: 缺streamFn。provider 层由 pi 提供，' +
+        'streamFn 是唯一必需的模型依赖。'
     );
   }
   if (!model) {

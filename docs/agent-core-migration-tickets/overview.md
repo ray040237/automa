@@ -19,7 +19,7 @@ Spec：[agent-core-migration-spec.md](../agent-core-migration-spec.md) ｜ 决�
  └── 06  预检与插话改接 pi 的注入点 ──────────┘
 ```
 
-**frontier（可立即开工）**：01
+**frontier：已清空。** 01~08 全部完成（2026-10-05），终态 **361 tests / 356 pass / 0 fail / 5 skipped**。剩余 5 条 skip 全部有据：B9 的退化（elide / MAX_STEPS / budget 打点 / 429 Retry-After）或 T-59（迁移前就缺的打点），**没有一条是「等后续票」**。
 
 ## 每票是中间态
 
@@ -50,7 +50,7 @@ Spec：[agent-core-migration-spec.md](../agent-core-migration-spec.md) ｜ 决�
 | 05 | 429 配额区分（B9，暂不做） |
 | 06 | 预检的检查逻辑本身（只改注入方式） |
 | 07 | 中断提示（B7，独立欠账） |
-| 08 | 顺手改别的 |
+| 08 | 顺手改别的（缺失的工具打点因此登记为 T-59，没在票里补） |
 
 ## 测试策略
 
@@ -76,5 +76,7 @@ Spec：[agent-core-migration-spec.md](../agent-core-migration-spec.md) ｜ 决�
 | T-56 | 裸文本回落通道 | 在 03 的路径上，顺手堵掉 |
 | T-57 | 不可信标签清单只钉了长度 | 独立改进 |
 | T-58 | 头注释与代码不符 | 独立改进 |
+| T-59 | `log` 缺工具调用/结果打点 | 票 08 明确不做「顺手改别的」 |
+| T-60 | pi 不跳过缺 toolCallId 的空转块 | 夹具层无害，等真出问题再补 |
 | B7 | 中断后的提示 | 07 之后前提才成立 |
-| B9 | 三项已知退化 | 这就是本重构的决策记录 |
+| B9 | 四项已知退化 | 这就是本重构的决策记录 |

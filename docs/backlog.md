@@ -188,7 +188,7 @@
 证据：**静态** —— `loop.js:406-411` 的注释与嵌套调用确认；三个诊断数字（`estimated` / `threshold` / `dropped`）目前只进 `log('budget')`，测试断言不到。**性能理由已被实测否掉**（该实测为评审文档所载，本轮未复跑）：合成 12 步 × 8K 快照跑完整管线 20 次取平均，单次 0.10–0.13 ms，`estimateTokens` 单次 0.036 ms，且 elide 先出手把估算压到 8.9K、远低于 25.6K 阈值，压根进不了 while 循环。
 影响：真实危害小，纯接口洁癖。
 建议：若将来要动，只动接口 —— 一个 `buildModelView({history, system, contextWindow})` 返回 `{messages, diagnostics}`，顺序收进实现、诊断数字变成可断言的返回值。**本轮不建议排期**，登记备查。
-状态：待审核
+状态：**已消解（2026-10-05，票 08）** —— 被抱怨的那个接口（`buildWireMessages`）随 `wire.js` 一起删除，「顺序知识留在调用方」不再成立。裁剪本身不做是 B9 第 1 项的独立决策。留档备查。
 
 ### T-52 — 工具卡永远不显示调用参数：`TOOL_CALL`/`TOOL_RESULT` 事件都不带 `args`
 
@@ -312,7 +312,7 @@ TOOL_CALL 事件里带 args 的数量: 0 / 1
 证据：**代码位置，未实测触发** —— `wire.js:109`（user-message）、`:116`（system-notice）。当前无触发者：两个生产者 `loop.js:343-350` 与 `:394-401` 都带 `wire`，且 `sessions.js:193` 整份 events 落盘/读回时 `wire` 字段会跟着活下来。属**潜在**缺陷，非现存 bug。
 影响：一旦有人新增事件生产者而忘了填 `wire`，用户输入或系统事实就裸奔进 prompt，违反红线第 2 条，且无测试报警（现有 `wire.test.js:30-52` 只测带 `wire` 的路径）。
 建议：缺 `wire` 时 throw 而非回落 `text`；或把 `|| ev.text` 直接删掉，让缺字段立刻暴露。代价约 2 行。
-状态：待审核
+状态：**已消解（2026-10-05，票 08）** —— 缺陷所在的 `wire.js` 已删除，新路径上没有这条通道（工具结果一律经 `tools/adapter.js` 的 `wrapUntrusted` 包装，用户输入经 `buildUserMessage`）。**本条不再是待办**，留档备查。
 
 ### T-57 — `untrusted.test.js` 只钉 `length === 7`，与红线「清单被测试钉死」有落差
 
@@ -334,6 +334,28 @@ TOOL_CALL 事件里带 args 的数量: 0 / 1
 证据：**实测** —— `untrusted.js:6`（注释写 6）vs `untrusted.js:27-35`（数组 7 项），`untrusted.test.js:137` 也断言 7。纯注释失同步，不影响运行时行为。
 影响：读注释的人会对「清单里有什么」判断错误；这类失同步会误导后续维护者以为某个标签不存在。
 建议：把注释里的「6 个」改成 7 个。代价 1 个词。
+状态：待审核
+
+### T-59 — `log` 缺工具调用与结果打点，参数摘要无处可查
+
+类型：bug
+登记日期：2026-10-05
+来源：会话 2026-10-05 票 08（删除 `llm/`），触发点 `src/agent/loop.js:533`、`:545`、`:696`，测试 `src/agent/loop.test.js`
+现象：`loop.js` 只打三个点 —— `tool.confirm.ask`、`tool.confirm.answer`、`turn.end`（另有 `turn.error`）。**工具实际执行与产结果没有任何打点**，所以「模型传了什么参数、工具返回了什么」在日志里查不到。只有过确认门的写类工具能间接看到参数（`tool.confirm.ask` 带 args），read 类工具一个点都没有。
+证据：**实测（对照迁移前基线）** —— 基线快照 `.scratch/agent-baseline/src/agent/loop.js` 里 `log(...)` 只有两处：`turn.error`（`:348`）与 `turn.end`（`:364`）。**迁移前就没有这两个打点**，所以这不是 pi 迁移引入的回归。`loop-test-classification.md` 的 #37 要求「重构时至少保住工具调用与结果有打点」，这条要求在迁移前就没满足。
+影响：排查「模型为什么调了这个工具、为什么回了这个结果」时没有现场，只能复现。`log.js` 头注写它是「排查卡死/异常时的现场」，工具链是助手最高频的卡点，缺的正是这一段。
+建议：在 `fromPiEvent` 的 `tool_execution_start` / `tool_execution_end` 映射处各打一点（`tool.call` 带 name + args 摘要、`tool.result` 带 name + isError），或者直接在 adapter 的 `execute` 前后打。代价约 4 行；注意 args 可能很大，打点要截断。
+状态：待审核
+
+### T-60 — pi 不跳过缺 toolCallId 的空转块，与迁移前的净化行为不同
+
+类型：改进
+登记日期：2026-10-05
+来源：会话 2026-10-05 票 08（删除 `wire.js`），探针实测见本条「证据」
+现象：迁移前 `wire.js` 会**跳过**没有 `toolCallId` 的空转块。pi 不跳：实测它把 `id: undefined` 一路传下去 —— `execute` 收到的 `toolCallId` 是 `undefined`，assistant 消息里那个 toolCall 块的 `id` 也是 `undefined`，产出的 toolResult 的 `toolCallId` 同样是 `undefined`。**两边都 undefined 所以仍然配对，工具照常执行、整轮不崩**，但这是「凑巧相等」而不是「有 id」。
+证据：**实测（探针，2026-10-05）** —— 用 `@earendil-works/pi-agent-core` 的 `Agent` 直接跑：投一个 `{type:'toolCall', name:'echo', arguments:{}}`（无 id）的 assistant 消息，事件序列完整走完 `tool_execution_start:echo → tool_execution_end:echo`，`toolResult.toolCallId === undefined`，且与 `execute` 收到的 id 相等（都是 undefined）。探针见 `.scratch/probe-id.mjs`（过程材料，已 gitignore）。**未实测**：真实 provider 收到 `tool_calls[].id === undefined` 会不会被拒 —— 夹具层看不到请求。
+影响：夹具层无害。真发到 OpenAI 兼容端点时，缺 id 的 tool_call 很可能被拒（400）或导致 tool_call 无法与 tool 消息配对 —— 那时候的表现是「整轮 provider 报错」，而不是「跳过一个空块」。当前 `loop.test.js` 的替代断言只钉了「不崩」，没钉「provider 会不会收」。
+建议：两条路。① 在 `fromPiEvent` 的 `tool_execution_start` 映射处检查 toolCallId，缺失时打点并在 DONE 里附一句（不改pi 的行为，只让我们看得见）。② 什么都不做，等真出问题再补。代价：①约 5 行 + 一条测试。
 状态：待审核
 
 ## 已批准（待排期）
@@ -395,13 +417,15 @@ TOOL_CALL 事件里带 args 的数量: 0 / 1
 
 **这一条是决策记录，不是待办** —— 三项退化都是**明知故犯**，写在这里是为了「三个月后没人记得为什么长对话会炸」。
 
-内容（三项，同一次决策的三个侧面）：
+内容（**四项**，同一次决策的四个侧面。前三项是用户决策，第四项是票 08 落地时才发现的连带后果）：
 
 1. **无 token 预算裁剪、无步数上限**（原 Q7=B）。pi-agent-core 实测**没有任何默认行为**：`transformContext` 只是个回调位置，pi 从不自己调它做任何事；也没有 `MAX_STEPS` 等价物。后果：长对话直接撞 provider context 上限（主用 ModelScope 是 128k，页面正文动辄几万 token）；模型可无限工具循环，只有用户手点停止。**注**：`window.js` 的裁剪与 T-01/B2 的「纵深防御」注释都建立在这个前提上，去掉它等于把纵深防御一起去掉。
 2. **`ERROR_KIND` 六种分类降级**（Q1=B 的连带后果）。实测 pi 的 openai-completions 失败路径上 `diagnostics` 恒为 `undefined`（只有 bedrock / pi-messages / codex-responses 三个 adapter 写它），`onResponse` 在 `await retryProviderRequest(...)` **之后**调用因而对 401/429 一次都不触发，`AssistantMessage` 上唯一可靠的只有 `stopReason`（`error`/`aborted` 两值）+ `errorMessage` 字符串。pi 自己做分类靠 `retry.ts:30-102` 约 60 条正则。后果：配置缺失要与 provider 401 区分、429 配额耗尽要与真限流区分，都得靠我们自己对字符串做正则反解 —— 而现状 `classifyHttpError` 直接拿得到 status 与 body全文，信息更全。
 3. **丢掉全部 364 条测试的回归保护**（Q11=C）。`docs/backlog-done.md` 里 44 条已解决条目每条背后都有一条测试。重写期间若新代码有 bug，**没有旧测试能回答「这里本来是对的」**。缓解措施：基线快照在 `.scratch/agent-baseline/`（来自 commit `894ec164`，`.scratch/` 已 gitignore），配`.scratch/run-baseline-tests.mjs`。**该快照不在版本库里，换机器就没了** —— 若这批欠账要长期跟踪，重构落地时应把关键断言补成新测试并说明它们替代了哪条旧断言。
 
-缓决原因：用户的目标是「拿到更成熟的上下文管理与鲁棒性」（并行工具执行、truncation 保护、steering 队列、更完善的悬空 tool_calls 净化 —— `transform-messages.ts:158-186` 这几项实测 pi 确实强于现状），且明确接受用体积（+414 KB min）与上述代价换取。
+4. **未知工具名不再过确认门**（票 08 落地时发现，非用户决策）。pi 在内部短路未知工具（`agent-loop.js` 里直接产 error toolResult），**不经过 `beforeToolCall`** —— 所以用户不会看到「是否允许调用工具 X」的卡片。后果：与 ADR 0002「写类工具必过确认门」在字面上有落差。**判断为可接受**：不存在的工具本来也执行不了，确认它没有意义；而 ADR 0002 要防的是「模型改了不该改的东西」，这条路径上什么都没发生。**但如果将来引入「按名字动态注册工具」（比如用户自定义工具集），这条必须重开。**
+
+缓决原因：用户的目标是「拿到更成熟的上下文管理与鲁棒性」（并行工具执行、truncation 保护、steering 队列、更完善的悬空 tool_calls 净化 —— `transform-messages.ts:158-186` 这几项实测 pi 确实强于现状），且明确接受用体积与上述代价换取。**实测体积（票 08 后）**：内核 153.6 KB min / 40.4 KB gzip + provider 层 309.7 KB min / 77.8 KB gzip = **463.3 KB min / 118.2 KB gzip**，两个都是异步 chunk。比 PoC 预估的 596.6 KB 小，因为只 import 了两个子路径而非 pi-ai 的 index。
 重开条件（任一命中即应重开）：
 - 用户报告长对话撞 context 上限，或模型陷入工具循环
 - `ERROR_KIND` 降级导致错误提示无法区分（联系 T-04：那条已经在抱怨错误渲染太弱）
