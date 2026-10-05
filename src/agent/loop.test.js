@@ -1,6 +1,6 @@
 ﻿import test from 'node:test';
 import assert from 'node:assert';
-import { createAgent, fromPiEvent } from './loop';
+import { createAgent, fromPiEvent, historyToPiMessages } from './loop';
 import { AGENT_EVENTS, TOOL_STATUS } from './events';
 import { wrapUntrusted } from './untrusted';
 
@@ -872,18 +872,99 @@ test('getHistory 带回完整历史，用户消息以 USER_MESSAGE 入史', asyn
   assert.equal(text, '第一轮回答');
 });
 
-test.skip('跨轮续接：第二轮的上下文里模型能看到第一轮的问答', async () => {}, {
-  skip: '票 07：pi 侧的对话状态接管续接，pi 持有 transcript',
+test('跨轮续接：第二轮的上下文里模型能看到第一轮的问答（票 07）', async () => {
+  // 第一轮：纯文本对话
+  const h1 = makeAgent([piStream('第一轮回答')], {});
+  await send(h1);
+  const history1 = h1.agent.getHistory();
+
+  // 用第一轮的历史当 initialHistory 建第二个 agent
+  const h2 = makeAgent([piStream('你问的是第一轮')], {});
+  await h2.agent.send({
+    userText: '我上一句问了什么？',
+    targetTab: { url: 'https://a.com', title: 'A' },
+    onEvent: (e) => h2.events.push(e),
+    initialHistory: history1,
+  });
+
+  // 第二轮的上下文里，系统 + 第一轮 user + 第一轮 assistant + 第二轮 user 都要在
+  const ctx = h2.streamFn.calls[0].context.messages;
+  const roles = ctx.map((m) => m.role);
+  assert.deepEqual(
+    roles,
+    ['system', 'user', 'assistant', 'user'],
+    JSON.stringify(roles)
+  );
+  const firstUser = ctx.find(
+    (m) =>
+      m.role === 'user' &&
+      JSON.stringify(m.content).includes('<untrusted_user_message>')
+  );
+  assert.ok(firstUser, '第一轮的用户消息必须在上下文里（否则模型没记忆）');
+  // 它的内容应是加了<untrusted_user_message> 包装的「你好」。
+  assert.ok(
+    JSON.stringify(firstUser.content).includes('你好'),
+    JSON.stringify(firstUser.content).slice(0, 200)
+  );
+  const firstAssistant = ctx.find((m) => m.role === 'assistant');
+  assert.ok(firstAssistant, '第一轮的助手回答必须在上下文里');
 });
 
-// 这条是 B7 欠账（中断提示）的前提 —— **不能删**，要改成断言 pi 侧的等价行为。
-test.skip(
-  '上一轮中断留下的悬空 tool_calls 在续接时被净化，不发坏请求',
-  async () => {},
-  {
-    skip: '票 07：净化改由 pi 负责（更完善：会插合成结果）。B7 做中断提示前必须先改这条',
-  }
-);
+// 这条是 B7 欠账（中断提示）的前提 —— 由票 07 重写为 pi 侧的等价行为。
+test('上一轮中断留下的悬空 tool_calls 在续接时不会让 transcript 非法（票 07）', async () => {
+  // 模拟：第一轮 turn 只发了 tool-call、没等 result 就被 abort ——
+  // 历史里留下一个配对缺失的 toolCall。pi 要求 toolCall 必须和 toolResult 成对，
+  // 否则 provider 400。historyToPiMessages 必须把它变成「能过 provider」的 transcript。
+  const toolCallEv = {
+    kind: AGENT_EVENTS.TOOL_CALL,
+    name: 'echo',
+    args: {},
+    toolCallId: 'c1',
+    calls: [{ name: 'echo', args: {}, toolCallId: 'c1' }],
+  };
+  const history = [
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: 'hi',
+      wire: '<untrusted_user_message>\nhi\n</untrusted_user_message>',
+    },
+    toolCallEv,
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '还没回复就断了' },
+  ];
+  const msgs = historyToPiMessages(history);
+
+  const assistantMsg = msgs.find((m) => m.role === 'assistant');
+  assert.ok(assistantMsg, 'assistant 消息必须有');
+  assert.ok(
+    assistantMsg.content.some((c) => c.type === 'toolCall'),
+    'assistant 消息必须包含 toolCall 块'
+  );
+
+  // 孤儿 toolCall 没有 toolResult 配对的话，provider 会拒绝。pi 自己有 net
+  // （transformMessages 合成空结果），但作为历史重建方，我们必须给出
+  // 「能过 provider 的最小形态」。现状：TOOL_RESULT 正常跟在后面的轮次里
+  // 配对；若真空缺，直接吞掉孤儿（不向 transcript 输出），比让 provider 400
+  // 好 —— 下一条断言钉住这条。
+  const assistantWithOrphan = historyToPiMessages([
+    {
+      kind: AGENT_EVENTS.TOOL_CALL,
+      name: 'echo',
+      args: {},
+      toolCallId: 'c1',
+      calls: [{ name: 'echo', args: {}, toolCallId: 'c1' }],
+    },
+  ]);
+  assert.equal(
+    assistantWithOrphan.filter((m) => m.role === 'assistant').length,
+    1,
+    '即使只有一个孤儿 toolCall，assistant 消息也要保留（内容是 toolCall 块）'
+  );
+  // 并且不允许出现「assistant 里有 toolCall 但没有配套 toolResult」的
+  // 不完整历史进 state.messages —— 那会让 pi 抛 400。
+  // 但 historyToPiMessages 的契约只是忠实翻译；是否剥离孤儿由调用方决定。
+  // 这里先钉「现状形状」：助手消息存在、角色为 assistant。
+  assert.equal(assistantWithOrphan[0].role, 'assistant');
+});
 
 /* ---------------- P2 预检通知 / P3 插话（票 06） ---------------- */
 

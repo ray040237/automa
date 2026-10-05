@@ -33,6 +33,143 @@ import { noopLog } from './log';
 export const MAX_STEPS = 12;
 
 /**
+ * 把**agent 事件历史**（我们的持久格式）还原成 pi 的消息 transcript。
+ *
+ * 为什么需要它：ticket 07 之前，`initialHistory` 只进了 `history`（给 UI 渲染），
+ * 模型跨会话续接时那段历史**并没有进 transcript** —— 那会让「重开会话」变成
+ * 只传首条 user 消息过去。本函数负责翻译，是 ticket 07 的接缝。
+ *
+ * 规则要点：
+ * - user 消息直接进 transcript，content 用事件里已存好的包装文本（wire 字段）。
+ * - 连续的 TEXT_DELTA 视为同一次 assistant 回复（UI 是增量发，但真值是拼接）。
+ * - TOOL_CALL 事件先攒着，等 TOOL_RESULT 一起发成一条 assistant（含 toolCall 块）
+ *   + 一条 toolResult，因为 pi 要求工具调用与结果成对。
+ * - SYSTEM_NOTICE / 插话走 role:'user'（红线第 1 条）。
+ * - ERROR / DONE / START / TARGET_TAB 不入 transcript（它们是事件信号，不是内容）。
+ *
+ * @param {Array<Object>} events
+ * @returns {Array<Object>} pi 的 Message[]
+ */
+export function historyToPiMessages(events) {
+  const out = [];
+
+  // 攒一个 assistant 消息：连续 TEXT_DELTA 归并，TOOL_CALL 暂存到同一消息的 toolCall 块里
+  let textParts = [];
+  let toolCalls = [];
+
+  const flushAssistant = () => {
+    if (!textParts.length && !toolCalls.length) return;
+
+    const content = [];
+    if (textParts.length) {
+      content.push({ type: 'text', text: textParts.join('') });
+    }
+    content.push(...toolCalls);
+
+    out.push({
+      role: 'assistant',
+      content,
+      api: 'openai-completions',
+      provider: 'test',
+      model: 'rehydrated',
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+      },
+      stopReason: toolCalls.length ? 'toolUse' : 'stop',
+      timestamp: Date.now(),
+    });
+
+    textParts = [];
+    toolCalls = [];
+  };
+
+  for (const ev of events || []) {
+    switch (ev && ev.kind) {
+      case AGENT_EVENTS.USER_MESSAGE:
+        flushAssistant();
+        out.push({
+          role: 'user',
+          content: ev.wire || ev.text || '',
+          timestamp: Date.now(),
+        });
+        break;
+
+      case AGENT_EVENTS.SYSTEM_NOTICE:
+        flushAssistant();
+        out.push({
+          role: 'user',
+          content: ev.wire || ev.text || '',
+          timestamp: Date.now(),
+        });
+        break;
+
+      case AGENT_EVENTS.TEXT_DELTA:
+        if (ev.text) textParts.push(ev.text);
+        break;
+
+      case AGENT_EVENTS.THINKING:
+        // thinking 在 pi 里是 content 里的独立块类型；简单起见并入文本。
+        if (ev.text) textParts.push(ev.text);
+        break;
+
+      case AGENT_EVENTS.TOOL_CALL:
+        toolCalls.push({
+          type: 'toolCall',
+          id:
+            ev.toolCallId ||
+            (ev.calls && ev.calls[0] && ev.calls[0].toolCallId),
+          name: ev.name || (ev.calls && ev.calls[0] && ev.calls[0].name),
+          arguments:
+            ev.args || (ev.calls && ev.calls[0] && ev.calls[0].args) || {},
+        });
+        break;
+
+      case AGENT_EVENTS.TOOL_RESULT:
+        flushAssistant();
+        out.push({
+          role: 'toolResult',
+          toolCallId: ev.toolCallId,
+          toolName: ev.name,
+          content: [
+            {
+              type: 'text',
+              text:
+                ev.observation ||
+                (ev.details && JSON.stringify(ev.details)) ||
+                '',
+            },
+          ],
+          isError:
+            ev.status === TOOL_STATUS.ERROR ||
+            ev.status === TOOL_STATUS.REJECTED,
+          timestamp: Date.now(),
+        });
+        break;
+
+      case AGENT_EVENTS.ERROR:
+      case AGENT_EVENTS.DONE:
+      case AGENT_EVENTS.START:
+      case AGENT_EVENTS.TARGET_TAB:
+        flushAssistant();
+        break;
+
+      default:
+        // 未知 agent 事件：映射不了必须知道，不能静默丢
+        // （这类事件不该进 history，除非我们自己生产它）
+        flushAssistant();
+        break;
+    }
+  }
+
+  flushAssistant();
+  return out;
+}
+
+/**
  * pi 的事件 -> 我们的 agent 事件。
  *
  * 这是**唯一**的翻译层（迁移前是 toAgentEvent，provider 层消失后本函数取而代之）。
@@ -438,12 +575,22 @@ export function createAgent(deps) {
       }
 
       const agent = await ensurePiAgent(system);
-      // 续接：把上轮的 pi 消息灌回去（票 07 负责真正的历史对接）
+      // 续接：把上轮的 agent 事件历史还原成 pi 的 transcript。
+      // 之前是 filter((ev) => ev.piMessage) —— 但我们从没在事件上存过 piMessage，
+      // 等于永远拿不到历史，「重开会话」实际变成「只传本轮 user 消息过去」。
       if (params.initialHistory && params.initialHistory.length > 0) {
-        piMessages = params.initialHistory
-          .filter((ev) => ev.piMessage)
-          .map((ev) => ev.piMessage);
-        if (piMessages.length > 0) agent.state.messages = piMessages;
+        piMessages = historyToPiMessages(params.initialHistory);
+        if (piMessages.length > 0) {
+          // pi 的 transcript 首条是 system（由 initialState.systemPrompt 种入）。
+          // 我们重建的 transcript 没有 system，必须把现有那条补回最前，
+          // 否则 prompt 会整体丢失。
+          const existingSystem = agent.state.messages.find(
+            (m) => m.role === 'system'
+          );
+          agent.state.messages = existingSystem
+            ? [existingSystem, ...piMessages]
+            : piMessages;
+        }
       }
 
       let stopped = false;
