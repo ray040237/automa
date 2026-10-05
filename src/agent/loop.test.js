@@ -27,26 +27,31 @@ import { wrapUntrusted } from './untrusted';
 function piStream(content, extra = {}) {
   const final = assistant(content, extra);
   const partial = { ...final, stopReason: undefined };
-  const pieces = typeof content === 'string' ? [...content] : [];
+  const isText = typeof content === 'string';
   const events = [
     { type: 'start', partial },
-    { type: 'text_start', contentIndex: 0, partial },
-    ...pieces.map((p) => ({
-      type: 'text_delta',
-      contentIndex: 0,
-      delta: p,
-      partial,
-    })),
-    {
-      type: 'text_end',
-      contentIndex: 0,
-      content: typeof content === 'string' ? content : '',
-      partial,
-    },
+    ...(isText
+      ? [
+          { type: 'text_start', contentIndex: 0, partial },
+          ...[...content].map((p) => ({
+            type: 'text_delta',
+            contentIndex: 0,
+            delta: p,
+            partial,
+          })),
+          { type: 'text_end', contentIndex: 0, content, partial },
+        ]
+      : []),
     { type: 'done', reason: final.stopReason, message: final },
   ];
   return { events, final };
 }
+
+/** 一轮「模型要求调工具」的流 —— content 传数组表示只有 toolCall 块 */
+const toolCallStream = (name, args) =>
+  piStream([{ type: 'toolCall', id: 'call-1', name, arguments: args }], {
+    stopReason: 'toolUse',
+  });
 
 /** 把若干轮响应排成队列的假 streamFn，并记录每次收到的参数 */
 function fakeStream(turns) {
@@ -102,10 +107,7 @@ const echoTool = {
   group: 'context',
   description: '回显参数',
   parameters: { type: 'object', properties: {} },
-  execute: async () => ({
-    content: [{ type: 'text', text: 'echo' }],
-    details: {},
-  }),
+  execute: async (args) => ({ payload: 'echo:' + JSON.stringify(args) }),
 };
 
 const testModel = {
@@ -380,42 +382,153 @@ test('发给模型的 system 不含页面内容', async () => {
   );
 });
 
-// 票 02：工具注册表适配到 AgentTool
-test.skip('tools 以 pi 的工具声明下发', async () => {}, {
-  skip: '票 02：工具注册表适配',
+// ── 票 02：工具注册与执行 ──
+
+test('tools 以 pi 的工具声明下发，class/group 保留在运行时工具表上', async () => {
+  const h = makeAgent([piStream('hi')]);
+  await send(h);
+  // pi 把给模型看的声明放在 system 消息的 toolsAdded 上（实测），
+  // 而 class/group 留在运行时工具表里 —— 票 04 的确认门、票 03 的标签判定读后者。
+  const sys = h.streamFn.calls[0].context.messages[0];
+  assert.ok(Array.isArray(sys.toolsAdded), 'system 消息必须带工具声明');
+  const declared = sys.toolsAdded.find((t) => t.name === 'echo');
+  assert.ok(declared, 'echo 工具应在声明里');
+  assert.equal(declared.description, '回显参数');
+  assert.ok(declared.parameters, '声明要带参数 schema');
+  // 给模型的声明里不该出现内部字段
+  assert.equal(declared.class, undefined, 'class 不给模型看');
+
+  const runtime = h.agent.getState().tools.find((t) => t.name === 'echo');
+  assert.equal(
+    runtime.class,
+    'read',
+    'class 必须留在运行时工具表 —— 票 04 的确认门靠它'
+  );
+  assert.equal(
+    runtime.group,
+    'context',
+    'group 必须留着 —— 票 03 的不可信标签靠它'
+  );
+  assert.equal(runtime.label, '回显参数', 'label 是 pi 必填项');
 });
 
-test.skip('tool_call -> 执行 -> 再问一轮', async () => {}, {
-  skip: '票 02：工具执行',
+test('tool_call -> 执行 -> 再问一轮，工具结果回到对话', async () => {
+  const h = makeAgent([toolCallStream('echo', { a: 1 }), piStream('好的')]);
+  const doneEv = await send(h);
+
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE);
+  assert.equal(h.streamFn.calls.length, 2, '工具执行后应该再问一轮');
+
+  const second = h.streamFn.calls[1].context.messages;
+  const toolMsg = second.find((m) => m.role === 'toolResult');
+  assert.ok(toolMsg, '第二轮必须带工具结果消息');
+  assert.equal(toolMsg.toolCallId, 'call-1', '与工具调用配对');
+  assert.ok(
+    toolMsg.content[0].text.includes('echo:'),
+    `工具结果应回到对话，实际 ${JSON.stringify(toolMsg.content)}`
+  );
 });
-test.skip('工具结果按 tool 消息回传且 tool_call_id 成对', async () => {}, {
-  skip: '票 02/03',
+
+test('未知工具名产生错误结果，循环继续', async () => {
+  // ⚠️ 与迁移前的差异：旧实现在错误里**列出可用工具名**，帮模型自我纠正；
+  // pi 的消息只有 "Tool X not found"，不列。未知工具走 pi 内部的短路分支，
+  // beforeToolCall / afterToolCall 都碰不到，所以补不回来。
+  // 见票 02 完成记录。契约部分是「失败是错误观察值 + 循环继续」。
+  const h = makeAgent([toolCallStream('nope', {}), piStream('好的')]);
+  const doneEv = await send(h);
+  const toolMsg = h.streamFn.calls[1].context.messages.find(
+    (m) => m.role === 'toolResult'
+  );
+  assert.ok(toolMsg, '未知工具也要有结果消息');
+  assert.equal(toolMsg.isError, true, '未知工具是失败');
+  assert.ok(
+    toolMsg.content[0].text.includes('nope'),
+    `错误里要指明是哪个工具，实际 ${toolMsg.content[0].text}`
+  );
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE, '未知工具不终止整轮');
 });
-test.skip('页面类工具结果用 untrusted_page_content 包装', async () => {}, {
+
+test('工具抛错不终止循环，转成错误结果让模型自纠', async () => {
+  const tool = {
+    ...echoTool,
+    execute: async () => {
+      throw new Error('boom');
+    },
+  };
+  const h = makeAgent([toolCallStream('echo', {}), piStream('好的')], {
+    tools: [tool],
+  });
+  const doneEv = await send(h);
+
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE, '工具失败不终止整轮');
+  assert.equal(h.streamFn.calls.length, 2, '出错后仍应继续问一轮');
+  const toolMsg = h.streamFn.calls[1].context.messages.find(
+    (m) => m.role === 'toolResult'
+  );
+  assert.equal(
+    toolMsg.isError,
+    true,
+    'isError 必须为真，否则模型把失败读成成功'
+  );
+  assert.ok(toolMsg.content[0].text.includes('boom'));
+});
+
+test('一条消息里多个互不依赖的工具被并发执行', async () => {
+  const order = [];
+  const slow = {
+    ...echoTool,
+    name: 'slow',
+    execute: async () => {
+      order.push('slow-start');
+      await new Promise((r) => {
+        setTimeout(r, 30);
+      });
+      order.push('slow-end');
+      return 'slow done';
+    },
+  };
+  const fast = {
+    ...echoTool,
+    name: 'fast',
+    execute: async () => {
+      order.push('fast');
+      return 'fast done';
+    },
+  };
+  const multi = piStream(
+    [
+      { type: 'toolCall', id: 'call-1', name: 'slow', arguments: {} },
+      { type: 'toolCall', id: 'call-2', name: 'fast', arguments: {} },
+    ],
+    { stopReason: 'toolUse' }
+  );
+
+  const h = makeAgent([multi, piStream('好的')], { tools: [slow, fast] });
+  await send(h);
+
+  assert.deepEqual(
+    order,
+    ['slow-start', 'fast', 'slow-end'],
+    `并发时 fast 应在 slow 结束前完成，实际 ${order.join(',')}`
+  );
+});
+
+// ── 票 03~04：不可信包装与确认门 ──
+
+test.skip('工具结果按 untrusted 包装后回到对话', async () => {}, {
   skip: '票 03',
 });
-test.skip('非页面类工具用 untrusted_tool_result 包装', async () => {}, {
+test.skip('页面类工具结果用 untrusted_page_content 包装', async () => {}, {
   skip: '票 03',
 });
 test.skip('旧的页面快照在下一步被压成占位符（elide）', async () => {}, {
   skip: '票 03',
 });
-test.skip('结构化返回被解包：payload 当正文、内层 error 升级', async () => {}, {
-  skip: '票 02',
-});
-
-// ── 以下属于票 02~04 的范围，票 01 不做。skip 里写明等哪张票。──
+test.skip('写类工具必须经过确认', async () => {}, { skip: '票 04' });
+test.skip('用户拒绝时工具绝不能执行', async () => {}, { skip: '票 04' });
 
 test.skip('工具调用不无限循环（MAX_STEPS 兜底）', async () => {}, {
   skip: 'B9 第 1 项：本次不做步数上限。pi 无内置等价物，若将来补用 finishTurn',
-});
-
-test.skip('未知工具报明确错误并列出可用工具', async () => {}, {
-  skip: '票 02',
-});
-
-test.skip('工具抛错不终止循环，转成观察值让模型自纠', async () => {}, {
-  skip: '票 02',
 });
 
 test('LLM 报错时发 ERROR 事件，且 send 返回 ERROR 而非 DONE', async () => {

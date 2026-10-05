@@ -25,6 +25,7 @@ import {
   errorEvent,
   toolError,
 } from './events';
+import { toAgentTools } from './tools/adapter';
 import { noopLog } from './log';
 
 /** 一轮里最多来回多少次工具调用，防止模型卡在工具循环里。 */
@@ -161,9 +162,6 @@ export function createAgent(deps) {
     streamFn,
     model,
     promptFacts = () => ({}),
-    // 下面这些是后续票的接线点，票 01 只声明不消费 ——
-    // 提前消费会让人以为工具路径已经通了（而它并没有）。
-    // eslint-disable-next-line no-unused-vars
     tools = [],
     // wrapUntrusted 由装配层注入（import 自 untrusted.js）。
     // 迁移期若未注入，工具路径会因缺它而抛错 —— 这正是想要的行为（见 T-55）。
@@ -171,7 +169,6 @@ export function createAgent(deps) {
     buildUserMessage = ({ userText }) => userText,
     // eslint-disable-next-line no-unused-vars
     requestConfirmation = async () => ({ approved: false }),
-    // eslint-disable-next-line no-unused-vars
     toolCtx = {},
     // eslint-disable-next-line no-unused-vars
     preStepNotice,
@@ -236,7 +233,9 @@ export function createAgent(deps) {
       initialState: {
         systemPrompt,
         model,
-        tools: [],
+        // 票 02：工具经适配层注册。ticket 04 在beforeToolCall 接确认门，
+        // 票 03 在 afterToolCall 落不可信包装。
+        tools: toAgentTools(tools, { toolCtx }),
       },
       streamFn,
     });
@@ -245,6 +244,11 @@ export function createAgent(deps) {
   }
 
   return {
+    /** pi Agent 的只读状态快照（票 02 起有用：票 04 的确认门要读 tools 上的 class）。 */
+    getState() {
+      return piAgent ? piAgent.state : null;
+    },
+
     /**
      * 发一轮对话。
      *
