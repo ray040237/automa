@@ -1,10 +1,10 @@
 # 06: 预检与插话改接 pi 的注入点
 
+**Status:** ✅ 已完成（2026-10-05）—— 全量 **402 tests / 391 pass / 0 fail / 11 skipped**
+
 **What to build:** 每步开工前的环境预检通知照旧送达模型（tab 还在吗、页面 origin 漂移了吗）；任务进行中用户补充的插话照旧在下一步开工前送达。两者都作为 **user 角色**进对话。
 
 **Blocked by:** 01 — pi 运行时骨架
-
-**Status:** ready-for-agent
 
 ## 验收标准
 
@@ -26,3 +26,34 @@
 **术语上最容易搞错的地方**：项目里有个标签叫「untrusted_system_notice」，它的「system」指的是「这条事实由系统侧产生」，不是「用 system 角色发送」。现状设计（通知走 user 角色）是对的，迁移时要保持。
 
 位置差异不是 bug，是如实记录。语义等价（都是下一轮开工前送达），但写进事件契约测试时要按新位置断言。
+
+---
+
+## 完成记录（2026-10-05）
+
+**注入点选 `transformContext`。** 这是我实测后做的决定，值得写下来：
+
+先试了 `getSteeringMessages`（构造参数里的回调），但 Agent 无条件覆盖它成自己的队列实现（`agent.js:331`），传进去会被静默丢掉 —— 实测确认。
+
+`Agent.steer()` 可以用，但它把消息**持久进 transcript**，而预检通知是「当次请求的提醒」，不该永久占 Context。`transformContext` 是 pi 每次LLM 请求前调用的纯函数，产物只用于当次请求、不写回 `state.messages` —— 语义恰好等于「在 wire 里注入一条 user 消息」，与现状的注入方式对齐。
+
+**红线第 1 条的测试（4 条）**：
+
+- 预检通知以 user 角色进模型上下文，且 SYSTEM_NOTICE 事件被发出
+- **通知/插话绝不以 system 角色出现** —— 专门断言：上下文里任何 `role:'system'` 的消息都不含通知文本。pi 把后续 system 消息并进 system prompt 首部，那是「不可信变可信」的路径
+- 通知经 `untrusted_system_notice` 包装，插话经 `untrusted_user_message` 包装
+- 注入只进当次请求：`agent.state.messages` 里**没有**未信融的通知和插话（留一条钉住，防止未来的人改成持久注入）
+
+**`drainInstructions` 的语义**：旧实现是「每步开工前 drain 一次」，新实现在 `transformContext` 里调，效果一样（每次 LLM 请求前调一次，产出只用于当次）。多条插话一次注入。`Agent.steer()` 在代码里没用 —— 因为它的持久化语义不对。
+
+**失败语义保持不变**：预检抛错不杀整轮，插话通道抛错不挡轮。已钉两条测试。
+
+### 顺带踩到的一个测试坑
+
+断言「通知不进 system 角色」时，不能用「目标页」这个词来过滤 ——
+`buildSystemPrompt` 里允许的「目标页与标签页」段落含同一个词，会把
+合法的 system 消息误判成违规。改成用通知的独有文本（"目标页已导航"）过滤。
+
+### 没做
+
+`preStepNotice` 里的去重逻辑（`lastNoticeKey`）在 `index.js` 装配层，本票没动。新路径下它依然按 step 维度判重 —— step 计数从第一次请求开始。

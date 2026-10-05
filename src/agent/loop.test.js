@@ -152,6 +152,8 @@ function makeAgent(turns, opts = {}) {
     requestConfirmation:
       opts.requestConfirmation || (async () => ({ approved: true })),
     log: opts.log,
+    preStepNotice: opts.preStepNotice,
+    drainInstructions: opts.drainInstructions,
   });
   return { agent, streamFn, events, onEvent: (e) => events.push(e) };
 }
@@ -884,24 +886,145 @@ test.skip(
 );
 
 /* ---------------- P2 预检通知 / P3 插话（票 06） ---------------- */
-// 三条都等票 06 —— 那是红线第1 条（通知绝不进 system 角色）所在，
-// 现在接上去等于在中间态里把最危险的一条做半。
 
-test.skip(
-  'preStepNotice 的 notice 作为系统通知入史并对模型可见',
-  async () => {},
-  {
-    skip: '票 06：预检改接 pi 的注入点。必须断言 role 是 user 不是 system',
-  }
-);
+test('preStepNotice 的通知以 user 角色注入对话，且是 SYSTEM_NOTICE 事件', async () => {
+  const h = makeAgent([piStream('ok')], {
+    preStepNotice: async () => '目标页已导航到别处',
+  });
+  await send(h);
 
-test.skip('preStepNotice 抛错不炸整轮', async () => {}, { skip: '票 06' });
+  // 1. UI 会看到一条 system-notice 事件
+  const notice = h.events.find((e) => e.kind === AGENT_EVENTS.SYSTEM_NOTICE);
+  assert.ok(notice, '必须对外发 SYSTEM_NOTICE 事件');
+  assert.ok(
+    notice.wire.includes('<untrusted_system_notice>'),
+    'notice 必须经不可信包装'
+  );
 
-test.skip('drainInstructions 的插话作为用户消息注入下一步', async () => {}, {
-  skip: '票 06：插话改走 Agent.steer()（构造参数里的回调会被 pi 覆盖）',
+  // 2. 模型拿到的必须是 role:'user' 的消息 —— **不是** role:'system'。
+  // pi 在 OpenAI 兼容端点上默认把后续 system 消息并进 system prompt 首部，
+  // 那会把不可信内容永久提升为可信指令。这是红线第 1 条。
+  const ctx = h.streamFn.calls[0].context.messages;
+  const injected = ctx.find(
+    (m) =>
+      m.role === 'user' && JSON.stringify(m.content).includes('目标页已导航')
+  );
+  assert.ok(injected, '通知必须进模型上下文');
+  assert.equal(injected.role, 'user', '通知必须是 user 角色，不能是 system');
+  const sysWithNotice = ctx.filter(
+    (m) =>
+      m.role === 'system' && JSON.stringify(m.content).includes('目标页已导航')
+  );
+  assert.deepEqual(
+    sysWithNotice,
+    [],
+    '预检通知绝不能出现在 system 角色里（buildSystemPrompt 里允许的「目标页」是另一回事，本条只查通知文本）'
+  );
 });
 
-test.skip('插话通道抛错不炸整轮', async () => {}, { skip: '票 06' });
+test('preStepNotice 抛错不炸整轮', async () => {
+  const h = makeAgent([piStream('ok')], {
+    preStepNotice: async () => {
+      throw new Error('tabs.get exploded');
+    },
+  });
+  const doneEv = await send(h);
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE, '预检是 advisory，失败不挡轮');
+  assert.equal(
+    h.events.filter((e) => e.kind === AGENT_EVENTS.SYSTEM_NOTICE).length,
+    0
+  );
+});
+
+test('drainInstructions 的插话以 user 角色注入，且标明是任务中插话', async () => {
+  let drained = false;
+  const h = makeAgent([piStream('ok')], {
+    drainInstructions: () => {
+      if (drained) return [];
+      drained = true;
+      return ['顺便把价格也抓一下'];
+    },
+  });
+  await send(h);
+
+  const inj = h.events.find(
+    (e) => e.kind === AGENT_EVENTS.USER_MESSAGE && e.text.includes('价格')
+  );
+  assert.ok(inj, '插话必须对外发 USER_MESSAGE 事件');
+  assert.ok(inj.wire.includes('任务进行中插话'), '要标明是任务中插话');
+
+  const ctx = h.streamFn.calls[0].context.messages;
+  const injected = ctx.find(
+    (m) => m.role === 'user' && JSON.stringify(m.content).includes('价格')
+  );
+  assert.ok(injected, '插话必须进模型上下文');
+  assert.equal(injected.role, 'user', '插话必须是 user 角色');
+});
+
+test('drainInstructions 连续多次返回都会逐条注入并 drain 清空', async () => {
+  let round = 0;
+  const h = makeAgent([piStream('ok')], {
+    drainInstructions: () => {
+      round += 1;
+      return round === 1 ? ['第一条', '第二条'] : [];
+    },
+  });
+  await send(h);
+
+  const injected = h.streamFn.calls[0].context.messages.filter(
+    (m) =>
+      m.role === 'user' && JSON.stringify(m.content).includes('任务进行中插话')
+  );
+  assert.equal(injected.length, 2, '两条都要注入');
+  const texts = injected.map((m) => JSON.stringify(m.content));
+  assert.ok(
+    texts[0].includes('第一条') && texts[1].includes('第二条'),
+    texts.join('|')
+  );
+});
+
+test('插话通道抛错不炸整轮', async () => {
+  const h = makeAgent([piStream('ok')], {
+    drainInstructions: () => {
+      throw new Error('queue exploded');
+    },
+  });
+  const doneEv = await send(h);
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE);
+});
+
+test('通知与插话都经 untrusted 包装，且不出现在 transcript 里（只有用户/助手/工具消息持久）', async () => {
+  const h = makeAgent([piStream('ok')], {
+    preStepNotice: async () => '目标页漂移',
+    drainInstructions: () => ['看看 footer'],
+  });
+  await send(h);
+
+  const ctx = h.streamFn.calls[0].context.messages;
+  const noticeMsg = ctx.find(
+    (m) =>
+      m.role === 'user' &&
+      JSON.stringify(m.content).includes('untrusted_system_notice')
+  );
+  const injMsg = ctx.find(
+    (m) =>
+      m.role === 'user' &&
+      JSON.stringify(m.content).includes('untrusted_user_message')
+  );
+  assert.ok(noticeMsg, '通知必须包在 untrusted_system_notice 里');
+  assert.ok(injMsg, '插话必须包在 untrusted_user_message 里');
+
+  // 注入的内容只用于当次请求，不应累积进持久 transcript
+  // （pi 的 state.messages 只存真正的用户/助手/工具消息）
+  const persisted = h.agent
+    .getState()
+    .messages.filter(
+      (m) =>
+        JSON.stringify(m.content).includes('untrusted_system_notice') ||
+        JSON.stringify(m.content).includes('untrusted_user_message')
+    );
+  assert.equal(persisted.length, 0, '持久 transcript 里不该出现注入的通知');
+});
 
 test('usage 累计到 done 事件', async () => {
   // 数据源从provider 的 usage chunk 换成 pi 的末条assistant 消息

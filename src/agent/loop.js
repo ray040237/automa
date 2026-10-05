@@ -171,9 +171,9 @@ export function createAgent(deps) {
     // 票 04：写类/未知工具的确认门，默认拒绝（得显式调用方放行才过）
     requestConfirmation = async () => ({ approved: false }),
     toolCtx = {},
-    // eslint-disable-next-line no-unused-vars
+    // 票 06：预检通知与插话队列。注入点是 transformContext（每次请求前
+    // 调用，产物只用于当次请求、不写回 transcript）。
     preStepNotice,
-    // eslint-disable-next-line no-unused-vars
     drainInstructions,
     systemPromptOverride,
     log = noopLog,
@@ -199,6 +199,8 @@ export function createAgent(deps) {
   let history = [];
   /** 本轮中止控制器 */
   let controller = null;
+  /** 本轮的请求序号，喂给 preStepNotice（它按 step 判重） */
+  let stepCounter = 0;
 
   /**
    * 被确认门拒绝的工具调用：toolCallId -> 拒绝原因。
@@ -271,10 +273,76 @@ export function createAgent(deps) {
         tools: toAgentTools(tools, { toolCtx, wrapUntrusted }),
       },
       streamFn,
+      // 票 06：预检通知与插话队列。注入点选 transformContext ——
+      // pi 每次 LLM 请求前调用它，产物只用于当次请求、**不写回 transcript**。
+      // 这样通知期后模型能看到，但不会进持久历史（persist 的只是用户/助手/工具消息），
+      // 与现状「通知进 wire 不进 transcript」的语义一致。
+      //
+      // 红线：注入的通知**必须是 user 角色**，绝不能用 system ——
+      // pi 在 OpenAI 兼容端点上默认把后续 system 消息并进 system prompt 首部，
+      // 那会把不可信内容永久提升为可信系统指令。
+      transformContext: async (messages) => {
+        const step = stepCounter;
+        stepCounter += 1;
+
+        const extra = [];
+
+        if (preStepNotice) {
+          try {
+            const notice = await preStepNotice({ step });
+            if (notice) {
+              const wrapped = wrapUntrusted('untrusted_system_notice', notice);
+              const ev = {
+                kind: AGENT_EVENTS.SYSTEM_NOTICE,
+                text: notice,
+                wire: wrapped,
+              };
+              record(ev);
+              if (currentEmit) currentEmit(ev);
+              extra.push({
+                role: 'user',
+                content: wrapped,
+                timestamp: Date.now(),
+              });
+            }
+          } catch {
+            // 预检失败不能杀掉整轮 —— 与 promptFacts 降级同一原则
+          }
+        }
+
+        if (drainInstructions) {
+          try {
+            (drainInstructions() || []).forEach((t) => {
+              const text = String(t || '').trim();
+              if (!text) return;
+              const wrapped = wrapUntrusted(
+                'untrusted_user_message',
+                '[用户在任务进行中插话] ' + text
+              );
+              const ev = {
+                kind: AGENT_EVENTS.USER_MESSAGE,
+                text,
+                wire: wrapped,
+              };
+              record(ev);
+              if (currentEmit) currentEmit(ev);
+              extra.push({
+                role: 'user',
+                content: wrapped,
+                timestamp: Date.now(),
+              });
+            });
+          } catch {
+            // 插话通道坏了也一样不能挡轮
+          }
+        }
+
+        return extra.length ? [...messages, ...extra] : messages;
+      },
       beforeToolCall: async ({ toolCall, args }) => {
-        // ADR 0002 的闸：class 决定要不要用户裁决。read 免确认，
-        // write 与**未知工具**一律要确认。未知工具按「保守方向倒」处理 ——
-        // 不认识的一律当需要确认，宁可多问一次，也不把写操作变成免确认。
+        // 红线第 3 条（ADR 0002 的闸）：class 决定要不要用户裁决。
+        // read 免确认，write 一律要确认。
+        // （未知工具 pi 内部走短路，不会到这 —— 已知退化，见票 04 完成记录）
         const tool = tools.find((t) => t.name === toolCall.name);
         if (tool && tool.class === 'read') return undefined;
 
@@ -346,6 +414,7 @@ export function createAgent(deps) {
 
       // 跨轮续接：历史重置为调用方给的上轮历史
       history = [...(params.initialHistory || [])];
+      stepCounter = 0;
 
       const startEv = { kind: AGENT_EVENTS.START };
       record(startEv);
