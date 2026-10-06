@@ -4,8 +4,12 @@ import {
   escapeUntrustedWrappers,
   escapeWrapperAttribute,
   wrapUntrusted,
+  stripUntrustedForDisplay,
   UNTRUSTED_WRAPPER_TAGS,
 } from './untrusted';
+
+// 换行：写成字面量会在复制粘贴时静默变形，这里显式构造
+const NL = String.fromCharCode(10);
 
 test('空值与非字符串输入安全返回空串', () => {
   assert.equal(escapeUntrustedWrappers(''), '');
@@ -136,4 +140,74 @@ test('wrapUntrusted 拒绝未知标签（防止打错标签后内容裸奔）', 
 
 test('标签清单就是文档约定的 8 个（含 system_notice 与 compaction_summary）', () => {
   assert.equal(UNTRUSTED_WRAPPER_TAGS.length, 8);
+});
+test('T-07：展示层反包装剥掉外层标签，正文原样留下', () => {
+  const wrapped = wrapUntrusted(
+    'untrusted_page_content',
+    '正文 A' + NL + '正文 B'
+  );
+
+  assert.equal(stripUntrustedForDisplay(wrapped), '正文 A' + NL + '正文 B');
+});
+
+test('T-07：白名单里的每个标签都剥得掉（含带属性的开标签）', () => {
+  const leftover = UNTRUSTED_WRAPPER_TAGS.filter((tag) =>
+    stripUntrustedForDisplay(`<${tag}>x</${tag}>`).includes(tag)
+  );
+
+  assert.deepEqual(leftover, [], '有标签剥不掉：' + leftover.join(','));
+
+  const withAttr = stripUntrustedForDisplay(
+    `<untrusted_tab_metadata url="a" title="b">x</untrusted_tab_metadata>`
+  );
+  assert.equal(withAttr, 'x', '带属性的开标签也要剥掉');
+});
+
+test('T-07：非白名单的尖括号字面量不动（别把第三方内容当包装剥）', () => {
+  assert.equal(stripUntrustedForDisplay('<div>hi</div>'), '<div>hi</div>');
+  assert.equal(
+    stripUntrustedForDisplay('<script>x</script>'),
+    '<script>x</script>'
+  );
+});
+
+test('T-07：截断注记可换成人话，不给 noteText 时原样保留', () => {
+  const obs =
+    '<untrusted_page_content>' +
+    NL +
+    '正文' +
+    NL +
+    '[note: 观察值超预算已截断，需要更细的信息请换更精确的参数重新调用。]' +
+    NL +
+    '</untrusted_page_content>';
+
+  assert.equal(
+    stripUntrustedForDisplay(obs, { noteText: '（已截断）' }),
+    '正文' + NL + '（已截断）'
+  );
+
+  const kept = stripUntrustedForDisplay(obs);
+  assert.match(kept, /\[note: /, '没给 noteText 时注记应原样保留');
+  assert.ok(!kept.includes('untrusted_page_content'), '标签仍要剥掉');
+
+  // truncateObservation 嵌在正文里的那种形态也要认
+  assert.equal(
+    stripUntrustedForDisplay('[truncated: 超出 8000 字符，已截断]x', {
+      noteText: 'N',
+    }),
+    'Nx'
+  );
+});
+
+test('T-07：非字符串与空值返回空串；重复剥是幂等的', () => {
+  assert.equal(stripUntrustedForDisplay(''), '');
+  assert.equal(stripUntrustedForDisplay(null), '');
+  assert.equal(stripUntrustedForDisplay(undefined), '');
+  assert.equal(stripUntrustedForDisplay(42), '');
+  assert.equal(stripUntrustedForDisplay({ a: 1 }), '');
+
+  const once = stripUntrustedForDisplay(
+    wrapUntrusted('untrusted_tool_result', 'a')
+  );
+  assert.equal(stripUntrustedForDisplay(once), once, '剥两次结果应当相同');
 });

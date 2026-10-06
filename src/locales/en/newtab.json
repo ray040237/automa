@@ -251,7 +251,8 @@
       "backup": "Backup Workflows",
       "editor": "Editor",
       "shortcuts": "Shortcuts",
-      "about": "About"
+      "about": "About",
+      "agent": "AI Assistant"
     },
     "backupWorkflows": {
       "title": "Local Backup",
@@ -344,22 +345,98 @@
     },
     "agent": {
       "title": "AI assistant",
-      "description": "The assistant reads the page you are looking at and helps you build workflows and write JavaScript. It talks to the model service configured here — your own key, your own endpoint.",
-      "provider": "Model provider",
+      "goto": "Open assistant settings",
+      "currentInUse": "In use:",
+      "nextTurnTakesEffect": "changes take effect on your next message",
+      "unnamed": "(unnamed)",
+      "addConnection": "Add connection",
+      "deleteConnection": "Delete connection",
+      "deleteConnectionConfirm": "Delete the connection \"{name}\"? Its key and models are removed too.",
+      "deleteConnectionConfirmActive": "\"{name}\" is the one in use right now. Delete it? The assistant falls back to another connection.",
+      "inUse": "In use",
+      "setAsCurrent": "Use this one",
+      "useThis": "Use this",
+      "modelCount": "{n} models",
+      "name": "Name",
+      "namePlaceholder": "e.g. Work proxy",
+      "template": "Template",
       "baseUrl": "API endpoint",
-      "model": "Model",
-      "modelPlaceholder": "Type the model name, e.g. gpt-4o-mini",
       "apiKey": "API key",
-      "apiKeySet": "Saved — type to replace",
+      "apiKeySet": "Saved",
       "clearKey": "Forget this key",
-      "privacy": "When you use the assistant, the text and structure of the target page are sent to the endpoint above — a third-party service. Do not use pages containing personal or confidential information.",
-      "saved": "Saved",
-      "modelParams": "Model parameters",
+      "models": "Models",
+      "addModelManually": "Model name",
+      "modelPlaceholder": "e.g. gpt-4o-mini",
+      "modelNameRequired": "Enter a model name first",
+      "modelExists": "\"{id}\" is already in this connection.",
+      "add": "Add",
+      "fetchModels": "Fetch available models",
+      "fetching": "Fetching…",
+      "fetch": {
+        "badUrl": "Fill in an http:// or https:// endpoint first.",
+        "keyRejected": "The endpoint rejected the key (HTTP {status}). Check the key and try again.",
+        "notSupported": "This endpoint has no /models list (HTTP 404). Type the model name below instead.",
+        "httpError": "The endpoint answered with HTTP {status}.",
+        "unknownShape": "The endpoint replied, but the body is not a model list this page understands. Type the model name below instead.",
+        "network": "Could not reach the endpoint: {msg}"
+      },
+      "picker": {
+        "title": "Available models",
+        "empty": "The endpoint returned an empty list.",
+        "addSelected": "Add selected ({n})"
+      },
       "contextWindow": "Context window (tokens)",
-      "contextWindowHint": "Max tokens your model can read in one call. Past it, earlier turns are compressed into a summary (never deleted — you can still scroll back). Switching provider fills in a suggested value; keep it if unsure.",
       "maxTokens": "Max output tokens (per reply)",
-      "maxTokensPlaceholder": "Leave empty for no limit",
-      "maxTokensHint": "Cap on a single reply. Leave empty to use the endpoint default — a low cap cuts long replies off mid-sentence."
+      "maxTokensPlaceholder": "No limit",
+      "privacy": "When you use the assistant, the text and structure of the target page are sent to the endpoint above — a third-party service. Do not use pages containing personal or confidential information.",
+      "saveAllHint": "Saving writes every connection on this page.",
+      "saved": "Saved",
+      "instructions": {
+        "title": "Custom instructions",
+        "enabled": "Enabled",
+        "hint": "Persistent guidance for the assistant, attached to every turn (like an AGENTS.md). Changes take effect on your next message.",
+        "placeholder": "e.g. Keep answers concise; prefer data-testid attributes in selectors; reply in Chinese…",
+        "charCount": "{n} characters",
+        "overLimit": "Over {limit} characters — the whole text is attached to every request and inflates token cost. Consider trimming it."
+      },
+      "commands": {
+        "title": "Slash commands",
+        "add": "Add command",
+        "hint": "Type / in the assistant's input box to pick one. Picking replaces the whole input; you can still edit before sending.",
+        "name": "Name",
+        "description": "Description (shown in the picker)",
+        "body": "Content",
+        "edit": "Edit",
+        "empty": "No commands yet. Save frequent prompts here and bring them up with /."
+      },
+      "skills": {
+        "title": "Skills",
+        "add": "Add skill",
+        "hint": "Reusable know-how the assistant loads on demand: the system prompt only carries a one-line summary; when a task matches, the assistant reads the full text with the read_skill tool. Import .md or .zip skill folders from the pi / Claude Code ecosystem.",
+        "name": "Name",
+        "description": "Summary (one line in the system prompt index)",
+        "body": "Content (SKILL.md)",
+        "fileCount": "{n} attached files",
+        "exportOne": "Export",
+        "edit": "Edit",
+        "empty": "No skills yet. Import a skill folder (.zip / .md) or write one yourself.",
+        "importMd": "Import .md",
+        "importZip": "Import skill .zip",
+        "exportBackup": "Export backup",
+        "importBackup": "Import backup",
+        "backupExported": "Backup exported: automa-agent-backup.zip (skills + slash commands + custom instructions).",
+        "backupImported": "Backup imported.",
+        "importMdDone": "Imported from {name}:",
+        "importZipDone": "Imported from {name}:",
+        "importMerged": "{added} added, {updated} updated (merged by name).",
+        "commandsMerged": "Slash commands merged: {n}.",
+        "instructionsImported": "Custom instructions imported (they were empty before).",
+        "instructionsKept": "Your current custom instructions were kept (backup would overwrite them).",
+        "warnBody": "Body exceeds {limit} characters — read_skill output gets truncated there, the model would read a partial skill.",
+        "warnTotal": "Total size (body + attached files) exceeds {limit} KB — consider splitting this skill.",
+        "warnDescription": "Summary is {n} characters (over {limit}) — it is attached to every request. Consider trimming it.",
+        "warnIndex": "Enabled skill summaries exceed {limit} characters in total — they live in every system prompt. Consider disabling some skills."
+      }
     }
   },
   "workflow": {
@@ -673,15 +750,21 @@
       "thinkingResult": "Thought process",
       "compacted": "Earlier conversation compacted ({n} turns)",
       "scrollToBottom": "Jump to latest",
-      "placeholder": "Ask about the current page: where is the search box, how do I scrape this list…",
-      "empty": "Ask me about the page you're looking at. I can read its real structure and write a selector or a block for you.",
+      "placeholder": "Ask about this page…",
+      "empty": "No messages yet",
       "noTarget": "No readable page selected",
       "pickTab": {
         "title": "Pick a page",
         "loading": "Reading tabs…",
-        "empty": "No page can be read yet. Open a normal webpage first (extension and chrome:// pages can't be read).",
+        "empty": "Open a normal webpage first",
         "mainWindow": "Main window",
-        "window": "Window {n}"
+        "window": "Window {n}",
+        "pinned": "pinned",
+        "auto": "auto",
+        "staleClosed": "Target page closed",
+        "staleDrift": "Target page navigated away",
+        "reselect": "Re-select",
+        "faviconAlt": "Site icon"
       },
       "copy": "Copy",
       "copied": "Copied",
@@ -691,7 +774,8 @@
         "ok": "done",
         "error": "failed",
         "rejected": "declined",
-        "running": "running"
+        "running": "running",
+        "truncatedNote": "(too long — only the beginning is shown here)"
       },
       "config": {
         "title": "Assistant settings",
@@ -722,11 +806,10 @@
         "canvasUpdateTitle": "Update node {nodeId} on the canvas",
         "canvasHint": "Changes the in-memory canvas only and never saves it — check it, then save yourself."
       },
-      "notConfiguredHint": "Configure an API first — the assistant reads the page through your own model provider, so it needs an API key.",
       "goSettings": "Go to settings",
       "interject": "Add",
       "stop": "Stop generating",
-      "queued": "Queued — it will be delivered before the next step of the running task",
+      "queued": "Queued",
       "usage": "Session token usage: {in} in / {out} out",
       "session": {
         "new": "New chat",
@@ -735,8 +818,26 @@
         "untitled": "Untitled chat",
         "empty": "No conversations yet",
         "deleteConfirmTitle": "Delete this chat?",
-        "deleteConfirmBody": "This permanently deletes \"{title}\" and every message in it. This can't be undone."
-      }
+        "deleteConfirmBody": "This permanently deletes \"{title}\" and every message in it. This can't be undone.",
+        "busyHint": "The assistant is still working — switching or deleting sessions is unavailable"
+      },
+      "errorKind": {
+        "config": "Configuration",
+        "network": "Network",
+        "provider": "Model provider",
+        "tool": "Tool failed",
+        "noTargetTab": "No target page",
+        "internal": "Assistant internal error"
+      },
+      "errorDetail": {
+        "retry": "Retry",
+        "copyDetail": "Copy details",
+        "copyFailed": "Copy failed",
+        "detailTitle": "Assistant error details",
+        "kindField": "Kind",
+        "timeField": "Time"
+      },
+      "aborted": "Generation stopped."
     }
   },
   "collection": {

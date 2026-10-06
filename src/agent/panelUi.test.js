@@ -298,6 +298,50 @@ test('守卫：图标名必须存在于项目白名单 vRemixicon.js', () => {
   );
 });
 
+test('守卫：从 v-remixicon import 的图标名都必须是上游真有的', () => {
+  // 本地白名单只证明「我们 import 了它」，**不证明上游有这个图标**。
+  // v-remixicon@0.1.4 的图标集比记忆里的 RemixIcon 旧：riSparklingLine /
+  // riCheckCircleLine 都不在里面，但只要在 src/lib/vRemixicon.js 里写上一行
+  // import，v-remixicon 照样安静地把它们渲染成空 SVG（控制台只有一条
+  // 「name of the icon is incorrect」）。上一个守卫（.vue 引用 ⊆ 本地白名单）
+  // 对这个洞**完全无感** —— 两处一拼就放行了。这是 2026-10-06 真踩的一次。
+  //
+  // 只查 import 块：icons 映射里还有一批**内联手抄的 SVG path**（riKey、
+  // mdi*），它们本来就不来自上游，全文件扫会把它们误报成「上游没有」。
+  const lib = stripComments(
+    readFileSync(join(ROOT, 'src/lib/vRemixicon.js'), 'utf8')
+  );
+  const importBlock = lib.match(
+    /import\s*\{([\s\S]*?)\}\s*from\s*'v-remixicon\/icons'/
+  );
+
+  assert.ok(importBlock, '没找到 v-remixicon/icons 的 import 块，守卫本身失效');
+
+  const declared = new Set(
+    [...importBlock[1].matchAll(/\bri[A-Z][A-Za-z0-9]*/g)].map((m) => m[0])
+  );
+  assert.ok(declared.size > 100, 'import 块解析异常，守卫本身失效');
+
+  const upstream = stripComments(
+    readFileSync(join(ROOT, 'node_modules/v-remixicon/icons.js'), 'utf8')
+  );
+  const exists = new Set(
+    [...upstream.matchAll(/export const (ri[A-Za-z0-9]+)/g)].map((m) => m[1])
+  );
+  assert.ok(exists.size > 500, '上游 icons.js 解析异常，守卫本身失效');
+
+  const missing = [...declared].filter((n) => !exists.has(n));
+
+  assert.deepEqual(
+    missing,
+    [],
+    [
+      '这些名字在 src/lib/vRemixicon.js 里 import 了，但 v-remixicon 上游没有，加了也只会渲染成空 SVG：',
+      ...missing,
+    ].join('\n')
+  );
+});
+
 test('守卫：全仓 .vue 引用的图标名必须在白名单里', () => {
   // T-87/T-88：先用 agent 局部守卫不够 —— 全仓另有 3 处引用了没被 provide 的图标
   // （riSparklingLine ×2 / riDragMoveLine / riListUnordered），局部守卫完全看不到。
@@ -372,5 +416,389 @@ test('守卫：面板只能读 agentHost 真实暴露的字段', () => {
     [],
     'AgentPanel 读了 agentHost 不存在的字段（运行时恒为 undefined）：' +
       bad.join(', ')
+  );
+});
+
+// —— T-81a：/ 模板菜单的接线守卫 ——
+
+test('T-81a 守卫：面板的 / 菜单必须走 customizations 的纯函数，不许就地重写解析', () => {
+  const src = stripComments(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
+  );
+
+  assert.match(
+    src,
+    /import\s*\{[^}]*parseSlashDraft[^}]*\}\s*from\s*'@\/agent\/customizations'/,
+    '触发解析必须用 parseSlashDraft（有单测），在面板里手写正则会漂移'
+  );
+  assert.match(
+    src,
+    /filterCommands/,
+    '过滤必须用 filterCommands（只回 enabled 且有正文的项）'
+  );
+  assert.match(src, /loadCommands/, '菜单数据来自存储的模板列表');
+});
+
+test('T-81a 守卫：菜单开着时回车必须被路由给菜单，不能直达 send', () => {
+  const src = stripComments(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
+  );
+
+  // 回归形状：只绑 @keydown.enter.exact.prevent="send" 的话，
+  // 菜单开着按回车会把 "/rev" 当消息发出去，选中操作永远无效。
+  assert.doesNotMatch(
+    src,
+    /@keydown\.enter[^>]+onDraftKeydown|@keydown\.enter\.exact\.prevent="send"/,
+    '回车必须经 onDraftKeydown 统一路由（菜单开 = 选中，菜单关 = 发送）'
+  );
+  assert.match(src, /@keydown="onDraftKeydown"/);
+  assert.match(src, /pickCommand/);
+  assert.match(
+    src,
+    /slashDismissed/,
+    'Esc 关闭后必须能保持关闭（关了又弹等于关不掉）'
+  );
+});
+
+test('T-81a 守卫：选中模板后整框替换 draft', () => {
+  const src = stripComments(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
+  );
+
+  assert.match(
+    src,
+    /draft\.value\s*=\s*c\.body/,
+    '选定模板的语义是「整框替换」，不是追加（追加会留下 /xxx 前缀）'
+  );
+});
+
+test('T-109 守卫：事件流必须有空态，用的文案键两种语言都得在', () => {
+  // 2026-10-06 实测：T-103 删设置页说明段落时把 workflow.agent.empty 一起删掉了，
+  // 键留在 locale 里却没有引用点 —— 新会话的正文区整个空白，连一句提示都没有。
+  const src = stripComments(
+    read('src/components/newtab/workflow/agent/AgentTranscript.vue')
+  );
+
+  assert.match(
+    src,
+    /v-if="items\.length === 0"/,
+    '没有空态分支：items 为空时事件流什么都不渲染，正文区一片空白'
+  );
+  assert.match(
+    src,
+    /t\('workflow\.agent\.empty'\)/,
+    '空态没有引用 workflow.agent.empty（键在 locale 里，但不是死键就是白留）'
+  );
+
+  // 键必须两种语言都在，否则空态渲染出来是裸 key
+  for (const lang of ['zh', 'en']) {
+    const locale = JSON.parse(read(`src/locales/${lang}/newtab.json`));
+    assert.equal(
+      typeof locale.workflow.agent.empty,
+      'string',
+      `${lang}/newtab.json 缺 workflow.agent.empty，空态会渲染成裸 key`
+    );
+    assert.ok(
+      locale.workflow.agent.empty.trim().length > 0,
+      `${lang}/newtab.json 的 workflow.agent.empty 是空串`
+    );
+  }
+});
+
+test('T-13 守卫：事件流是 log 活区，折叠控件都带 aria-expanded', () => {
+  // 2026-10-06 实测：滚动容器只有 class，没有 role / aria-live ——
+  // 读屏软件完全听不到助手新到的回答与工具结果。
+  const src = stripComments(
+    read('src/components/newtab/workflow/agent/AgentTranscript.vue')
+  );
+
+  for (const attr of [
+    'role="log"',
+    'aria-live="polite"',
+    'aria-relevant="additions"',
+  ]) {
+    assert.ok(
+      src.includes(attr),
+      `滚动容器缺 ${attr}：事件流对屏幕阅读器不再是活区`
+    );
+  }
+
+  // 两个折叠卡（思考过程 / 压缩摘要）都由 open 状态驱动，必须报出展开与否
+  const expanded = src.match(/:aria-expanded="item\.open"/g) || [];
+  assert.equal(
+    expanded.length,
+    2,
+    '折叠按钮必须恰好两处带 :aria-expanded="item.open"（思考卡 + 压缩摘要卡）'
+  );
+
+  const tool = stripComments(
+    read('src/components/newtab/workflow/agent/AgentToolStep.vue')
+  );
+  assert.match(
+    tool,
+    /:aria-expanded="expanded"/,
+    '工具卡的展开按钮没报 aria-expanded'
+  );
+});
+
+test('T-13 守卫：工具状态不能只靠颜色 —— 每个状态都得有图标', () => {
+  // 红/绿/琥珀对色觉障碍用户是一条通道；失败（✕）与被拒（⊗）最容易混，
+  // 状态表里的每个取值都必须映射到一个图标。
+  const tool = stripComments(
+    read('src/components/newtab/workflow/agent/AgentToolStep.vue')
+  );
+  const events = read('src/agent/events.js');
+
+  const statusBlock = /export const TOOL_STATUS = \{([\s\S]*?)\n\};/.exec(
+    events
+  );
+  assert.ok(statusBlock, '没解析出 TOOL_STATUS，守卫本身失效');
+  const pairs = [...statusBlock[1].matchAll(/(\w+):\s*'([^']+)'/g)].map((m) => [
+    m[1],
+    m[2],
+  ]);
+  assert.ok(
+    pairs.length >= 5,
+    `TOOL_STATUS 只解析出 ${pairs.length} 个，守卫本身失效`
+  );
+
+  const iconBlock = /const STATUS_ICON = \{([\s\S]*?)\n\};/.exec(tool);
+  assert.ok(
+    iconBlock,
+    'AgentToolStep 里没有 STATUS_ICON 表（状态又退回纯色了）'
+  );
+  const icons = new Set(
+    [...iconBlock[1].matchAll(/TOOL_STATUS\.(\w+)\s*\]/g)].map((m) => m[1])
+  );
+
+  for (const [key] of pairs) {
+    assert.ok(icons.has(key), `状态 ${key} 没有图标，只剩颜色一条区分通道`);
+  }
+
+  // 图标必须真的渲染出来，而不是定义了表不用
+  assert.match(
+    tool,
+    /v-remixicon\s+:name="statusIcon"/,
+    '模板里没渲染 statusIcon'
+  );
+});
+
+test('T-07 守卫：工具卡渲染的是剥过标签的观察值，不是原始 observation', () => {
+  // untrusted_* 标签与 note 截断注记是写给模型看的，直接摊给用户会被当成乱码/漏洞。
+  // 守卫盯两件事：模板绑的是剥离后的 computed，且没有哪处又把原始值绑回去。
+  const tool = stripComments(
+    read('src/components/newtab/workflow/agent/AgentToolStep.vue')
+  );
+
+  assert.match(
+    tool,
+    /stripUntrustedForDisplay\(/,
+    '工具卡没有调用 stripUntrustedForDisplay（untrusted 标签会原样摊给用户）'
+  );
+  assert.match(
+    tool,
+    /displayObservation/,
+    '模板里没有 displayObservation：剥离结果没被用上'
+  );
+  assert.ok(
+    !/\{\{\s*step\.observation\s*\}\}/.test(tool),
+    '模板里仍直接渲染 step.observation —— 等于没剥'
+  );
+});
+
+test('T-08 守卫：目标页条要显示失效态，且监听必须成对摘掉', () => {
+  // 三件不能省的东西：① chip 渲染 state/pinned 并有失效分支；
+  // ② 宿主注册了 tabs.onRemoved/onUpdated；③ 卸载时 removeListener ——
+  // 监听挂在 browser 上不是组件上，漏摘就是泄漏（面板反复开关后重复处理）。
+  const picker = stripComments(
+    read('src/components/newtab/workflow/agent/AgentTabPicker.vue')
+  );
+  assert.match(picker, /stale/, 'chip 没有失效态分支');
+  assert.match(picker, /staleClosed/, 'chip 没有「目标页已关闭」的文案分支');
+  assert.match(picker, /staleDrift/, 'chip 没有「目标页已跳转」的文案分支');
+  assert.match(picker, /pickTab\.pinned/, 'chip 没有「固定 / 自动」的来源徽标');
+  assert.match(picker, /favIconUrl/, 'chip 没有站点图标');
+
+  const host = stripComments(
+    readFileSync(join(ROOT, 'src/composable/agentHost.js'), 'utf8')
+  );
+  for (const ev of ['onRemoved', 'onUpdated']) {
+    assert.match(
+      host,
+      new RegExp(`tabs\\.${ev}\\.addListener`),
+      `宿主没有注册 tabs.${ev}`
+    );
+    assert.match(
+      host,
+      new RegExp(`tabs\\.${ev}\\.removeListener`),
+      `宿主卸载时没有摘掉 tabs.${ev}（挂在 browser 上，漏摘就是泄漏）`
+    );
+  }
+  assert.match(host, /targetHealth/, '宿主没有用 targetHealth 判失效');
+});
+
+test('T-04 守卫：错误独立成类，重试与复制详情都要有，且每个 errorKind 都有文案', () => {
+  const transcript = stripComments(
+    read('src/components/newtab/workflow/agent/AgentTranscript.vue')
+  );
+
+  // ① agent:error 不能再走 notice 通道
+  const errorCase = transcript.match(
+    /case AGENT_EVENTS\.ERROR:[\s\S]{0,400}?return;/
+  );
+  assert.ok(errorCase, '没解析出 ERROR 分支，守卫本身失效');
+  assert.ok(
+    /type:\s*'error'/.test(errorCase[0]),
+    'agent:error 仍被 push 成 notice —— 错误又和预检提示同色了'
+  );
+  assert.ok(
+    !/type:\s*'notice'/.test(errorCase[0]),
+    'ERROR 分支里不该再出现 notice'
+  );
+
+  // ② 三件套：错误图标 / 重试 / 复制详情
+  assert.match(transcript, /riErrorWarningLine/, '错误卡没有图标');
+  assert.match(transcript, /emit\('retry'/, '没有把重试交回宿主');
+  assert.match(transcript, /clipboard\.writeText/, '没有复制详情');
+
+  // ③ events.js 的 ERROR_KIND 每新增一档都得有文案
+  const eventsSrc = readFileSync(join(ROOT, 'src/agent/events.js'), 'utf8');
+  const kindBlock = eventsSrc.match(/ERROR_KIND = \{([\s\S]*?)\n\};/);
+  assert.ok(kindBlock, '没解析出 ERROR_KIND，守卫本身失效');
+  const kinds = [...kindBlock[1].matchAll(/(\w+):\s*'([^']+)'/g)].map(
+    (m) => m[2]
+  );
+  assert.ok(
+    kinds.length >= 6,
+    `ERROR_KIND 只解析出 ${kinds.length} 个，守卫本身失效`
+  );
+  const labelBlock = transcript.match(/ERROR_KIND_LABEL = \{([\s\S]*?)\n\};/);
+  assert.ok(labelBlock, '没解析出 ERROR_KIND_LABEL');
+  const mapped = [...labelBlock[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  const missing = kinds.filter((k) => !mapped.includes(k));
+  assert.deepEqual(
+    missing,
+    [],
+    '这些 errorKind 没有文案，界面上会退成兜底文案：' + missing.join(',')
+  );
+});
+
+test('T-11 守卫：busy 时禁用态要给理由，中止要有回执', () => {
+  // ① 三个禁用控件都必须在 busy 时把 title 换成「为什么点不动」
+  const panel = stripComments(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
+  );
+  assert.match(
+    panel,
+    /host\.busy[\s\S]{0,200}session\.busyHint/,
+    '新建按钮 busy 时没换 title —— 禁用态仍然没有理由'
+  );
+
+  const list = stripComments(
+    read('src/components/newtab/workflow/agent/AgentSessionList.vue')
+  );
+  // 按 :disabled="disabled" 切段：**每一个**禁用控件后面都得紧跟 busyHint。
+  // 数字写死成 3（行主体 + 删除按钮 + 行容器另算）是刻意的 —— 新增禁用控件时
+  // 守卫会失败，逼着同时补上「为什么点不动」。
+  const afterDisabled = list.split(':disabled="disabled"').slice(1);
+  assert.equal(
+    afterDisabled.length,
+    2,
+    `禁用控件数变成 ${afterDisabled.length} 个了，新增禁用控件要一并补 busyHint 理由`
+  );
+  for (const seg of afterDisabled) {
+    assert.match(
+      seg.slice(0, 400),
+      /session\.busyHint/,
+      '有一个 disabled 控件在 busy 时没给理由'
+    );
+  }
+
+  // ② 中止回执：宿主必须看 DONE.aborted 并插一条 system-notice
+  const host = stripComments(
+    readFileSync(join(ROOT, 'src/composable/agentHost.js'), 'utf8')
+  );
+  assert.match(
+    host,
+    /AGENT_EVENTS\.DONE\s*&&\s*ev\.aborted/,
+    '宿主没有读 DONE.aborted —— 中止后没有任何回执'
+  );
+  assert.match(
+    host,
+    /kind:\s*AGENT_EVENTS\.SYSTEM_NOTICE/,
+    '中止回执必须走 system-notice 通道（与入队提示同一条）'
+  );
+});
+
+test('T-52 守卫：工具卡的参数三段链路不许断（事件带 args → 合并保留 → 渲染）', () => {
+  // 这条 bug 的真实成因是**链路**断在中间：事件不带 args 时，卡片里的
+  // <pre> 永远不渲染，而现象只是「参数区是空的」，看着像组件没写。
+  // T-74 方案 B 已经把 args 放进 TOOL_CALL 事件（loop.test.js 钉着），
+  // 但「面板合并时保留 args」与「prettyArgs 非空即渲染」这两段从没有守卫 ——
+  // 少了任一段，卡片又会空回去且没有任何测试变红。
+
+  // ① 事件层：message_end 映射出 TOOL_CALL 时必须带 args
+  const loop = stripComments(read('src/agent/loop.js'));
+  assert.match(
+    loop,
+    /AGENT_EVENTS\.TOOL_CALL[\s\S]{0,120}?args:\s*calls\[0\]\.arguments/,
+    'loop.js 的 TOOL_CALL 映射必须带 args —— 少了它卡片参数恒空'
+  );
+
+  // ② 合并层：TOOL_RESULT 事件本身没有 args，合并时不能把已有 args 抹掉
+  const transcript = stripComments(
+    read('src/components/newtab/workflow/agent/AgentTranscript.vue')
+  );
+  assert.match(
+    transcript,
+    /args:\s*ev\.args\s*!==\s*undefined\s*\?\s*ev\.args\s*:\s*target\.args/,
+    '合并卡片的逻辑必须保留 TOOL_CALL 带进来的 args（ev.args 缺席时回落 target）'
+  );
+
+  // ③ 渲染层：args 非空即渲染参数块
+  const step = stripComments(
+    read('src/components/newtab/workflow/agent/AgentToolStep.vue')
+  );
+  assert.match(step, /const prettyArgs = computed/, '工具卡必须有 prettyArgs');
+  assert.match(
+    step,
+    /<pre v-if="prettyArgs"/,
+    '参数块必须由 prettyArgs 驱动渲染，否则 args 到了也不显示'
+  );
+});
+
+test('守卫：import 清单必须全部注册进 icons 表（半截接线不许存在）', () => {
+  // T-108/T-31：`import` 了但没进 `export const icons` 表，是**半截接线** ——
+  // 组件走 injectIcons[name] === undefined 分支，只在控制台打一行 error 就渲染
+  // 空 SVG（用户看到的是「图标没了」），而两个方向的老守卫都看不见：
+  // ① 「.vue 引用 ⊆ import 清单」看到名字在清单里，放行；
+  // ② 「import ⊆ 上游」也放行。症状恰好是 ESLint 的 no-unused-vars，
+  // 也就是「lint 红了但没人当回事」—— 宁可让 lint 真绿，也不要它长期当摆设。
+  const lib = stripComments(
+    readFileSync(join(ROOT, 'src/lib/vRemixicon.js'), 'utf8')
+  );
+  const importBlock = lib.match(
+    /import\s*\{([\s\S]*?)\}\s*from\s*'v-remixicon\/icons'/
+  );
+  const mapBlock = lib.match(/export const icons = \{([\s\S]*?)\n\};/);
+
+  assert.ok(importBlock, '没找到 import 块，守卫本身失效');
+  assert.ok(mapBlock, '没找到 icons 注册表，守卫本身失效');
+
+  const names = (src) =>
+    new Set([...src.matchAll(/\bri[A-Z][A-Za-z0-9]*/g)].map((m) => m[0]));
+  const declared = names(importBlock[1]);
+  const registered = names(mapBlock[1]);
+  assert.ok(declared.size > 100, 'import 块解析异常，守卫本身失效');
+  assert.ok(registered.size > 50, 'icons 表解析异常，守卫本身失效');
+
+  const missing = [...declared].filter((n) => !registered.has(n));
+  assert.deepEqual(
+    missing,
+    [],
+    [
+      '这些图标 import 了但没注册进 export const icons —— 会静默渲染成空 SVG：',
+      ...missing,
+    ].join('\n')
   );
 });

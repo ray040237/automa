@@ -33,6 +33,9 @@ export function countBlocks(catalog) {
  * @param {Object} params.catalog 块目录
  * @param {Array<Object>} params.tools
  * @param {Array<string>} params.excludeFuncs 要剔掉的补全项（补全里有、运行时没注入的）
+ * @param {string=} params.instructions 用户自定义指令（T-81a）；空串/缺省 = 未配置
+ * @param {Array<{name: string, description: string}>=} params.skills
+ *   技能索引（T-81b，只含启用的）；空数组/缺省 = 不拼索引区
  * @returns {Object}
  */
 export function buildFacts({
@@ -41,6 +44,8 @@ export function buildFacts({
   catalog,
   tools,
   excludeFuncs = [],
+  instructions = '',
+  skills = [],
 }) {
   return {
     automaFuncs: Object.keys(automaFuncs || {}).filter(
@@ -54,5 +59,7 @@ export function buildFacts({
       group: t.group,
       description: t.description,
     })),
+    instructions: String(instructions || ''),
+    skills: Array.isArray(skills) ? skills : [],
   };
 }

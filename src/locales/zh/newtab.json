@@ -251,7 +251,8 @@
       "general": "常规",
       "shortcuts": "快捷键",
       "about": "关于",
-      "profile": "个人资料"
+      "profile": "个人资料",
+      "agent": "AI 助手"
     },
     "backupWorkflows": {
       "title": "本地备份",
@@ -344,22 +345,98 @@
     },
     "agent": {
       "title": "AI 助手",
-      "description": "助手会读你正在看的页面，帮你搭工作流、写 JavaScript。它用的是这里配置的服务商 —— 你的 Key、你的接口，数据不会经过我们。",
-      "provider": "模型服务商",
+      "goto": "打开助手设置",
+      "currentInUse": "当前在用：",
+      "nextTurnTakesEffect": "改动下一轮消息生效",
+      "unnamed": "（未命名）",
+      "addConnection": "新建连接",
+      "deleteConnection": "删除连接",
+      "deleteConnectionConfirm": "删除连接「{name}」？它的 Key 与模型会一并删除。",
+      "deleteConnectionConfirmActive": "「{name}」正是当前在用的连接。删除后助手会改用别的连接。",
+      "inUse": "使用中",
+      "setAsCurrent": "改用这条",
+      "useThis": "设为当前",
+      "modelCount": "{n} 个模型",
+      "name": "名称",
+      "namePlaceholder": "例如 公司内网反代",
+      "template": "模板",
       "baseUrl": "接口地址",
-      "model": "模型",
-      "modelPlaceholder": "直接填模型名，例如 gpt-4o-mini",
       "apiKey": "API Key",
-      "apiKeySet": "已保存 —— 输入新值可覆盖",
+      "apiKeySet": "已保存",
       "clearKey": "删除这个 Key",
-      "privacy": "使用助手时，目标页的正文与结构会发送到你上面填的接口地址（第三方服务）。请勿用于含个人或机密信息的页面。",
-      "saved": "已保存",
-      "modelParams": "模型参数",
+      "models": "模型",
+      "addModelManually": "模型名",
+      "modelPlaceholder": "例如 gpt-4o-mini",
+      "modelNameRequired": "请先填模型名",
+      "modelExists": "「{id}」已经在这条连接里了。",
+      "add": "添加",
+      "fetchModels": "获取可用模型",
+      "fetching": "获取中…",
+      "fetch": {
+        "badUrl": "先填一个以 http:// 或 https:// 开头的接口地址。",
+        "keyRejected": "接口拒绝了这条 Key（HTTP {status}）。请检查 Key 后重试。",
+        "notSupported": "该接口没有 /models 列表（HTTP 404）。请在下方手填模型名。",
+        "httpError": "接口返回了 HTTP {status}。",
+        "unknownShape": "接口有响应，但返回体不是本页能认得的模型列表。请在下方手填模型名。",
+        "network": "连不上这个接口：{msg}"
+      },
+      "picker": {
+        "title": "可用模型",
+        "empty": "接口返回了空列表。",
+        "addSelected": "添加所选（{n}）"
+      },
       "contextWindow": "上下文窗口（token）",
-      "contextWindowHint": "你的模型一次能读的最大 token 数。超过时早期轮次会被压缩成摘要（原始记录不删除，界面里仍可往上翻）；切换服务商会自动填入建议值，不确定就保持它。",
       "maxTokens": "单次回复上限（token）",
-      "maxTokensPlaceholder": "留空表示不限制",
-      "maxTokensHint": "单次回复的输出上限。留空即使用接口默认值；设得太小会让长回答被截断在半句。"
+      "maxTokensPlaceholder": "不限",
+      "privacy": "使用助手时，目标页的正文与结构会发送到你上面填的接口地址（第三方服务）。请勿用于含个人或机密信息的页面。",
+      "saveAllHint": "保存会写入本页所有连接",
+      "saved": "已保存",
+      "instructions": {
+        "title": "自定义指令",
+        "enabled": "启用",
+        "hint": "给助手的持久指令，每轮对话都会随系统提示带上（类似 AGENTS.md）。改动下一条消息生效。",
+        "placeholder": "例如：回答尽量简洁；写 selector 优先用 data-testid；请用中文回复…",
+        "charCount": "{n} 个字符",
+        "overLimit": "已超过 {limit} 字符——整段文本会随每一轮请求发送，推高 token 开销，建议精简。"
+      },
+      "commands": {
+        "title": "/ 模板",
+        "add": "新增模板",
+        "hint": "在助手输入框键入 / 即可选用；选中后整框替换为模板内容，发送前还能修改。",
+        "name": "名称",
+        "description": "描述（显示在选择菜单里）",
+        "body": "内容",
+        "edit": "编辑",
+        "empty": "还没有模板。把常用的提示词存成模板，输入 / 一键带出。"
+      },
+      "skills": {
+        "title": "技能",
+        "add": "新增技能",
+        "hint": "助手按需加载的可复用知识：系统提示只带一行摘要，任务匹配时助手用 read_skill 工具读取全文。支持导入 pi / Claude Code 生态的技能文件夹（.zip / .md）。",
+        "name": "名称",
+        "description": "摘要（进系统提示索引区的一行）",
+        "body": "正文（SKILL.md）",
+        "fileCount": "{n} 个附带文件",
+        "exportOne": "导出",
+        "edit": "编辑",
+        "empty": "还没有技能。导入技能文件夹（.zip / .md）或自己写一个。",
+        "importMd": "导入 .md",
+        "importZip": "导入技能 .zip",
+        "exportBackup": "导出备份",
+        "importBackup": "导入备份",
+        "backupExported": "已导出备份：automa-agent-backup.zip（技能 + / 模板 + 自定义指令）。",
+        "backupImported": "已导入备份。",
+        "importMdDone": "从 {name} 导入：",
+        "importZipDone": "从 {name} 导入：",
+        "importMerged": "新增 {added} 条、更新 {updated} 条（按名称合并）。",
+        "commandsMerged": "/ 模板已合并：{n} 条。",
+        "instructionsImported": "自定义指令已导入（之前为空）。",
+        "instructionsKept": "保留了你当前的自定义指令（备份里的未套用）。",
+        "warnBody": "正文超过 {limit} 字符——read_skill 返回会在此截断，模型读到的是残缺技能。",
+        "warnTotal": "技能总量（正文+附带文件）超过 {limit} KB——建议拆分。",
+        "warnDescription": "摘要 {n} 字符（超过 {limit}）——会随每轮请求发送，建议精简。",
+        "warnIndex": "启用技能的摘要总量超过 {limit} 字符——它们随每轮系统提示发送，建议停用一部分。"
+      }
     }
   },
   "workflow": {
@@ -673,15 +750,21 @@
       "thinkingResult": "思考过程",
       "compacted": "已压缩早期对话（{n} 轮）",
       "scrollToBottom": "回到底部",
-      "placeholder": "问当前这个页面：搜索框在哪、这个列表怎么抓…",
-      "empty": "问我关于你正在看的这个页面。我能读到它的真实结构，并直接给你 selector 或块。",
+      "placeholder": "问问这个页面…",
+      "empty": "还没有消息",
       "noTarget": "还没有选中的可读页面",
       "pickTab": {
         "title": "选择目标页",
         "loading": "正在读取标签页…",
-        "empty": "暂时没有可读取的页面。请先打开一个普通网页（扩展页和 chrome:// 内置页读不了）。",
+        "empty": "请先打开一个普通网页",
         "mainWindow": "主窗口",
-        "window": "窗口 {n}"
+        "window": "窗口 {n}",
+        "pinned": "固定",
+        "auto": "自动",
+        "staleClosed": "目标页已关闭",
+        "staleDrift": "目标页已跳到别的页面",
+        "reselect": "重新选择",
+        "faviconAlt": "站点图标"
       },
       "copy": "复制",
       "copied": "已复制",
@@ -691,7 +774,8 @@
         "ok": "完成",
         "error": "失败",
         "rejected": "已拒绝",
-        "running": "执行中"
+        "running": "执行中",
+        "truncatedNote": "（内容太长，这里只显示前面一部分）"
       },
       "config": {
         "title": "助手设置",
@@ -722,11 +806,10 @@
         "canvasUpdateTitle": "修改画布上的节点 {nodeId}",
         "canvasHint": "只改内存画布，不会保存；你检查后再自己点保存。"
       },
-      "notConfiguredHint": "助手通过你配置的模型服务来读页面，所以需要先填一个 API Key。",
       "goSettings": "去设置页填写",
       "interject": "插话",
       "stop": "停止生成",
-      "queued": "已加入插话队列，将在当前任务下一步执行前送达",
+      "queued": "已排队",
       "usage": "本会话 token 用量：输入 {in} / 输出 {out}",
       "session": {
         "new": "新会话",
@@ -735,8 +818,26 @@
         "untitled": "未命名会话",
         "empty": "还没有历史会话",
         "deleteConfirmTitle": "删除这个会话？",
-        "deleteConfirmBody": "将永久删除「{title}」及其中的全部对话，删除后无法恢复。"
-      }
+        "deleteConfirmBody": "将永久删除「{title}」及其中的全部对话，删除后无法恢复。",
+        "busyHint": "助手正在生成，暂不可切换或删除会话"
+      },
+      "errorKind": {
+        "config": "配置问题",
+        "network": "网络问题",
+        "provider": "模型服务报错",
+        "tool": "工具执行失败",
+        "noTargetTab": "没有目标页",
+        "internal": "助手内部错误"
+      },
+      "errorDetail": {
+        "retry": "重试",
+        "copyDetail": "复制详情",
+        "copyFailed": "复制失败",
+        "detailTitle": "助手错误详情",
+        "kindField": "归类",
+        "timeField": "时间"
+      },
+      "aborted": "已停止生成。"
     }
   },
   "collection": {

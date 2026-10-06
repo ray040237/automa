@@ -208,12 +208,26 @@ export const getVariables = {
   ctx: ['getVariables'],
   description:
     '读取当前工作流已定义的变量与全局变量（含值与类型）。' +
-    '写 JS 或讲模板引用前应先看，避免引用不存在的变量名。',
+    '写 JS 或讲模板引用前应先看，避免引用不存在的变量名。' +
+    '未绑定工作流时会明确说明「这里没有工作流可读」—— 那是与「变量为空」不同的结论，' +
+    '不要把它当成这个工作流没有变量。',
   parameters: { type: 'object', properties: {} },
   async execute(args, ctx) {
     const data = await ctx.getVariables();
-    const vars = (data && data.variables) || {};
-    const globals = (data && data.globals) || {};
+
+    // T-50：没绑定工作流 ≠ 变量为空。宿主返回 {bound:false} 时说「没有工作流可读」，
+    // 绝不落到下面的「（空）」分支 —— 那个分支的语义是「这个工作流确实没定义变量」，
+    // 两句结论对模型完全不同，混起来它就会以为该工作流没有变量而凭空编一个名字。
+    if (!data || data.bound === false) {
+      return [
+        '## 变量',
+        '未绑定工作流：助手当前不在任何工作流的编辑页里，拿不到工作流变量与全局变量。',
+        '若用户要讨论某个具体工作流的变量，请让其在那个工作流的编辑页打开助手。',
+      ].join('\n');
+    }
+
+    const vars = data.variables || {};
+    const globals = data.globals || {};
     const lines = ['## 变量'];
 
     lines.push('工作流变量:');

@@ -2,15 +2,59 @@
   <!-- side="top"：chip 贴着面板底部，往下展开在矮窗口里会被视口截断 -->
   <agent-dropdown v-model="open" align="left" side="top" width="w-72">
     <template #trigger>
+      <!--
+        失效态（T-08）：页被关掉或跳去了别的 origin 时，这一行不再假装正常。
+        「重新选择」就是同一个 trigger —— 点哪都开列表，不另套一个按钮
+        （按钮套在 dropdown 的 trigger 里是无效 HTML）。
+      -->
       <button
         type="button"
-        class="bg-box-transparent hover:bg-opacity-10 flex max-w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
+        class="flex max-w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
+        :class="
+          stale
+            ? 'bg-red-500/10 hover:bg-opacity-20'
+            : 'bg-box-transparent hover:bg-opacity-10'
+        "
         :title="t('workflow.agent.pickTab.title')"
       >
-        <v-remixicon name="riEarthLine" class="shrink-0 text-gray-400" />
+        <img
+          v-if="faviconUrl && !faviconBroken"
+          :src="faviconUrl"
+          class="h-4 w-4 shrink-0 rounded-sm"
+          :alt="t('workflow.agent.pickTab.faviconAlt')"
+          @error="faviconBroken = true"
+        />
+        <v-remixicon v-else name="riEarthLine" class="shrink-0 text-gray-400" />
+
         <span class="truncate text-xs" :class="{ 'text-gray-400': !targetTab }">
           {{ label }}
         </span>
+
+        <span
+          v-if="stale"
+          class="shrink-0 rounded bg-red-500/15 px-1 text-[10px] text-red-600 dark:text-red-400"
+        >
+          {{ staleText }}
+        </span>
+        <span
+          v-else
+          class="shrink-0 rounded px-1 text-[10px] text-gray-500 dark:text-gray-400"
+          :class="pinned ? 'bg-gray-500/15' : ''"
+        >
+          {{
+            pinned
+              ? t('workflow.agent.pickTab.pinned')
+              : t('workflow.agent.pickTab.auto')
+          }}
+        </span>
+
+        <span
+          v-if="stale"
+          class="shrink-0 text-[10px] text-red-600 underline dark:text-red-400"
+        >
+          {{ t('workflow.agent.pickTab.reselect') }}
+        </span>
+
         <v-remixicon name="riArrowDownSLine" class="shrink-0 text-gray-400" />
       </button>
     </template>
@@ -49,6 +93,10 @@ const props = defineProps({
   targetTab: { type: Object, default: null },
   // 由父组件注入，组件本身不必知道 browser API，也便于单测
   listTabs: { type: Function, required: true },
+  // T-08：'ok' | 'closed' | 'drift' | 'none'，由宿主按 tab 事件判定
+  state: { type: String, default: 'none' },
+  // T-08：这一页是用户手选固定的，还是运行时自动解析的
+  pinned: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['pick', 'no-target']);
@@ -63,6 +111,29 @@ const label = computed(() =>
   props.targetTab
     ? props.targetTab.title || props.targetTab.url
     : t('workflow.agent.noTarget')
+);
+
+/** T-08：图标拿不到（没有 favIconUrl、或加载失败）时退回地球图标 */
+const faviconUrl = computed(() =>
+  props.targetTab ? props.targetTab.favIconUrl || '' : ''
+);
+const faviconBroken = ref(false);
+
+/** 换目标页后要让坏掉的图标重新试一次，否则图标永远停在地球上 */
+watch(
+  () => props.targetTab && props.targetTab.id,
+  () => {
+    faviconBroken.value = false;
+  }
+);
+
+const stale = computed(
+  () => props.state === 'closed' || props.state === 'drift'
+);
+const staleText = computed(() =>
+  props.state === 'closed'
+    ? t('workflow.agent.pickTab.staleClosed')
+    : t('workflow.agent.pickTab.staleDrift')
 );
 
 /**

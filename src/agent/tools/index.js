@@ -14,6 +14,7 @@
 import { readPage, findText, getVariables, getBlockSchema } from './page';
 import { testJsTool, queryElementsTool } from './page-write';
 import { highlightSelector } from './highlight';
+import { readSkillTool } from './skill';
 import {
   addBlockTool,
   updateBlockTool,
@@ -59,6 +60,7 @@ export const TOOLS = [
   findText,
   getVariables,
   getBlockSchema,
+  readSkillTool,
   queryElementsTool,
   highlightSelectorTool,
   testJsTool,

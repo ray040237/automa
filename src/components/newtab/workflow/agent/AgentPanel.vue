@@ -47,18 +47,31 @@
         />
       </agent-dropdown>
 
+      <!-- T-11：busy 时 title 换成「为什么点不动」。原先 title 恒是「新建会话」，
+           disabled 之后这句仍然在说功能名，用户看到的是「有按钮但不给理由」。 -->
       <button
         type="button"
         class="bg-box-transparent hover:bg-opacity-10 shrink-0 rounded-md px-2 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
         :disabled="host.busy"
-        :title="t('workflow.agent.session.new')"
+        :title="
+          host.busy
+            ? t('workflow.agent.session.busyHint')
+            : t('workflow.agent.session.new')
+        "
         @click="host.newSession()"
       >
         <v-remixicon name="riAddLine" class="shrink-0" />
       </button>
     </div>
 
-    <agent-transcript class="flex-1" :events="host.events" :busy="host.busy" />
+    <!-- T-04：错误卡上的「重试」把出错那一轮的原文交回宿主重发。
+         刻意不碰 draft —— 用户可能正在打下一句，替他清空是越权。 -->
+    <agent-transcript
+      class="flex-1"
+      :events="host.events"
+      :busy="host.busy"
+      @retry="host.send($event)"
+    />
 
     <!-- 没配 API Key 时把入口摆在正中：
          这个状态下发消息只会回一句「请先配置」，让人以为功能坏了。 -->
@@ -66,8 +79,7 @@
       v-if="!configured"
       class="border-b border-yellow-300 bg-yellow-500/10 p-3 text-sm text-yellow-800 dark:text-yellow-300"
     >
-      <p class="mb-2">{{ t('workflow.agent.notConfiguredHint') }}</p>
-      <button type="button" class="text-sm underline" @click="goSettings">
+      <button type="button" class="underline" @click="goSettings">
         {{ t('workflow.agent.goSettings') }}
       </button>
     </div>
@@ -91,10 +103,36 @@
     <agent-tab-picker
       class="mx-2 mb-1"
       :target-tab="host.targetTab"
+      :state="host.targetState"
+      :pinned="host.targetPinned"
       :list-tabs="host.listTabs"
       @pick="host.pickTab($event)"
       @no-target="host.noTarget()"
     />
+
+    <!-- / 模板菜单（T-81a）：draft 以 / 开头时出现。放文档流里不盖正文，
+         与确认卡同一立场（T-06）。回车/点击选中后整框替换为模板正文。 -->
+    <div
+      v-if="slashMenuOpen"
+      class="mx-2 mb-1 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
+    >
+      <ul class="scroll max-h-48 overflow-y-auto py-1">
+        <li v-for="(c, i) in matchedCommands" :key="c.id">
+          <button
+            type="button"
+            class="flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-sm"
+            :class="i === highlightIndex ? 'bg-box-transparent' : ''"
+            @click="pickCommand(c)"
+            @mousemove="commandIndex = i"
+          >
+            <span class="shrink-0 font-mono">/{{ c.name }}</span>
+            <span class="min-w-0 truncate text-xs opacity-60">{{
+              c.description
+            }}</span>
+          </button>
+        </li>
+      </ul>
+    </div>
 
     <form class="flex items-end gap-2 p-2 pt-0" @submit.prevent="send">
       <ui-textarea
@@ -102,7 +140,7 @@
         class="flex-1"
         rows="3"
         :placeholder="t('workflow.agent.placeholder')"
-        @keydown.enter.exact.prevent="send"
+        @keydown="onDraftKeydown"
       />
       <ui-button
         v-if="host.busy"
@@ -128,9 +166,15 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { sessionOptionLabel } from '@/agent/sessions';
+import { configIO } from '@/agent';
+import {
+  filterCommands,
+  loadCommands,
+  parseSlashDraft,
+} from '@/agent/customizations';
 import AgentTranscript from './AgentTranscript.vue';
 import AgentTabPicker from './AgentTabPicker.vue';
 import AgentSessionList from './AgentSessionList.vue';
@@ -232,5 +276,81 @@ function send() {
   // busy 时也放行 —— 宿主会把它送进插话队列（P3）
   props.host.send(text);
   draft.value = '';
+}
+
+// —— / 模板菜单（T-81a）——
+// 解析与过滤逻辑在 @/agent/customizations（纯函数，有单测）；这里只做接线。
+
+const commands = ref([]);
+const commandIndex = ref(0);
+// Esc 关掉后到 draft 离开触发态之前不再自动弹出 —— 关了又弹等于关不掉
+const slashDismissed = ref(false);
+
+const slashQuery = computed(() => parseSlashDraft(draft.value));
+const matchedCommands = computed(() =>
+  filterCommands(commands.value, slashQuery.value || '')
+);
+const slashMenuOpen = computed(
+  () =>
+    slashQuery.value !== null &&
+    !slashDismissed.value &&
+    matchedCommands.value.length > 0
+);
+// 列表因继续输入变短时，高亮不能悬在已不存在的行上
+const highlightIndex = computed(() =>
+  Math.min(commandIndex.value, matchedCommands.value.length - 1)
+);
+
+watch(slashQuery, (q) => {
+  slashDismissed.value = false;
+  commandIndex.value = 0;
+  // 触发时才拉列表：模板是低频配置数据，面板挂载不必预载；
+  // 每次触发现读一次，设置页改完立即生效，无同步问题。
+  if (q !== null) {
+    loadCommands(configIO).then((list) => {
+      commands.value = list;
+    });
+  }
+});
+
+function pickCommand(c) {
+  if (!c) return;
+
+  draft.value = c.body;
+  slashDismissed.value = true; // 正文本身以 / 开头时不能让菜单又弹回来
+}
+
+/**
+ * 输入框键盘路由。菜单开着时 ↑↓ 移高亮、回车选中、Esc 关闭；
+ * 没开时回车 = 发送（与原 @keydown.enter.exact.prevent 等价：
+ * 带修饰键的回车留给换行/浏览器默认行为）。
+ */
+function onDraftKeydown(e) {
+  const plainEnter =
+    e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+
+  if (!slashMenuOpen.value) {
+    if (plainEnter) {
+      e.preventDefault();
+      send();
+    }
+
+    return;
+  }
+
+  const n = matchedCommands.value.length;
+
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const dir = e.key === 'ArrowDown' ? 1 : -1;
+
+    commandIndex.value = (highlightIndex.value + dir + n) % n;
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    slashDismissed.value = true;
+  } else if (plainEnter) {
+    e.preventDefault();
+    pickCommand(matchedCommands.value[highlightIndex.value]);
+  }
 }
 </script>

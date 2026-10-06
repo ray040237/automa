@@ -19,6 +19,7 @@ import SettingsProfile from './pages/settings/SettingsProfile.vue';
 import SettingsShortcuts from './pages/settings/SettingsShortcuts.vue';
 import SettingsBackup from './pages/settings/SettingsBackup.vue';
 import SettingsEditor from './pages/settings/SettingsEditor.vue';
+import SettingsAgent from './pages/settings/SettingsAgent.vue';
 
 const routes = [
   {
@@ -111,6 +112,7 @@ const routes = [
       // Profile page only manages the cloud account; excluded from offline builds
       ...(IS_OFFLINE ? [] : [{ path: '/profile', component: SettingsProfile }]),
       { path: '/about', component: SettingsAbout },
+      { path: '/agent', component: SettingsAgent },
       { path: '/backup', component: SettingsBackup },
       { path: '/editor', component: SettingsEditor },
       { path: '/shortcuts', component: SettingsShortcuts },

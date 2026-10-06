@@ -1,8 +1,9 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert';
 import { createAgent, fromPiEvent, historyToPiMessages } from './loop';
 import { AGENT_EVENTS, ERROR_KIND, TOOL_STATUS } from './events';
 import { wrapUntrusted } from './untrusted';
+import { buildUserMessage } from './prompt';
 import { SUMMARIZATION_SYSTEM_PROMPT } from './compaction';
 
 /**
@@ -162,8 +163,15 @@ function makeAgent(turns, opts = {}) {
     }),
     tools: opts.tools || [echoTool],
     wrapUntrusted,
-    buildUserMessage: ({ userText }) =>
-      wrapUntrusted('untrusted_user_message', userText),
+    // 桩只处理用户原文，但**必须与真函数同样认 wrapUserText**（T-63）：活轮次传
+    // false，桩若无视这个标志就会把活轮次重新包起来，通知/插话那条用例会假红。
+    // 要验真实形态（元数据段等）用 opts.buildUserMessage 换成 prompt.js 的真的。
+    buildUserMessage:
+      opts.buildUserMessage ||
+      (({ userText, wrapUserText = true }) =>
+        wrapUserText
+          ? wrapUntrusted('untrusted_user_message', userText)
+          : userText),
     toolCtx: opts.toolCtx || {},
     requestConfirmation:
       opts.requestConfirmation || (async () => ({ approved: true })),
@@ -1962,4 +1970,63 @@ test('主请求撞上下文上限：压缩 → continue 续跑 → 正常收尾�
   // 用户看得见：压缩事件 + 恢复通知
   assert.ok(h.events.some((e) => e.kind === AGENT_EVENTS.COMPACTION));
   assert.ok(h.events.some((e) => e.kind === AGENT_EVENTS.SYSTEM_NOTICE));
+});
+
+/* ---------------- T-63: 活轮次发「元数据 + 原文」, 入史仍是全包装 ---------------- */
+
+test('T-63: 活轮次请求带目标页元数据, 用户原文不进 untrusted 标签', async () => {
+  const h = makeAgent([piStream('好的')], { buildUserMessage });
+  await send(h, { userText: '帮我看看这个页面' });
+
+  const live = h.streamFn.calls[0].context.messages
+    .filter((m) => m.role === 'user')
+    .pop();
+  // pi 的 user 消息 content 是 [{type:'text',text}] —— 先取块文本再断言
+  const liveText = live.content.map((c) => c.text).join('');
+
+  assert.ok(
+    liveText.includes('<untrusted_tab_metadata'),
+    '首轮也必须让模型知道在哪个页面: ' + liveText
+  );
+  assert.ok(liveText.includes('url="https://a.com"'), liveText);
+  assert.ok(
+    !liveText.includes('<untrusted_user_message'),
+    '当轮指令不包装: ' + liveText
+  );
+  assert.ok(
+    liveText.endsWith('帮我看看这个页面'),
+    '原文逐字送到模型: ' + liveText
+  );
+});
+
+test('T-63: 入史的 promptText 仍是全包装版（重放侧契约不变）', async () => {
+  const h = makeAgent([piStream('好的')], { buildUserMessage });
+  await send(h, { userText: '帮我看看这个页面' });
+
+  const stored = h.events.find((e) => e.kind === AGENT_EVENTS.USER_MESSAGE);
+  assert.ok(stored.promptText, '必须入史');
+  assert.ok(
+    stored.promptText.includes('<untrusted_user_message'),
+    stored.promptText
+  );
+  assert.ok(
+    stored.promptText.includes('<untrusted_tab_metadata'),
+    stored.promptText
+  );
+  assert.equal(stored.text, '帮我看看这个页面', '面板回显用原文, 不受影响');
+
+  // 重放进 pi 的是入史那份（包装版）, 不是活轮次那份
+  // historyToPiMessages 投影出的 user 消息 content 是**字符串**（promptText 整体）
+  const replayedText = historyToPiMessages([stored])[0].content;
+  assert.ok(replayedText.includes('<untrusted_user_message'), replayedText);
+});
+
+test('T-63: 没有目标页时活轮次只剩用户原文, 不留空包装块', async () => {
+  const h = makeAgent([piStream('好的')], { buildUserMessage });
+  await send(h, { userText: '你好', targetTab: null });
+
+  const live = h.streamFn.calls[0].context.messages
+    .filter((m) => m.role === 'user')
+    .pop();
+  assert.deepEqual(live.content, [{ type: 'text', text: '你好' }]);
 });

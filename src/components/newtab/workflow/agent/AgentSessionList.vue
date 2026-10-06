@@ -14,16 +14,20 @@
         丢掉当前上下文（还要过 guardAgentSwitch），为了删一条历史记录被迫先搬过去。
         垃圾桶与行主体是两个独立 button，点删除不会连带触发切换。
       -->
+      <!-- T-11：行容器上也挂 title —— disabled 按钮在部分浏览器里不派发鼠标
+           事件，title 只挂在按钮上有时弹不出来；容器不是 disabled，稳。 -->
       <div
         v-for="s in sessions"
         :key="s.id"
         class="flex items-center rounded"
         :class="{ 'bg-box-transparent': s.id === currentSessionId }"
+        :title="disabled ? t('workflow.agent.session.busyHint') : ''"
       >
         <button
           type="button"
           :disabled="disabled"
           class="flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1.5 text-left text-sm hoverable disabled:cursor-not-allowed disabled:opacity-60"
+          :title="disabled ? t('workflow.agent.session.busyHint') : ''"
           @click="emit('select', s.id)"
         >
           <v-remixicon
@@ -44,8 +48,16 @@
           type="button"
           class="shrink-0 rounded p-1.5 text-gray-500 hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-400 dark:hover:text-red-400"
           :disabled="disabled"
-          :title="t('workflow.agent.session.delete')"
-          :aria-label="t('workflow.agent.session.delete')"
+          :title="
+            disabled
+              ? t('workflow.agent.session.busyHint')
+              : t('workflow.agent.session.delete')
+          "
+          :aria-label="
+            disabled
+              ? t('workflow.agent.session.busyHint')
+              : t('workflow.agent.session.delete')
+          "
           @click="emit('delete', s.id)"
         >
           <v-remixicon name="riDeleteBin7Line" class="shrink-0" />

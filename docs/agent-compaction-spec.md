@@ -1,10 +1,10 @@
 # Agent 上下文压缩 + 溢出恢复设计（T-76）
 
-日期：2026-10-05 ｜ 状态：随 T-76 实施 ｜ 机制来源：pi coding-agent harness（`pi/packages/coding-agent/src/core/compaction/`），**按机制自研，不搬实现**（红线 4）。
+日期：2026-10-05 ｜ 状态：随 T-76 实施（2026-10-06 校准阈值与默认值）｜ 机制来源：pi coding-agent harness（`pi/packages/coding-agent/src/core/compaction/`），**按机制自研，不搬实现**（红线 4）。
 
 ## 1. 背景与目标
 
-迁移 pi 后 transcript 无任何预算管理（B9 第 1 项决策记录）：事件历史随轮次累积、每轮 `historyToPiMessages` 全量重建，长对话 / 大页面必撞 provider context 上限（主用 ModelScope 128k，`config.contextWindow` 默认 32000），用户只能弃会话重开。本设计补上两件事：
+迁移 pi 后 transcript 无任何预算管理（B9 第 1 项决策记录）：事件历史随轮次累积、每轮 `historyToPiMessages` 全量重建，长对话 / 大页面必撞 provider context 上限（主用 ModelScope 128k，而当时 `config.contextWindow` 默认只有 32000 —— 默认值偏低是压缩会「提前触发」的直接原因，现已改为按模板预填建议值、回落 200000，见 §5），用户只能弃会话重开。本设计补上两件事：
 
 1. **预压缩**：提交新 user prompt 前估算上下文，超过阈值就把保留窗之外的老轮次压成结构化摘要；
 2. **溢出恢复**：provider 真报 context-overflow 时，压缩一次并续跑当前轮一次。
@@ -47,10 +47,28 @@ estimateHistoryTokens()   = Σ 事件(promptText||text||observation||JSON(args))
 reserveTokens     = clamp(contextWindow × 0.15, 2048, 16384)
 thresholdTokens   = contextWindow − reserveTokens            // 超过它才压
 keepRecentTokens  = clamp(thresholdTokens × 0.3, 2048, 20000) // 保留窗
-summaryMaxTokens  = reserveTokens × 0.8                       // 摘要请求的输出上限
+summaryMaxTokens  = min( max(512, reserveTokens × 0.8), 2048 ) // 摘要请求的输出上限
 ```
 
-（32k 窗口 → 阈值 27200 / 保留 8160；128k → 111616 / 20000，与 pi 默认值在同数量级。）
+`contextWindow < 4096` 或非有限数 → `compactionThresholds` 返回 `null`，压缩整体关闭（`runCompaction` 直接短路）。
+
+**实测阈值表**（`compactionThresholds()` 直接调用，2026-10-06）：
+
+| contextWindow | reserve | threshold | keepRecent | summaryMax |
+|---|---|---|---|---|
+| 4096（压缩下限） | 2048 | 2048 | 1024 | 1638 |
+| 8192 | 2048 | 6144 | 2048 | 1638 |
+| 32000（TemplateScope 建议值） | 4800 | 27200 | 8160 | 2048 |
+| 65536（DeepSeek 建议值） | 9830 | 55706 | 16712 | 2048 |
+| 128000（OpenAI 建议值） | 16384 | 111616 | 20000 | 2048 |
+| **200000（`DEFAULT_CONFIG` 回落值）** | **16384** | **183616** | **20000** | **2048** |
+
+**两条容易被忽略的上限**：
+
+1. **reserve 的 16384 是天花板**，所以大窗口的触发点**不是** `cw × 0.85`。默认 200K 窗口下 `cw × 0.15 = 30000` 被截到 16384，阈值是 **183616**。门槛低于约 109k 之后 reserve 恒为 16384，改默认窗口的影响就只体现在阈值本身。
+2. **`SUMMARY_MAX_TOKENS_CAP = 2048`**（`compaction.js:34`）是后加的（T-93）。摘要请求的输出上限**刻意不跟随用户在设置页填的 `maxTokens`** —— 用户填 512 会让摘要必然撞 `stopReason=length` → 抛错 → 压缩整体跳过。摘要 prompt 自己写「通常不超过 500 字」，2048 是四倍余量。
+
+各模板的建议 `contextWindow` 见 `src/agent/config.js` 的 `PROVIDER_TEMPLATES`（openai 128000 / deepseek 65536 / zhipu、aliyun 131072 / modelscope、moonshot 32768；openrouter 与 custom 不预填），**默认值 200000 只在查不到建议值时生效**。
 
 **切点规则**（`planCompaction`）：从尾部向前累积事件 token，累计 ≥ keepRecentTokens 时，切口回退到**包含该事件的那个 user 轮的开头**——绝不劈开 user 轮、绝不让 TOOL_CALL 与 TOOL_RESULT 分居两侧。拒绝压缩的情形（返回 null）：
 
@@ -96,14 +114,14 @@ compaction 事件投影为一条 user 消息（与 SYSTEM_NOTICE 同一红线：
 
 ## 9. UI 与文案
 
-`AgentTranscript.vue` 增加折叠卡（同 thinking 卡的交互）：收起显示「已压缩早期对话 · N 轮」，展开渲染摘要 Markdown（走 AgentMarkdown，XSS 断言已有）。i18n key：`workflow.agent.compacted`，10 个 locale 全配。
+`AgentTranscript.vue` 增加折叠卡（同 thinking 卡的交互）：收起显示「已压缩早期对话 · N 轮」，展开渲染摘要 Markdown（走 AgentMarkdown，XSS 断言已有）。i18n key：`workflow.agent.compacted`，**只有 en 与 zh 有该键**（实测 2026-10-06；其余 8 个 locale 缺键时回退到 en 的文案）。
 
 ## 10. 明确不做（本版范围外）
 
 - 轮中（工具批之间）主动压缩——恢复路径兜底；
-- 按模型分别配阈值——`config.contextWindow` 单值已够；
-- usage 驱动的估算、prompt-cache 命中率展示（T-80 已驳回）；
-- 压缩的手动命令（/compact）——面板没有命令通道，需要时随 T-81 的模板机制一起做。
+- ~~按模型分别配阈值——`config.contextWindow` 单值已够~~ —— **这一条已被后续推翻**：配置 v2（T-99）把 `contextWindow` 下放到**每个模型**，`models[].contextWindow` 各自独立，按模板建议值预填。见 §5。
+- usage 驱动的估算、prompt-cache 命中率展示（T-80 已驳回）；活轮次用真实 usage **校准估算系数**的方向已登记为 T-95（待审核，未实现）；
+- 压缩的手动命令（/compact）——T-81a 的 `/` 模板机制已经落地（`automaAgentCommands`，选中后整框替换输入框草稿），但**没有专门做 `/compact`**，压缩仍只在两个触发点自动发生。
 
 ## 11. 测试清单
 

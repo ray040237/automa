@@ -49,6 +49,7 @@ const router = useRouter();
 
 const menus = [
   { id: 'general', path: '/settings', icon: 'riSettings3Line' },
+  { id: 'agent', path: '/agent', icon: 'riMagicLine' },
   // Profile manages the cloud account only; not available offline
   ...(IS_OFFLINE
     ? []

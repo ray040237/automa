@@ -4,7 +4,9 @@ import {
   isTargetable,
   resolveTargetTab,
   listTargetableTabs,
+  normalize,
   originOf,
+  targetHealth,
 } from './tab';
 
 /** 构造一个可控的 browser.tabs 替身 */
@@ -190,5 +192,62 @@ test('originOf 解析真实 origin，受限页/坏 URL 返回空串', () => {
   assert.equal(originOf('about:blank'), '');
   assert.equal(originOf(''), '');
   assert.equal(originOf(undefined), '');
+  test('T-08：normalize 带上 favIconUrl，缺省时干脆不写这个键', () => {
+    const snap = normalize({
+      id: 7,
+      url: 'https://a.example/x',
+      title: 'A',
+      windowId: 1,
+      favIconUrl: 'https://a.example/f.ico',
+    });
+    assert.equal(snap.favIconUrl, 'https://a.example/f.ico');
+
+    const bare = normalize({ id: 8, url: 'https://b.example/', windowId: 1 });
+    assert.equal(bare.favIconUrl, undefined);
+    assert.ok(
+      !('favIconUrl' in bare),
+      '没有图标时不该留一个 undefined 键（JSON 序列化会多个假字段，同 errorEvent 的取舍）'
+    );
+    // 快照的其他四个字段不能因为加了这个而变样
+    assert.deepEqual(
+      Object.keys(bare).sort(),
+      ['id', 'title', 'url', 'windowId'].sort()
+    );
+  });
+
+  test('T-08：targetHealth 按 origin 判漂移，按存活判关闭', () => {
+    const snap = { id: 7, url: 'https://a.example/x' };
+
+    assert.equal(targetHealth(null, null), 'none', '还没有目标页');
+    assert.equal(targetHealth(null, undefined), 'none');
+    assert.equal(
+      targetHealth(null, { url: 'x' }),
+      'none',
+      '没有数字 id 的快照不算目标页'
+    );
+
+    assert.equal(targetHealth(null, snap), 'closed', '拿不到 tab = 被关掉了');
+    assert.equal(
+      targetHealth({ id: 9, url: 'https://a.example/x' }, snap),
+      'closed',
+      'id 对不上 = 不是那一页'
+    );
+
+    assert.equal(
+      targetHealth({ id: 7, url: 'https://a.example/y' }, snap),
+      'ok',
+      '同 origin 内跳转不算漂移'
+    );
+    assert.equal(
+      targetHealth({ id: 7, url: 'https://b.example/' }, snap),
+      'drift',
+      '换 origin = 漂移'
+    );
+
+    // 快照 url 本身是非法 URL（originOf 返 ''）时不能判成漂移，否则会一直报警
+    const odd = { id: 7, url: 'not a url' };
+    assert.equal(targetHealth({ id: 7, url: 'https://c.example/' }, odd), 'ok');
+  });
+
   assert.equal(originOf('not a url'), '');
 });

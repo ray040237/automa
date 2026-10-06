@@ -10,12 +10,16 @@
 |---|---|---|
 | §3.3 目录结构 | 列了 4 个从未存在的文件：`transcript.js`（已删）、`store.js`（从未存在）、`tools/workflow.js`（实为 `tools/canvas.js`）、`llm/index.js`（无此文件） | 直接看 `src/agent/` |
 | §3.5 事件契约 | 含 `agent:confirm` / `agent:proposal`，T-41 已作为零产出零消费的残留常量删除 | `src/agent/events.js` + `eventContract.test.js` |
-| §7.2 工具清单 | 列了从未实现的 `pick_element` / `connect_blocks`；漏了已上线的 `find_text` / `list_canvas` / `focus_tab` / `open_url`（现共 13 个） | `src/agent/tools/index.js` |
+| §7.2 工具清单 | 列了从未实现的 `pick_element` / `connect_blocks`；漏了已上线的 `find_text` / `list_canvas` / `focus_tab` / `open_url`，以及后加的 `read_block`（T-91）与 `read_skill`（T-81b）——**现共 15 个** | `src/agent/tools/index.js` |
 | §9.1 UI 接线表 | 整段基于「编辑器内 agent tab」，ADR 0001 已撤除该入口 | `src/composable/agentHost.js` 与两个宿主的接线 |
 | §10 分阶段实施计划 | P0–P3 全部完成，阶段划分不再有指导意义 | 完成记录见 `docs/backlog-done.md` |
-| §11.2 引入 vitest 的建议 | 未采纳，实际用 `node --test`（`npm test`，364 个用例） | `package.json` scripts |
+| §11.2 引入 vitest 的建议 | 未采纳，实际用 `node --test`（`npm test`，510 个用例 / 508 pass / 2 skipped，2026-10-06 实测） | `package.json` scripts |
 
-另有两处**参数已变**，引用本文时注意：单轮步数上限 §3.4 的 `maxSteps=8` → 实际 `MAX_STEPS=12`（`src/agent/loop.js`）；§8.1 的 `UNTRUSTED_WRAPPER_TAGS` 从 6 个增至 7 个（多 `untrusted_system_notice`）。
+另有三处**参数已变**，引用本文时注意：
+
+- §3.4 的**单轮步数上限 `maxSteps=8` 整条作废** —— 原先的 `MAX_STEPS=12` 也只是**定义了从未接线的死代码**，T-75 已整条删除。现状是**无步数上限**，何时停止由用户点「停止」决定（`src/agent/loop.js` 里已无 `MAX_STEPS`）。
+- §8.1 的 `UNTRUSTED_WRAPPER_TAGS` 从 6 个增至 **8** 个（多 `untrusted_system_notice` 与 T-76 的 `untrusted_compaction_summary`）。
+- §7.3 的变量 / 工作流上下文数据源**仍未落地**：`get_variables` 在两个宿主下都没有注入方（返回「（空）」），`untrusted_workflow_context` 是已登记但零触发的标签（T-50，仍在 `docs/backlog.md` 待审核）。
 
 `docs/adr/0002`（工具确认门分级）与 `0003`（SSE 外部依赖）记录了对本文的**有意偏离**，那两份 ADR 才是这些点上的现行依据。
 
@@ -165,7 +169,7 @@ export function createAgent({
   // —— 可覆盖（测试用）——
   llm,                  // { streamChat }，默认走 src/agent/llm
   tools,                // Tool[]，默认 tools/index.js 注册表
-  maxSteps = 8,         // 单轮 ReAct 上限 —— ⚠️ 实际实现是 MAX_STEPS = 12（src/agent/loop.js）
+  maxSteps = 8,         // 单轮 ReAct 上限 —— ⚠️⚠️ 已整条作废：先有 MAX_STEPS=12 的死代码（T-75 删除），现在是**无步数上限**
   now, nanoid,          // 可注入以便断言
 }) => ({ send(text), abort(), getState() })
 ```
@@ -447,7 +451,7 @@ for (const name of KNOWN_TOOL_NAMES) {
 ### 7.2 十个工具的实现路径
 
 > ⚠️ **本节的工具清单已过时**：它列的 10 个工具里，`pick_element` 与 `connect_blocks` **从未实现**，
-> 而已上线的 `find_text` / `list_canvas` / `focus_tab` / `open_url` 没被列进来（现共 13 个）。
+> 而已上线的 `find_text` / `list_canvas` / `focus_tab` / `open_url` 没被列进来，后加的 `read_block` / `read_skill` 也没有（**现共 15 个**）。
 > `highlight_selector` 的分类也在本表写错（此处的 `read`）—— ADR 0002 已把它归为 `write` 过确认门。
 > **现行清单与分类见 `src/agent/tools/index.js`**（`validateTools` 在模块加载期强制每个工具显式声明 `class`）。
 > 下表保留供追溯设计意图。
@@ -996,7 +1000,7 @@ npm run build:offline:firefox   # 验证 Firefox 构建不炸（Q6-A 降级）
 |---|---|
 | 多目标页 / 会话级 tab pin 模型 | Pie 的 pinned-tab-registry 是为长时程跨会话任务设计的；本方案单 target tab 足够（§3.2），且 N1 明确排除标签页管理 |
 | ~~transcript 持久化 / 历史落盘~~ | — | **已推翻**：后来做了多会话 + 事件历史落盘（`sessions.js`），理由是跨轮记忆，见 `docs/adr/0001` |
-| 工具渐进披露 `load_tools` | 13 个工具全披露仍只有约 1.5K token，机制成本远大于收益 |
+| 工具渐进披露 `load_tools` | 15 个工具全披露仍只有约 1.5K token，机制成本远大于收益。**T-81b 的技能库走了同一个结论的另一条路**：不披露正文，只披露索引，正文按需用 `read_skill` 取 |
 | 多 provider 并发路由 / 限流器 | 单 provider 单请求，429 退避即可（P1） |
 | 并发 run / 任务队列 | 单飞 + 中止语义已覆盖 |
 | Anthropic / Gemini 原生协议 | Q2=A；等 P0 验证核心假设后再评估（且 Anthropic 需绕开 SDK 依赖） |

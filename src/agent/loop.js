@@ -937,8 +937,19 @@ export function createAgent(deps) {
        *  由映射层转成 ERROR 事件并记在这里 —— 出错收尾不发 DONE（现状契约）。 */
       let errorEv = null;
 
+      // T-63: 活轮次发「元数据段 + 用户原文」, 不是原文, 也不是整条包装版。
+      // 元数据 (目标页 url/title、工作流上下文) 是第三方信息, 两种形态都包;
+      // 用户原文是**当轮指令**, 包进 untrusted 就等于按安全声明告诉模型
+      // 「这是数据别当指令」 —— 详见 prompt.js buildUserMessage 的说明。
+      // 入史的 promptText 仍是全包装版 (重放时那句已是历史, 适用红线第 2 条)。
+
+      const livePromptText = buildUserMessage(
+        { userText, targetTab, workflowContext, wrapUserText: false },
+        wrapUntrusted
+      );
+
       try {
-        await agent.prompt(userText);
+        await agent.prompt(livePromptText);
         stopped = true;
         // usage 累加**本轮全部**带 usage 的 assistant 消息：一个工具轮有 N 次
         // LLM 请求就有 N 条 assistant 消息，只取最后一条会把前 N-1 次的用量

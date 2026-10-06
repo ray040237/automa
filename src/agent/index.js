@@ -25,6 +25,7 @@ import { TOOLS } from './tools';
 import { createPiProvider, toPiContext } from './provider';
 import { wrapUntrusted } from './untrusted';
 import { buildUserMessage } from './prompt';
+import { readSkillFrom } from './skills';
 import {
   resolveTargetTab,
   listTargetableTabs,
@@ -376,8 +377,20 @@ export async function readPageFromTab(tab, params) {
  * @param {Object} deps
  * @param {() => Promise<Object>} deps.getConfig
  * @param {(payload: Object) => Promise<Object>} deps.requestConfirmation
- * @param {() => Promise<Object>=} deps.getVariables
+ * @param {() => Promise<Object>=} deps.getVariables **必填**（T-50）。返回形状：
+ *   绑定了工作流 `{bound:true, workflowId, variables:Object, globals:Object}`；
+ *   没绑定（例如独立助手页）`{bound:false}`。两种形状在 get_variables 工具里渲染成
+ *   完全不同的结论 —— 「没有变量」与「这里根本没有工作流可读」对模型是两回事，
+ *   混成同一个「（空）」会让模型凭空编出一个空变量名。
+ *   早先这里有个 `async () => ({})` 缺省兜底，等于任何漏注入的宿主都拿到
+ *   「（空）」这个静默错误答案；已删，缺注入直接抛。
  * @param {(name: string) => Promise<Object|null>=} deps.getBlockSchema
+ * @param {() => Promise<string>=} deps.getInstructions 用户自定义指令正文（T-81a），
+ *   每轮 send 取一次；空串 = 未配置/关闭。缺省给空实现 —— 测试装配不必关心指令。
+ * @param {() => Promise<Array>=} deps.getSkillIndex 技能索引清单（T-81b），
+ *   每轮 send 取一次进 prompt；缺省空实现。
+ * @param {(name: string) => Promise<{skill: Object|null, available: string[]}>=} deps.readSkill
+ *   read_skill 工具的查找实现；缺省读 configIO 的技能库。
  * @param {Object=} deps.targetTab
  * @param {Object=} deps.sessionStore sessions.js 的会话仓库；不传则无跨轮记忆
  * @param {() => string=} deps.getWorkflowId 会话归属的工作流 id
@@ -387,12 +400,23 @@ export function createAgentRuntime(deps) {
   const {
     getConfig,
     requestConfirmation,
-    getVariables = async () => ({}),
+    getVariables,
     getBlockSchema = lookupBlockSchema,
+    getInstructions = async () => '',
+    getSkillIndex = async () => [],
+    readSkill = null,
     sessionStore = null,
     getWorkflowId = () => null,
     enabledGroups = null,
   } = deps;
+
+  if (typeof getVariables !== 'function') {
+    throw new Error(
+      'createAgentRuntime: 缺 getVariables。变量数据来自宿主（工作流 globalData + 全局变量表），' +
+        '装配层拿不到就等于「没有变量」—— 这个假答案会让模型编出不存在的变量名。' +
+        '宿主必须注入；没有工作流可读时传 async () => ({ bound: false })。'
+    );
+  }
 
   let targetTab = deps.targetTab || null;
 
@@ -428,6 +452,11 @@ export function createAgentRuntime(deps) {
       readPageFromTab(targetTab, { op: 'find-text', ...params }),
     getVariables,
     getBlockSchema,
+    // read_skill 工具（T-81b）的查找实现：缺省读 configIO 里的技能库。
+    // 每次调用现读存储 —— 设置页改完技能下一轮生效，与指令同一立场。
+    // configIO 在模块底部才定义，运行时才走到这里 —— eslint 前置引用豁免
+    // eslint-disable-next-line no-use-before-define
+    readSkill: readSkill || readSkillFrom(configIO),
     // 画布写工具要用的东西。宿主把 vue-flow 的 editor 实例传进来，
     // 这样 canvas.js 完全不需要认识 vue-flow。
     blocks: deps.blocks,
@@ -652,10 +681,37 @@ export function createAgentRuntime(deps) {
     // 请求参数（messages / tools / temperature / 重试）此后全部由 pi 生成。
     const { model, streamFn } = await createPiProvider(config);
 
+    // 自定义指令（T-81a）：读取失败不杀整轮 —— 与事实表构建失败同一原则
+    // （降级成「无指令」继续对话），但必须留 warn，不静默。
+    let instructions = '';
+    try {
+      instructions = await getInstructions();
+    } catch (err) {
+      agentLog.warn('instructions.load.fail', {
+        message: err && err.message ? err.message : String(err),
+      });
+    }
+
+    // 技能索引（T-81b）：与指令同一模式 —— 每轮现读进事实表，失败降级留痕。
+    let skillIndex = [];
+    try {
+      skillIndex = await getSkillIndex();
+    } catch (err) {
+      agentLog.warn('skills.index.load.fail', {
+        message: err && err.message ? err.message : String(err),
+      });
+    }
+
     const agent = createAgent({
       model,
       streamFn,
-      promptFacts: () => collectPromptFacts(activeTools),
+      // 用户自定义指令（T-81a）与技能索引（T-81b）每轮 send 取一次，盖进事实表
+      // —— 与 enabledGroups 函数化同一立场：用户改完下一轮立即生效，无需重建。
+      promptFacts: () => ({
+        ...collectPromptFacts(activeTools),
+        instructions,
+        skills: skillIndex,
+      }),
       tools: activeTools,
       toolCtx,
       wrapUntrusted,

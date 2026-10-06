@@ -617,6 +617,55 @@ const agentHost = useAgentHost({
       : ['page', 'context', 'tab'],
   getWorkflowId: () => workflowId,
   sessionWorkflowId: workflowId,
+  // T-50：变量数据源（技术设计 §7.3 的三处来源，这里按编辑器实际形状组装）。
+  // 返回值按用户 2026-10-06 的决定**原样给值** —— 为功能牺牲隐私，
+  // 用户知情同意；工作流变量里放了 API key 的人要自己承担。
+  // workflow 可能是团队/包工作流（三个 store 择一），拿不到就报 bound:false。
+  getVariables: async () => {
+    const wf = workflow.value;
+    if (!wf) return { bound: false };
+
+    let globals = {};
+    try {
+      const storageVars = await dbStorage.variables.toArray();
+      storageVars.forEach((v) => {
+        if (v && v.name) globals[v.name] = v.value;
+      });
+    } catch (error) {
+      // 全局变量表读不到时不能装作「没有全局变量」—— 显式标出来，
+      // 让模型知道这一半是读失败而不是真的空。
+      globals = {};
+    }
+
+    return {
+      bound: true,
+      workflowId,
+      variables: parseJSON(wf.globalData, {}),
+      globals,
+    };
+  },
+  // 只读摘要进 prompt（untrusted_workflow_context）。**刻意不含块参数值**：
+  // 节点 data 里常有网址、选择器甚至用户填的文本，摘要只要够模型认得
+  // 「现在开着的是哪个工作流、大致长什么样」即可。
+  getWorkflowContext: () => {
+    const wf = workflow.value;
+    if (!wf) return null;
+
+    const nodes = Array.isArray(wf.drawflow && wf.drawflow.nodes)
+      ? wf.drawflow.nodes
+      : [];
+    const vars = parseJSON(wf.globalData, {});
+    const lines = [
+      '工作流: ' + (wf.name || '(未命名)') + '（id=' + workflowId + '）',
+      '块数: ' + nodes.length,
+      '工作流变量名: ' + (Object.keys(vars).join(', ') || '(无)'),
+    ];
+    const trigger = nodes.find((n) => n && n.label === 'trigger');
+    if (trigger) {
+      lines.push('触发器: 有（类型 ' + (trigger.component || '未知') + '）');
+    }
+    return lines.join('\n');
+  },
   canvas: {
     blocks,
     // editor 是 ref，agent 可能在画布就绪前就被调用，必须走 getter

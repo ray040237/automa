@@ -3,6 +3,7 @@
     <button
       type="button"
       class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+      :aria-expanded="expanded"
       @click="expanded = !expanded"
     >
       <v-remixicon
@@ -10,7 +11,11 @@
         class="shrink-0"
       />
       <span class="font-medium">{{ step.name }}</span>
-      <span class="ml-auto rounded px-1.5 py-0.5 text-xs" :class="statusClass">
+      <span
+        class="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs"
+        :class="statusClass"
+      >
+        <v-remixicon :name="statusIcon" class="shrink-0" />
         {{ statusLabel }}
       </span>
     </button>
@@ -22,8 +27,8 @@
       <pre v-if="prettyArgs" class="mb-2 whitespace-pre-wrap">{{
         prettyArgs
       }}</pre>
-      <pre v-if="step.observation" class="whitespace-pre-wrap">{{
-        step.observation
+      <pre v-if="displayObservation" class="whitespace-pre-wrap">{{
+        displayObservation
       }}</pre>
     </div>
   </div>
@@ -33,6 +38,7 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { TOOL_STATUS } from '@/agent/events';
+import { stripUntrustedForDisplay } from '@/agent/untrusted';
 
 const props = defineProps({
   step: { type: Object, required: true },
@@ -70,9 +76,44 @@ const statusLabel = computed(() =>
   t(STATUS_LABEL[props.step.status] || 'workflow.agent.tool.running')
 );
 
+/**
+ * 展示用的观察值（T-07）。
+ *
+ * step.observation 是**给模型看**的字符串：外面裹着 untrusted_* 标签（红线 2 的
+ * 不可信边界标记），截断时还带一句写给模型的 note。原样渲染等于把这些内部标记
+ * 摊给用户看，人会当成乱码或漏洞。
+ *
+ * 只在展示层剥：events.js 的包装一行没动，模型侧继续看到标签。
+ */
+const displayObservation = computed(() =>
+  stripUntrustedForDisplay(props.step.observation, {
+    noteText: t('workflow.agent.tool.truncatedNote'),
+  })
+);
+
 const statusClass = computed(
   () =>
     STATUS_STYLE[props.step.status] ||
     'bg-gray-500/15 text-gray-600 dark:text-gray-400'
+);
+
+/**
+ * 状态不能只靠颜色区分（T-13）：色觉障碍用户分不出「失败」与「被拒绝」，
+ * 暗色模式下两档红/琥珀的对比度也接近。徽标上再挂一个**形状不同**的图标，
+ * 颜色退成冗余通道。
+ *
+ * ✕（失败）与 ⊗（被拒）刻意选得不一样：这两个状态最容易混，前者是模型的错、
+ * 它还能自纠，后者是用户或策略挡下的，重试的意义完全不同。
+ */
+const STATUS_ICON = {
+  [TOOL_STATUS.OK]: 'riCheckLine',
+  [TOOL_STATUS.ERROR]: 'riCloseLine',
+  [TOOL_STATUS.REJECTED]: 'riCloseCircleLine',
+  [TOOL_STATUS.RUNNING]: 'riLoader4Line',
+  [TOOL_STATUS.PENDING]: 'riLoader4Line',
+};
+
+const statusIcon = computed(
+  () => STATUS_ICON[props.step.status] || 'riInformationLine'
 );
 </script>

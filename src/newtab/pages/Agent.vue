@@ -22,6 +22,12 @@ const agent = useAgentHost({
   enabledGroups: ['page', 'context', 'tab'],
   // 助手页会话是全局的，不绑定工作流
   getWorkflowId: () => null,
+  // T-50：这一页没有工作流可读，**必须显式说 bound:false**。
+  // 曾经靠 runtime 的空兜底返回 `{}`，工具渲染成「（空）」—— 那等于告诉
+  // 模型「这个工作流没有变量」，而事实是「这里根本没有工作流」，两者结论不同。
+  getVariables: async () => ({ bound: false }),
+  // 没有工作流就没有工作流上下文段（prompt 里那一段直接不出现）
+  getWorkflowContext: () => null,
 });
 
 onMounted(() => {

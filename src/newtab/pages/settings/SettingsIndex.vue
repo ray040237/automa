@@ -54,7 +54,14 @@
       {{ t('settings.language.reloadPage') }}
     </p>
   </div>
-  <settings-agent />
+  <!-- 助手配置已独立成菜单项（/settings/agent）。这里留一条入口，
+       否则从旧版升上来的用户打开「常规」会以为助手配置被删了。 -->
+  <div class="mt-12">
+    <p class="mb-1 font-semibold">{{ t('settings.agent.title') }}</p>
+    <ui-button @click="$router.push('/agent')">
+      {{ t('settings.agent.goto') }}
+    </ui-button>
+  </div>
 
   <div id="delete-logs" class="mt-12">
     <p class="mb-1 font-semibold">{{ t('settings.deleteLog.workflowLogs') }}</p>
@@ -97,7 +104,6 @@ import { useI18n } from 'vue-i18n';
 import { useStore } from '@/stores/main';
 import { useTheme } from '@/composable/theme';
 import { supportLocales } from '@/utils/shared';
-import SettingsAgent from './SettingsAgent.vue';
 
 const deleteLogDays = ['never', 7, 14, 30, 60, 120];
 

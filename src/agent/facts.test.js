@@ -142,3 +142,25 @@ describe('真实上游的形状守卫', () => {
     );
   });
 });
+
+describe('instructions（T-81a）', () => {
+  const BASE = {
+    automaFuncs: { a: '1' },
+    templatingFunctions: { now: '1' },
+    catalog: {},
+    tools: [],
+    excludeFuncs: [],
+  };
+
+  test('缺省是空串；传了就原样进事实表，由 prompt.js 决定拼不拼 section', () => {
+    assert.equal(buildFacts(BASE).instructions, '');
+
+    const f = buildFacts({ ...BASE, instructions: '请用中文回复' });
+    assert.equal(f.instructions, '请用中文回复');
+  });
+
+  test('非字符串输入归一成字符串，不让 storage 里的坏数据炸掉事实表', () => {
+    assert.equal(buildFacts({ ...BASE, instructions: null }).instructions, '');
+    assert.equal(buildFacts({ ...BASE, instructions: 42 }).instructions, '42');
+  });
+});

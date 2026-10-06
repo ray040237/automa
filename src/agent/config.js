@@ -4,21 +4,44 @@
  * 纯逻辑与 IO 分离：加解密与 storage 都从外部注入，因此本文件可被 node --test 覆盖，
  * 也不会在 import 期碰到 browser / crypto-js。
  *
+ * ## 形状（v2）
+ *
+ * 一份配置里有**多条连接**，每条连接带自己的 baseUrl / 密钥 / 模型列表；全局另有
+ * 「当前连接 + 当前模型」两个标量。运行时只认当前那一条 —— `resolveActiveConfig()`
+ * 把它摊平成与 v1 **完全相同**的扁平结构，于是 provider.js / loop.js / compaction.js
+ * 一行都不用改。风险因此被完整关在这一层里。
+ *
+ * ## 两套 apiKey 字段，别混
+ *
+ * - `providers[].apiKey`：**存储态是密文**（沿用 v1 的落盘约定，迁移才能原样搬）。
+ *   表单态被 `loadConfigDoc` 清空，只装用户当场敲进来的明文。
+ * - `providers[].encryptedKey`：只活在表单里，装着从存储读来的那段密文，
+ *   供「用户没动这个 Key」时原样写回。**UI 任何时候都不该渲染它。**
+ *
+ * 有效密钥 = `apiKey` 明文优先，否则 `encryptedKey`。这就是「没动密钥就别把空串
+ * 写回去，否则会把已存的密钥清掉」（T-97）在配置层的落点。
+ *
  * 密钥用项目既有的 credentialUtil（AES + HMAC，passKey 来自 getPassKey）加密，
  * 不另造加密方案 —— 两套加密并存只会让「到底哪套是当前有效的」变得无法回答。
  */
 
 export const STORAGE_KEY = 'automaAgentConfig';
+export const CONFIG_VERSION = 2;
 
 /**
- * 支持的 provider。都是 OpenAI 兼容端点，走同一个 provider 实现。
+ * 厂商模板：**只**出现在「新建连接」的下拉里，点一下预填 baseUrl / 常用模型 / 建议窗口。
  *
- * `contextWindow` 是**建议值**（T-94）：BYOK 场景下 OpenAI 兼容协议不暴露模型
- * 窗口，只能按官方公开标称值预填，用户随时可改；同一 provider 下个别模型不同
- * 时用 `modelWindows` 覆盖。填小了提前压缩（多花一次摘要请求），填大了压缩不
- * 触发、只剩溢出恢复兜底 —— 两个方向都不致命，所以敢预填。
+ * 它们不是配置项，也不约束用户 —— 配置里存的是连接，不是厂商。同一个厂商建三条
+ * 连接（三个 Key、两套反代）是完全合法的，所以 `validateConfig` 不再检查
+ * provider 是否在枚举里。
+ *
+ * `contextWindow` 是**建议值**：BYOK 场景下 OpenAI 兼容协议不暴露模型窗口，只能按
+ * 官方公开标称值预填，用户随时可改；同一模板下个别模型不同时用 `modelWindows` 覆盖。
+ * 填小了提前压缩（多花一次摘要请求），填大了压缩不触发、只剩溢出恢复兜底 —— 两个
+ * 方向都不致命，所以敢预填。查不到的（openrouter / 自定义端点 / 手填模型名）回落
+ * `DEFAULT_CONFIG.contextWindow`，宁可按保守值提前压缩，也不要假装有数。
  */
-export const PROVIDERS = [
+export const PROVIDER_TEMPLATES = [
   {
     id: 'openai',
     label: 'OpenAI',
@@ -72,36 +95,35 @@ export const PROVIDERS = [
   { id: 'custom', label: '自定义（OpenAI 兼容）', baseUrl: '', models: [] },
 ];
 
+/**
+ * 运行时看到的**未配置**形态，同时兜住 v1 遗留字段的缺省值。
+ *
+ * `apiKey: ''` 是「没配好」的**唯一**信号：`index.js` 的 send 开头与
+ * `AgentPanel.vue` 的 `configured` 都只看这一个字段，所以连接被删空时，
+ * 那两处的现有检查不用改就会接管。contextWindow 200K 是查不到建议值时的回落值
+ * （compactionThresholds 的 reserve 上限 16384，所以触发点是 183616 估算 token）。
+ */
 export const DEFAULT_CONFIG = {
-  provider: 'openai',
-  baseUrl: 'https://api.openai.com/v1',
-  model: 'gpt-4o-mini',
+  provider: 'custom',
+  baseUrl: '',
+  model: '',
   temperature: 0.2,
-  // 驱动 T-76 压缩阈值（compaction.js 的 compactionThresholds）：阈值 =
-  // contextWindow - reserve。设置页按 provider/model 预填建议值（见下面
-  // resolveContextWindow），用户可改；< 4096 视为压缩不可用。
-  contextWindow: 32000,
-  // 单次回复的输出上限（T-96）。0 = 不传，交给端点默认 —— 写死一个数字会让
-  // 长回答被静默截断在半句（provider.js 里记着「曾为 4096」的教训）。
+  contextWindow: 200000,
   maxTokens: 0,
   apiKey: '',
 };
 
-const byId = (id) => PROVIDERS.find((p) => p.id === id);
+const byTemplateId = (id) => PROVIDER_TEMPLATES.find((t) => t.id === id);
 
 /**
- * 按 provider/model 取上下文窗口的**建议值**（T-94）。
+ * 按模板/模型取上下文窗口的**建议值**。
  *
- * 只是预填用的建议，不是真相：同一模型不同版本/账号档位窗口可能不同，用户
- * 随时能在设置页改。查不到（openrouter / 自定义端点 / 手填模型名）就回落
- * DEFAULT_CONFIG.contextWindow —— 宁可按保守值提前压缩，也不要假装有数。
- *
- * @param {string} providerId
+ * @param {string} templateId 建这条连接时用的模板
  * @param {string=} model
  * @returns {number}
  */
-export function resolveContextWindow(providerId, model) {
-  const preset = byId(providerId);
+export function resolveContextWindow(templateId, model) {
+  const preset = byTemplateId(templateId);
   if (!preset) return DEFAULT_CONFIG.contextWindow;
   const perModel =
     preset.modelWindows && model ? preset.modelWindows[model] : undefined;
@@ -109,41 +131,48 @@ export function resolveContextWindow(providerId, model) {
 }
 
 /**
- * 校验并补全配置。
+ * 新建连接时用的 id。只在本地生成，不进任何网络请求。
  *
- * @param {Object} input
- * @returns {{ok: boolean, config: Object, errors: string[]}}
+ * 直接用全局 `crypto`（浏览器与 node --test 都有），不写 `globalThis.crypto`：
+ * 本项目 eslint 的 env 只声明了 browser，那种写法过不了 no-undef。
+ *
+ * 这个 id 只需要在同一份配置里不重复，不承担安全职责 —— 所以没有
+ * randomUUID 时的兜底也用不着那么讲究。
  */
-export function validateConfig(input) {
-  const raw = input || {};
+export function newProviderId() {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
+    return 'p_' + crypto.randomUUID();
+  }
+
+  return (
+    'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+  );
+}
+
+function label(p, index) {
+  const name = String(p.name || '').trim();
+
+  return name ? `「${name}」` : `第 ${index + 1} 条`;
+}
+
+/**
+ * 校验并补全一个模型条目。
+ *
+ * @param {Object} raw
+ * @param {string} ctx 出错时用的前缀（`<连接名> 的模型 <n>`）
+ * @returns {{errors: string[], model: Object}}
+ */
+function cleanModel(raw, ctx) {
+  const src = raw || {};
   const errors = [];
+  const id = String(src.id || '').trim();
 
-  const provider = raw.provider || DEFAULT_CONFIG.provider;
-  if (!byId(provider)) errors.push('未知的 provider: ' + provider);
+  if (!id) errors.push(`${ctx}：缺少模型名`);
 
-  const preset = byId(provider);
-  const baseUrl = (raw.baseUrl || (preset && preset.baseUrl) || '').trim();
-  if (!baseUrl) {
-    errors.push('缺少 baseUrl');
-  } else if (!/^https?:\/\//.test(baseUrl)) {
-    errors.push('baseUrl 必须以 http:// 或 https:// 开头');
-  }
-
-  const model = (raw.model || (preset && preset.models[0]) || '').trim();
-  if (!model) errors.push('缺少 model');
-
-  const apiKey = (raw.apiKey || '').trim();
-  if (!apiKey) errors.push('缺少 apiKey');
-
-  const temperature =
-    typeof raw.temperature === 'number'
-      ? raw.temperature
-      : DEFAULT_CONFIG.temperature;
-  if (typeof temperature !== 'number' || temperature < 0 || temperature > 2) {
-    errors.push('temperature 必须在 0 到 2 之间');
-  }
-
-  let { contextWindow } = raw;
+  let { contextWindow } = src;
   if (
     contextWindow === undefined ||
     contextWindow === null ||
@@ -153,14 +182,14 @@ export function validateConfig(input) {
   } else {
     contextWindow = Number(contextWindow);
     if (!Number.isFinite(contextWindow) || contextWindow < 1024) {
-      errors.push('contextWindow 必须是不小于 1024 的数字');
+      errors.push(`${ctx}：上下文窗口必须是不小于 1024 的数字`);
     }
   }
 
-  // maxTokens：留空 / 0 = 不限制（把上限交给端点默认）。一旦填了就要是个
-  // 像样的数 —— 太小的上限等于把「回答说到一半没了」变成常态（配套 T-96②：
-  // 真截断时 loop 会发 SYSTEM_NOTICE，用户看得见，不是静默）。
-  let { maxTokens } = raw;
+  // maxTokens：留空 / 0 = 不限制（把上限交给端点默认）。一旦填了就要是个像样的数 ——
+  // 太小的上限等于把「回答说到一半没了」变成常态（T-96②：真截断时 loop 会发
+  // SYSTEM_NOTICE，用户看得见，不是静默）。
+  let { maxTokens } = src;
   if (
     maxTokens === undefined ||
     maxTokens === null ||
@@ -171,22 +200,333 @@ export function validateConfig(input) {
   } else {
     maxTokens = Number(maxTokens);
     if (!Number.isFinite(maxTokens) || maxTokens < 256) {
-      errors.push('maxTokens 必须是不小于 256 的数字，留空表示不限制');
+      errors.push(
+        `${ctx}：单次回复上限必须是不小于 256 的数字，留空表示不限制`
+      );
     }
   }
+
+  return { errors, model: { id, contextWindow, maxTokens } };
+}
+
+/**
+ * 校验并补全一条连接。
+ *
+ * @param {Object} raw
+ * @param {number} index 在列表里的位置，只用于报错时称呼
+ * @returns {{errors: string[], provider: Object}}
+ */
+function cleanProvider(raw, index) {
+  const src = raw || {};
+  const errors = [];
+  const name = String(src.name || '').trim();
+  const tag = label(src, index);
+  const baseUrl = String(src.baseUrl || '').trim();
+
+  if (!baseUrl) {
+    errors.push(`${tag}：缺少接口地址`);
+  } else if (!/^https?:\/\//.test(baseUrl)) {
+    errors.push(`${tag}：接口地址必须以 http:// 或 https:// 开头`);
+  }
+
+  // 表单里新敲的明文与存储里的密文**分开留着**：揉成一个字段的话，
+  // saveConfig 分不清手上是明文还是密文，会把密文再加密一次（enc:enc:sk-…）。
+  const apiKey = String(src.apiKey || '').trim();
+  const encryptedKey = String(src.encryptedKey || '');
+
+  if (!apiKey && !encryptedKey) errors.push(`${tag}：缺少 API Key`);
+
+  const models = [];
+  const seen = new Set();
+
+  (Array.isArray(src.models) ? src.models : []).forEach((m, i) => {
+    const r = cleanModel(m, `${tag} 的第 ${i + 1} 个模型`);
+
+    errors.push(...r.errors);
+    // 同一条连接里挂两份同名模型只会在列表里让人以为有两个，其实删哪个都一样
+    if (r.model.id && seen.has(r.model.id)) {
+      errors.push(`${tag}：模型「${r.model.id}」重复了`);
+    }
+    seen.add(r.model.id);
+    models.push(r.model);
+  });
+
+  if (models.length === 0) {
+    errors.push(`${tag}：至少添加一个模型，否则这条连接用不了`);
+  }
+
+  return {
+    errors,
+    provider: {
+      // id 缺失只可能来自手改存储。补一个，别让整份配置因为一个 id 就加载不出来。
+      id: String(src.id || '') || newProviderId(),
+      name,
+      templateId: String(src.templateId || 'custom'),
+      baseUrl,
+      apiKey,
+      encryptedKey,
+      hasKey: Boolean(apiKey || encryptedKey),
+      models,
+    },
+  };
+}
+
+/**
+ * 校验并补全整份配置。
+ *
+ * 空列表**合法**：用户被允许删掉最后一条连接（助手随即进入「未配置」态并给出提示），
+ * 所以「没有任何连接」不能是一条校验错误。
+ *
+ * @param {Object} input
+ * @returns {{ok: boolean, config: Object, errors: string[]}}
+ */
+export function validateConfig(input) {
+  const raw = input || {};
+  const errors = [];
+
+  const temperature =
+    typeof raw.temperature === 'number'
+      ? raw.temperature
+      : DEFAULT_CONFIG.temperature;
+  if (typeof temperature !== 'number' || temperature < 0 || temperature > 2) {
+    errors.push('temperature 必须在 0 到 2 之间');
+  }
+
+  const providers = [];
+  const seenNames = new Map();
+
+  (Array.isArray(raw.providers) ? raw.providers : []).forEach((p, i) => {
+    const r = cleanProvider(p, i);
+
+    errors.push(...r.errors);
+
+    // 列表里靠名字认人，重名会让「删的是哪条」变得没法回答
+    if (r.provider.name) {
+      const key = r.provider.name.toLowerCase();
+      if (seenNames.has(key)) {
+        errors.push(
+          `连接名「${r.provider.name}」重复了（另一条在第 ${
+            seenNames.get(key) + 1
+          } 位）`
+        );
+      } else {
+        seenNames.set(key, i);
+      }
+    }
+    providers.push(r.provider);
+  });
+
+  const activeProviderId = pickActive(providers, raw.activeProviderId);
 
   return {
     ok: errors.length === 0,
     errors,
     config: {
-      provider,
-      baseUrl,
-      model,
+      version: CONFIG_VERSION,
+      providers,
+      activeProviderId,
+      activeModelId: pickModelId(
+        providers,
+        activeProviderId,
+        raw.activeModelId
+      ),
       temperature,
-      contextWindow,
-      maxTokens,
-      apiKey,
     },
+  };
+}
+
+/**
+ * 当前连接的自愈：指向的不在了就退回第一条，绝不因此让整份配置加载不出来。
+ *
+ * 这不是「静默降级」——它兜的是 UI 产生不出来的状态（手改存储、旧版本残留），
+ * 而报错只会让用户看着一份自己没碰过的配置发愣。
+ *
+ * @param {Object[]} providers
+ * @param {string} wanted
+ * @returns {string}
+ */
+function pickActive(providers, wanted) {
+  const key = String(wanted || '');
+
+  if (providers.length === 0) return '';
+  if (providers.some((p) => p.id === key)) return key;
+
+  return providers[0].id;
+}
+
+/**
+ * 当前模型的自愈，**只看当前连接底下那几条**。
+ *
+ * 范围必须收在当前连接内：另一条连接里的同名模型对当前连接毫无意义，留着会让
+ * 「当前用的哪个」这件事出现两个真相（Q10：全局只有一个真相）。
+ *
+ * @param {Object[]} providers
+ * @param {string} providerId
+ * @param {string} wanted
+ * @returns {string}
+ */
+function pickModelId(providers, providerId, wanted) {
+  const provider = providers.find((p) => p.id === providerId);
+  const models = (provider && provider.models) || [];
+  const key = String(wanted || '');
+
+  if (models.length === 0) return '';
+  if (models.some((m) => m.id === key)) return key;
+
+  return models[0].id;
+}
+
+/**
+ * v1（单条）-> v2（多条）的迁移。
+ *
+ * 只搬，不猜：连接名直接用旧的 provider id（预设的 label 表不进这里 —— 为一次迁移
+ * 留一张只服务迁移的映射，几个月后没人说得清它为什么还在）。模型窗口按旧值原样搬；
+ * 旧值不存在才回落默认。**旧结构不存在时返回空文档**（一个字段都没有就别硬造一条）。
+ *
+ * @param {Object} raw
+ * @returns {Object} v2 文档（存储态：apiKey 仍是密文）
+ */
+export function migrateLegacy(raw) {
+  const src = raw || {};
+  const templateId = String(src.provider || 'custom');
+  const template = byTemplateId(templateId);
+  const baseUrl = String(
+    src.baseUrl || (template && template.baseUrl) || ''
+  ).trim();
+  const model = String(
+    src.model || (template && template.models[0]) || ''
+  ).trim();
+  const key = String(src.apiKey || '');
+
+  // 一个可用字段都没有 —— 那不是一条配置，别凭空造一条出来
+  if (!baseUrl && !model && !key) {
+    return {
+      version: CONFIG_VERSION,
+      providers: [],
+      activeProviderId: '',
+      activeModelId: '',
+      temperature:
+        typeof src.temperature === 'number'
+          ? src.temperature
+          : DEFAULT_CONFIG.temperature,
+    };
+  }
+
+  const id = 'p_legacy';
+  const contextWindow =
+    src.contextWindow === undefined ||
+    src.contextWindow === null ||
+    src.contextWindow === ''
+      ? resolveContextWindow(templateId, model)
+      : Number(src.contextWindow);
+
+  return {
+    version: CONFIG_VERSION,
+    providers: [
+      {
+        id,
+        name: templateId,
+        templateId,
+        baseUrl,
+        apiKey: key,
+        models: model
+          ? [
+              {
+                id: model,
+                contextWindow,
+                maxTokens: Number(src.maxTokens) || 0,
+              },
+            ]
+          : [],
+      },
+    ],
+    activeProviderId: id,
+    activeModelId: model,
+    temperature:
+      typeof src.temperature === 'number'
+        ? src.temperature
+        : DEFAULT_CONFIG.temperature,
+  };
+}
+
+/**
+ * 存储里的原始值 -> 规范的 v2 文档。**纯函数**，不碰 IO、不加解密。
+ *
+ * 迁移只在这里发生一次视图层；落盘留给下一次保存，避免读路径带副作用。
+ *
+ * @param {Object} raw
+ * @returns {Object} v2 文档（存储态）
+ */
+export function normalizeDoc(raw) {
+  const src = raw || {};
+  const base = Array.isArray(src.providers) ? src : migrateLegacy(src);
+  const providers = (base.providers || []).map((p) => ({
+    id: String(p.id || ''),
+    name: String(p.name || ''),
+    templateId: String(p.templateId || 'custom'),
+    baseUrl: String(p.baseUrl || ''),
+    apiKey: String(p.apiKey || ''),
+    // 缺省在这里补齐而不是等到用：contextWindow 若是 undefined 进了
+    // compactionThresholds，阈值会算成 NaN，压缩就静默不触发了
+    models: (Array.isArray(p.models) ? p.models : []).map((m) => ({
+      id: String(m.id || ''),
+      contextWindow:
+        m.contextWindow === undefined ||
+        m.contextWindow === null ||
+        m.contextWindow === ''
+          ? DEFAULT_CONFIG.contextWindow
+          : Number(m.contextWindow),
+      maxTokens: Number(m.maxTokens) || 0,
+    })),
+  }));
+
+  return {
+    version: CONFIG_VERSION,
+    providers,
+    activeProviderId: String(base.activeProviderId || ''),
+    activeModelId: String(base.activeModelId || ''),
+    temperature:
+      typeof base.temperature === 'number'
+        ? base.temperature
+        : DEFAULT_CONFIG.temperature,
+  };
+}
+
+/**
+ * 把 v2 文档摊平成运行时要的扁平结构（与 v1 一模一样的形状）。
+ *
+ * 没有可用连接时返回 `DEFAULT_CONFIG`（`apiKey: ''`）—— 这正是
+ * `index.js` send 开头与 `AgentPanel.vue` 判定「没配好」所依赖的信号。
+ *
+ * @param {Object} doc v2 文档（已过 validateConfig）
+ * @param {string=} apiKey 当前连接的密钥明文
+ * @returns {Object} 扁平配置
+ */
+export function resolveActiveConfig(doc, apiKey) {
+  const src = doc || {};
+  const providers = Array.isArray(src.providers) ? src.providers : [];
+
+  if (providers.length === 0) return { ...DEFAULT_CONFIG };
+
+  const provider =
+    providers.find((p) => p.id === src.activeProviderId) || providers[0];
+  const model =
+    (provider.models || []).find((m) => m.id === src.activeModelId) ||
+    (provider.models || [])[0];
+
+  if (!provider.baseUrl || !model) return { ...DEFAULT_CONFIG };
+
+  return {
+    provider: provider.id,
+    baseUrl: provider.baseUrl,
+    model: model.id,
+    contextWindow: model.contextWindow,
+    maxTokens: model.maxTokens,
+    temperature:
+      typeof src.temperature === 'number'
+        ? src.temperature
+        : DEFAULT_CONFIG.temperature,
+    apiKey: String(apiKey || ''),
   };
 }
 
@@ -206,54 +546,94 @@ export function redactConfig(config) {
 }
 
 /**
- * 读取配置。apiKey 在内存里始终是明文，出了这个函数就是密文。
+ * 读取配置并解析成运行时形状。apiKey 在内存里始终是明文，出了这个函数就是密文。
+ *
+ * 只解密**当前那一条**的密钥：解密 N 条既没意义（设置页要的是 hasKey，不是明文），
+ * 也让「打开一次面板」不至于把整串密钥都摊在内存里。
  *
  * @param {{get: Function, decrypt: Function}} io
  * @returns {Promise<Object>}
  */
 export async function loadConfig(io) {
-  const raw = (await io.get(STORAGE_KEY)) || {};
+  const doc = normalizeDoc(await io.get(STORAGE_KEY));
 
-  // 解密实现当前是同步的，但 await 一个非 Promise 没有代价。
-  // 不写 await 的话，哪天有人换成异步实现，apiKey 会变成一个 Promise，
-  // 然后被当成 Bearer token 发出去 —— 而且不报错，只是鉴权失败。
-  const plainKey = raw.apiKey ? await io.decrypt(raw.apiKey) : '';
+  const provider = doc.providers.find((p) => p.id === doc.activeProviderId);
+  // 解密实现当前是同步的，但 await 一个非 Promise 没有代价。不写 await 的话，
+  // 哪天有人换成异步实现，apiKey 会变成一个 Promise，然后被当成 Bearer token
+  // 发出去 —— 而且不报错，只是鉴权失败。
+  const plainKey =
+    provider && provider.apiKey ? await io.decrypt(provider.apiKey) : '';
+
+  return resolveActiveConfig(doc, plainKey);
+}
+
+/**
+ * 设置页要用的整份文档。
+ *
+ * 每条连接的 `apiKey` 被**清空**，密文挪到 `encryptedKey`（UI 不可渲染它），
+ * 另给一个 `hasKey` 供占位文案用。这样设置页永远拿不到它没被用户敲进来的明文，
+ * 「没动密钥就别写回空串」也就成了形状上的必然。
+ *
+ * @param {{get: Function}} io
+ * @returns {Promise<Object>}
+ */
+export async function loadConfigDoc(io) {
+  const doc = normalizeDoc(await io.get(STORAGE_KEY));
 
   return {
-    ...DEFAULT_CONFIG,
-    ...raw,
-    apiKey: plainKey,
+    ...doc,
+    providers: doc.providers.map((p) => ({
+      ...p,
+      apiKey: '',
+      encryptedKey: p.apiKey,
+      hasKey: Boolean(p.apiKey),
+    })),
   };
 }
 
 /**
- * 忘掉已保存的密钥。
+ * 按需解开某条连接的密钥。
  *
- * 单独开一个函数而不是复用 saveConfig：validateConfig 要求 apiKey 非空，
- * 而「删除密钥」恰恰要传空值 —— 走保存那条路根本删不掉。
- * 用户想撤回授权时必须真的能删干净。
+ * 只在「抓可用模型」那一刻调用 —— 那是一次真实的网络请求，本来就该用这条连接
+ * 自己的钥匙。密钥不写回表单，也不进 DOM。
  *
- * @param {{remove: Function}} io
- * @returns {Promise<void>}
+ * @param {{get: Function, decrypt: Function}} io
+ * @param {string} providerId
+ * @returns {Promise<string>} 明文；没有这条连接或没存过密钥则返回空串
  */
-export async function clearApiKey(io) {
-  await io.remove(STORAGE_KEY);
+export async function revealApiKey(io, providerId) {
+  const doc = normalizeDoc(await io.get(STORAGE_KEY));
+  const provider = doc.providers.find((p) => p.id === providerId);
+
+  if (!provider || !provider.apiKey) return '';
+  return io.decrypt(provider.apiKey);
 }
 
 /**
  * 校验并保存（密钥加密后落盘）。校验不过就不写盘。
  *
- * @param {Object} io
- * @param {Object} config
+ * @param {{set: Function, encrypt: Function}} io
+ * @param {Object} input v2 文档（表单态）
  * @returns {Promise<{ok: boolean, errors: string[]}>}
  */
-export async function saveConfig(io, config) {
-  const { ok, errors, config: clean } = validateConfig(config);
+export async function saveConfig(io, input) {
+  const { ok, errors, config: clean } = validateConfig(input);
   if (!ok) return { ok: false, errors };
 
   await io.set(STORAGE_KEY, {
-    ...clean,
-    apiKey: io.encrypt(clean.apiKey),
+    version: CONFIG_VERSION,
+    providers: clean.providers.map((p) => ({
+      id: p.id,
+      name: p.name,
+      templateId: p.templateId,
+      baseUrl: p.baseUrl,
+      // 用户没动这个 Key 时原样写回存储里那段密文；动了才重新加密
+      apiKey: p.apiKey ? io.encrypt(p.apiKey) : p.encryptedKey,
+      models: p.models,
+    })),
+    activeProviderId: clean.activeProviderId,
+    activeModelId: clean.activeModelId,
+    temperature: clean.temperature,
   });
 
   return { ok: true, errors: [] };

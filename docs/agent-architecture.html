@@ -217,22 +217,24 @@
 <tr><th>文件</th><th>职责</th><th>关键导出</th></tr>
 <tr><td><span class="path">loop.js</span></td><td>ReAct 主循环：<strong>循环本体由 pi-agent-core 的 <code>Agent</code> 驱动</strong>（<code>agent.prompt / continue / abort</code>），本文件负责事件映射（<code>fromPiEvent</code>）、跨轮续接翻译（<code>historyToPiMessages</code>）、压缩接线（<code>runCompaction</code>）与确认门钩子；维护唯一事件历史</td><td><code>createAgent</code> <code>fromPiEvent</code> <code>historyToPiMessages</code></td></tr>
 <tr><td><span class="path">compaction.js</span></td><td>上下文压缩纯逻辑（T-76，append-only + 投影）：token 估算、阈值、切点规划、摘要序列化、溢出识别</td><td><code>shouldCompact</code> <code>planCompaction</code> <code>projectAfterLastCompaction</code></td></tr>
-<tr><td><span class="path">tools/adapter.js</span></td><td>把 14 个工具定义翻译成 pi 的 <code>AgentTool</code>；<code>content</code>/<code>isError</code> 红线落点，观察值包装在这里一次完成</td><td><code>toAgentTools</code> <code>toToolResult</code></td></tr>
+<tr><td><span class="path">tools/adapter.js</span></td><td>把 15 个工具定义翻译成 pi 的 <code>AgentTool</code>；<code>content</code>/<code>isError</code> 红线落点，观察值包装在这里一次完成</td><td><code>toAgentTools</code> <code>toToolResult</code></td></tr>
 <tr><td><span class="path">provider.js</span></td><td>BYOK 配置 → pi 的 <code>Model</code> + <code>streamFn</code>（纯形状翻译，不含任何流解析；temperature 在此注入）</td><td><code>createPiProvider</code> <code>buildModel</code> <code>toPiContext</code></td></tr>
 <tr><td><span class="path">events.js</span></td><td>事件常量、错误事件唯一构造、观察值 8K 截断 + untrusted 包装（原 window.js 的截断职责随 T-82 并入）</td><td><code>AGENT_EVENTS</code> <code>errorEvent</code> <code>wrapObservation</code></td></tr>
-<tr><td><span class="path">prompt.js</span></td><td>系统提示构建 + 每轮用户消息组装（三段 untrusted 块）</td><td><code>buildSystemPrompt</code> <code>buildUserMessage</code></td></tr>
-<tr><td><span class="path">untrusted.js</span></td><td>防注入转义：洗掉所有「像闭合标签」的字面量（8 个标签登记）</td><td><code>wrapUntrusted</code> <code>escapeUntrustedWrappers</code></td></tr>
+<tr><td><span class="path">prompt.js</span></td><td>系统提示构建（域知识事实表 + 可用工具 + <strong>技能索引区</strong> + <strong>用户自定义指令</strong> + 安全声明）+ 每轮用户消息组装（三段 untrusted 块；活轮次的用户原文<strong>刻意不包</strong>，见 T-63/T-112）</td><td><code>buildSystemPrompt</code> <code>buildUserMessage</code></td></tr>
+<tr><td><span class="path">untrusted.js</span></td><td>防注入转义：洗掉所有「像闭合标签」的字面量（8 个标签登记）+ <strong>展示层反包装</strong>（T-07：剥标签只发生在给用户看的那一侧，模型侧继续看到标签）</td><td><code>wrapUntrusted</code> <code>escapeUntrustedWrappers</code> <code>stripUntrustedForDisplay</code></td></tr>
 <tr><td><span class="path">turnRecord.js</span></td><td>会话收尾折叠（T-43）：usage 累加、剪流式碎片、save 对象形状单点、转中检查点（T-34）</td><td><code>buildTurnRecord</code> <code>createCheckpointSaver</code></td></tr>
 <tr><td><span class="path">targetState.js</span></td><td>目标页身份状态机纯函数核（T-43）：预检判定与文案、去重键、pin 的纯变换</td><td><code>tabClosedNotice</code> <code>originDriftNotice</code> <code>initialPinsFromTab</code></td></tr>
 <tr><td><span class="path">log.js</span></td><td>全链路日志：<code>[agent]</code> 前缀一行一事 + 环形缓冲（页面卡死刷新前可导出现场）</td><td><code>createAgentLog</code> <code>noopLog</code></td></tr>
-<tr><td><span class="path">facts.js</span></td><td>领域知识表纯计算（块数、可用函数、工具元数据）</td><td><code>buildFacts</code> <code>countBlocks</code></td></tr>
-<tr><td><span class="path">tab.js</span></td><td>目标页解析：可注入性判定 + 四级优先级</td><td><code>resolveTargetTab</code> <code>isTargetable</code> <code>originOf</code></td></tr>
+<tr><td><span class="path">facts.js</span></td><td>领域知识表纯计算（块数、可用函数、工具元数据、用户自定义指令、技能索引）</td><td><code>buildFacts</code> <code>countBlocks</code></td></tr>
+<tr><td><span class="path">tab.js</span></td><td>目标页解析：可注入性判定 + 四级优先级 + 健康状态纯判定（T-08：<code>none</code>/<code>closed</code>/<code>drift</code>/<code>ok</code>，漂移只看 origin）</td><td><code>resolveTargetTab</code> <code>isTargetable</code> <code>originOf</code> <code>targetHealth</code></td></tr>
 <tr><td><span class="path">sessions.js</span></td><td>会话存储逻辑 + IO 注入（save / remove / patchTitle 共用一条写串行链）</td><td><code>createSessionStore</code> <code>cropToTurns</code> <code>patchTitle</code></td></tr>
-<tr><td><span class="path">config.js</span></td><td>配置校验 + 加解密 IO 分离</td><td><code>validateConfig</code> <code>loadConfig</code> <code>PROVIDERS</code></td></tr>
+<tr><td><span class="path">config.js</span></td><td>连接配置 v2：<strong>多连接 + 每连接多模型</strong>，校验 + 加解密 IO 分离；读路径经 <code>resolveActiveConfig</code> 摊平成与 v1 同形的扁平结构给运行时（见 §15）</td><td><code>validateConfig</code> <code>loadConfig</code> <code>PROVIDER_TEMPLATES</code> <code>resolveActiveConfig</code> <code>resolveContextWindow</code></td></tr>
+<tr><td><span class="path">customizations.js</span></td><td>用户自定义内容（T-81a）：<strong>指令</strong>（常驻 system prompt 的一段）与 <strong>/ 模板</strong>（纯 UI 的输入片段），各自独立 storage key 与 IO 注入</td><td><code>getActiveInstructionsFrom</code> <code>parseSlashDraft</code> <code>filterCommands</code></td></tr>
+<tr><td><span class="path">skills.js</span></td><td>技能库（T-81b）：记录 CRUD + <strong>两级注入</strong>的上半（索引）+ zip 导入导出与全量备份；<code>readSkillFrom</code> 是下半（<code>read_skill</code> 工具的默认实现）</td><td><code>getSkillIndexFrom</code> <code>readSkillFrom</code> <code>importSkillsZip</code> <code>exportBackupZip</code> <code>mergeSkills</code></td></tr>
 <tr><td><span class="path">title.js</span></td><td>LLM 会话标题生成与清洗</td><td><code>buildTitleMessages</code> <code>cleanTitle</code></td></tr>
 <tr><td><span class="path">markdown.js</span></td><td>零依赖 markdown 渲染器（先转义再做行内替换）</td><td><code>markdownToBlocks</code></td></tr>
 <tr><td><span class="path">agentEvalInPage.js</span></td><td><code>test_js</code> 的页内求值核（表达式优先、语句回退）+ 通用超时竞速</td><td><code>agentEvalInPage</code> <code>raceTimeout</code></td></tr>
-<tr><td><span class="path">tools/*.js</span></td><td>14 个工具的定义 + 纯执行逻辑</td><td><code>TOOLS</code> <code>validateTools</code> <code>requiresConfirmation</code></td></tr>
+<tr><td><span class="path">tools/*.js</span></td><td>15 个工具的定义 + 纯执行逻辑</td><td><code>TOOLS</code> <code>validateTools</code> <code>requiresConfirmation</code></td></tr>
 </table>
 
 <blockquote class="note">
@@ -269,19 +271,22 @@
 <h3>第 3 层：宿主与 UI</h3>
 <table>
 <tr><th>文件</th><th>职责</th></tr>
-<tr><td><span class="path">src/composable/agentHost.js</span></td><td>两个宿主共用的接线：响应式状态、事件分发、确认门、会话管理</td></tr>
+<tr><td><span class="path">src/composable/agentHost.js</span></td><td>两个宿主共用的接线：响应式状态、事件分发、确认门（<code>createSessionAuth</code> 状态机 + 薄执行层，T-90）、会话管理、目标页健康状态订阅（T-08）。返回 <strong>单个 <code>reactive</code> 对象</strong>，面板直接调它上面的方法</td></tr>
 <tr><td><span class="path">src/newtab/pages/Agent.vue</span></td><td>独立助手页宿主（路由 /workflows/agent）</td></tr>
 <tr><td><span class="path">src/newtab/pages/workflows/[id].vue</span></td><td>编辑器侧栏宿主（持有画布句柄）</td></tr>
-<tr><td><span class="path">components/.../agent/AgentPanel.vue</span></td><td>面板外壳：header（会话 chip + 新建）/ 目标页条 / 输入框</td></tr>
+<tr><td><span class="path">components/.../agent/AgentPanel.vue</span></td><td>面板外壳：header（会话 chip + 新建）/ 目标页条 / 输入框。<strong>props 收敛为单个 <code>host</code> 对象</strong>（T-90），直调 <code>host.*</code>，面板自身零 <code>defineEmits</code></td></tr>
 <tr><td><span class="path">components/.../agent/AgentDropdown.vue</span></td><td>通用下拉壳（absolute 定位 —— 实测过挂 body 的 tippy 弹层在 320px 侧栏里的三种挤压症状）</td></tr>
 <tr><td><span class="path">components/.../agent/AgentSessionList.vue</span></td><td>会话列表：行主体切换、行尾垃圾桶删「这一条」（T-86）、当前项勾选</td></tr>
-<tr><td><span class="path">components/.../agent/AgentTranscript.vue</span></td><td>对话流渲染：增量折叠事件 → 展示槽位；工具卡按 <code>toolCallId</code> 从后往前配对</td></tr>
-<tr><td><span class="path">components/.../agent/AgentToolStep.vue</span></td><td>工具调用卡（状态标签 + 展开看参数与观察值）</td></tr>
+<tr><td><span class="path">components/.../agent/AgentTranscript.vue</span></td><td>对话流渲染：增量折叠事件 → 展示槽位；工具卡按 <code>toolCallId</code> 从后往前配对；<strong>error 独立成红色卡</strong>（分类文案 + 重试 / 复制详情，T-04）、<strong>compaction 是默认收起的折叠卡</strong>（展开可见摘要全文）</td></tr>
+<tr><td><span class="path">components/.../agent/AgentToolStep.vue</span></td><td>工具调用卡（状态图标 + 展开看参数与观察值；观察值经 <code>stripUntrustedForDisplay</code> 剥掉包装标签，T-07）</td></tr>
 <tr><td><span class="path">components/.../agent/AgentConfirmCard.vue</span></td><td>写操作确认卡</td></tr>
 <tr><td><span class="path">components/.../agent/AgentMarkdown.vue</span></td><td>markdown 渲染 + 代码块复制</td></tr>
 <tr><td><span class="path">components/.../agent/AgentTabPicker.vue</span></td><td>目标页选择弹窗（内部用 AgentDropdown + AgentTabList 渲染）</td></tr>
 <tr><td><span class="path">components/.../agent/AgentTabList.vue</span></td><td>可注入标签页列表（按窗口分组、当前项高亮）</td></tr>
-<tr><td><span class="path">src/newtab/pages/settings/SettingsAgent.vue</span></td><td>设置页：provider / baseUrl / model / contextWindow / apiKey</td></tr>
+<tr><td><span class="path">src/newtab/pages/settings/SettingsAgent.vue</span></td><td>设置页（独立菜单 <code>/settings/agent</code>）：<strong>连接卡片纵向平铺</strong>，每卡一份完整表单（名称 / 模板 / baseUrl / apiKey / 模型列表 + 每模型 contextWindow 与 maxTokens）；保存按钮在页底，<strong>写整份文档</strong>（不是只写当前展开那张）</td></tr>
+<tr><td><span class="path">settings/SettingsAgentInstructions.vue</span></td><td>自定义指令：单段文本 + 启停，<strong>独立保存按钮</strong>（与连接配置的两个写者刻意分开）</td></tr>
+<tr><td><span class="path">settings/SettingsAgentCommands.vue</span></td><td><code>/</code> 模板：增删改启停，<strong>逐动作立即落盘</strong></td></tr>
+<tr><td><span class="path">settings/SettingsAgentSkills.vue</span></td><td>技能库：录入 / md 与 zip 导入 / 单技能导出 / 全量备份导入导出</td></tr>
 </table>
 
 <h3>第 4 层：浏览器管道（MV3 三进程）</h3>
@@ -359,7 +364,7 @@
 <p>错误事件只能从 <code>errorEvent()</code>（events.js:70，T-40）这一个构造点出 —— 曾经 loop 里一处写 <code>error:</code>、一处写 <code>message:</code>，UI 只读 <code>message</code>，「事实表构建失败」的详情就永远显示不出来。CONFIRM / PROPOSAL 两个僵尸常量已删（T-41）：<code>eventContract.test.js</code> 会拦这类「全仓零产出零消费」的事件名。</p>
 
 <h3>跨轮续接的翻译规则（historyToPiMessages）</h3>
-<p>事件历史是我们的持久格式，pi 的 transcript 是 pi 的内存格式，续接时由 <code>historyToPiMessages()</code>（loop.js:82，票 07 的接缝）单向翻译。规则要点都写在函数头注释里：</p>
+<p>事件历史是我们的持久格式，pi 的 transcript 是 pi 的内存格式，续接时由 <code>historyToPiMessages()</code>（loop.js:95，票 07 的接缝）单向翻译。规则要点都写在函数头注释里：</p>
 <ul>
   <li><strong>user 消息</strong>直接进 transcript，content 用事件里已存好的包装文本（<code>promptText</code> 字段；票 08 前的旧持久化记录叫 <code>wire</code>，兼容读，T-67）。<strong>缺了就抛错，不许回落 <code>ev.text</code></strong> —— 那是未包装的原始文本，回落即裸文本直达模型（T-56/T-63）。</li>
   <li><strong>连续 TEXT_DELTA</strong> 归并成同一条 assistant 回复（UI 是增量发，真值是拼接）。</li>
@@ -373,11 +378,11 @@
 </blockquote>
 
 <h3>TOOL_CALL 按调用拆开（T-74）</h3>
-<p><code>fromPiEvent</code> 把 pi 一次消息里的并行工具调用合装成一个内部事件（含 <code>calls[]</code>），但<strong>在唯一的发射点拆开</strong> —— 一条 TOOL_CALL 事件配一条 TOOL_RESULT 事件，事件流里不再有 <code>calls[]</code> 字段，事件形状只有「单调用」一种（loop.js:688-707）。不拆的话，并行调用的第 2..N 个会从 UI 眼前消失。UI 侧配对用 <code>toolCallId</code> 从后往前找归属卡（同名并行调用不再互相覆盖）。</p>
+<p><code>fromPiEvent</code> 把 pi 一次消息里的并行工具调用合装成一个内部事件（含 <code>calls[]</code>），但<strong>在唯一的发射点拆开</strong> —— 一条 TOOL_CALL 事件配一条 TOOL_RESULT 事件，事件流里不再有 <code>calls[]</code> 字段，事件形状只有「单调用」一种（loop.js:691-712）。不拆的话，并行调用的第 2..N 个会从 UI 眼前消失。UI 侧配对用 <code>toolCallId</code> 从后往前找归属卡（同名并行调用不再互相覆盖）。</p>
 
 <h2 id="tools"><span class="n">04</span>工具目录与分级<span class="anchor">#tools</span></h2>
 
-<p>共 14 个工具，分 4 个组。<code>class</code> 决定要不要过用户确认门 — 这是整个安全模型的核心开关。</p>
+<p>共 15 个工具，分 4 个组。<code>class</code> 决定要不要过用户确认门 — 这是整个安全模型的核心开关。</p>
 
 <p>画布两个读工具的分工：<code>list_canvas</code> 只给清单（长值报字符数，绝不静默截断），<code>read_block</code> 才给某个字段的全文。分开的理由是观察值有 8000 字符硬上限，一次列举十个 JS 块的全文必然撞顶，届时被砍的是排在后面的节点，比不给更难预测（T-91）。</p>
 
@@ -388,6 +393,7 @@
 <tr><td><code>query_elements</code></td><td><span class="tag tag-read">read</span></td><td><span class="tag tag-ctx">page</span></td><td>查 selector 命中几个、命中的是啥</td><td><code>selector</code>、<code>limit</code></td></tr>
 <tr><td><code>get_variables</code></td><td><span class="tag tag-read">read</span></td><td><span class="tag tag-ctx">context</span></td><td>读工作流变量与全局变量</td><td>—</td></tr>
 <tr><td><code>get_block_schema</code></td><td><span class="tag tag-read">read</span></td><td><span class="tag tag-ctx">context</span></td><td>查块字段定义；猜错块名时返回全部可用块名</td><td><code>name</code></td></tr>
+<tr><td><code>read_skill</code></td><td><span class="tag tag-read">read</span></td><td><span class="tag tag-ctx">context</span></td><td>技能库（T-81b）两级注入的下半：读某个技能的 SKILL.md 正文，或它的一个附带文件；未命中时回可用技能名让模型自纠</td><td><code>name</code>、<code>path</code></td></tr>
 <tr><td><code>list_canvas</code></td><td><span class="tag tag-read">read</span></td><td><span class="tag tag-ctx">canvas</span></td><td>列画布上的节点与字段名（<strong>只给清单</strong>：长值只报字符数，不静默截断）</td><td>—</td></tr>
 <tr><td><code>read_block</code></td><td><span class="tag tag-read">read</span></td><td><span class="tag tag-ctx">canvas</span></td><td>读某个节点某个字段的<strong>全文</strong>（最常用：读 JS 块的 code），超长用 offset/limit 分页</td><td><code>nodeId</code>、<code>field</code>、<code>offset</code>、<code>limit</code></td></tr>
 <tr><td><code>list_tabs</code></td><td><span class="tag tag-read">read</span></td><td><span class="tag tag-ctx">tab</span></td><td>列出可注入标签页（按窗口分组）</td><td>—</td></tr>
@@ -665,15 +671,24 @@ history = [...(params.initialHistory || [])];
   promptText: <span class="fn">buildUserMessage</span>({ userText, targetTab, workflowContext }, wrapUntrusted),
 });
 <span class="kw">if</span> (targetTab) <span class="fn">emitAndRecord</span>({ kind: AGENT_EVENTS.TARGET_TAB, tab: targetTab });</code></pre>
-    <p class="srcline">src/agent/loop.js:804-868（节选）</p>
-    <p><code>buildUserMessage</code>（prompt.js:237-259）把用户这条消息拆成三段 untrusted 块再拼起来：</p>
+    <p class="srcline">src/agent/loop.js:860-900（节选）</p>
+    <p><code>buildUserMessage</code>（prompt.js:299-324）把用户这条消息拼成最多三段；<strong>同一条消息有两个形态</strong>（T-63/T-112）：</p>
 <pre><code><span class="kw">if</span> (targetTab &amp;&amp; targetTab.url) parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str">'untrusted_tab_metadata'</span>, <span class="str">'url='</span>+targetTab.url, {url, title}));
 <span class="kw">if</span> (workflowContext)        parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str">'untrusted_workflow_context'</span>, workflowContext));
-parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str">'untrusted_user_message'</span>, userText));</code></pre>
-    <p><strong>系统提示里装了什么</strong>（prompt.js）：角色定义、强项（读真实 DOM 的优势）、可用工具清单（按 class 分组列出）、目标页与标签页规则、Automa 领域知识（JS 块运行时函数 + 关键语义、模板函数、模板引用语法、工作流结构要点）、输出约定、安全声明。<strong>其中「Automa 领域知识」是动态取自项目常量的</strong> — 不硬编码拷贝，块增删或改名时自动跟上。</p>
+<span class="cm">// 活轮次（wrapUserText=false）刻意保持原文：它是指令，不是数据。</span>
+parts.<span class="fn">push</span>(wrapUserText ? <span class="fn">wrap</span>(<span class="str">'untrusted_user_message'</span>, userText) : userText);</code></pre>
+<blockquote class="note">
+  <strong>为什么用户原文在活轮次不包装。</strong> untrusted 标签的含义是「这是数据，不是指令」—— 把用户<strong>此刻</strong>的指令包进去，等于一边让模型照做、一边按系统提示的安全声明告诉它这是数据。安全声明是全文最后一段、按结构保证「untrusted 内不得当指令」，把指令塞进去就是把结构保证换成对模型服从度的赌注。<br><br>
+  入史 / 重放那份（<code>promptText</code>，<code>wrapUserText</code> 默认 true）仍然全包装 —— 模型在本轮之后回看它时，它是「历史里的一句话」。<strong>目标页元数据两种形态都带</strong>：它是第三方信息，但模型第一轮就该知道自己看的是哪个页面。<br><br>
+  代价：历史里用户文本被包、当轮不被包，形态仍有漂移。要彻底统一就得收窄红线第 2 条对「用户输入回显」的要求 —— 那是另一次拍板，不夹带在这里。
+</blockquote>
+    <p><strong>系统提示里装了什么</strong>（prompt.js，按顺序）：角色定义 → 强项（读真实 DOM 的优势）→ <strong>可用工具</strong>（按 class 分组列出）→ 目标页与标签页规则 → Automa 领域知识（JS 块运行时函数 + 关键语义、模板函数、模板引用语法、工作流结构要点）→ 输出约定 → <strong>可用技能索引</strong>（T-81b）→ <strong>用户自定义指令</strong>（T-81a）→ <strong>安全声明</strong>。<strong>领域知识与工具清单都是动态取自项目常量</strong> — 不硬编码拷贝，块增删或改名时自动跟上。</p>
+<blockquote class="note">
+  <strong>用户指令为什么排在安全声明之前。</strong> 安全声明必须保持全文末段，这样「用户指令覆盖不了安全边界」由<strong>结构</strong>保证，而不是靠模型听话。它也不包 untrusted —— 它是用户显式写入配置的内容，属于红线第 2 条管不到的第三类白名单（常量 / 工具元数据 / 用户显式配置）。
+</blockquote>
 
     <h4>3b — 起 pi Agent：两个钩子挂进去</h4>
-    <p><code>ensurePiAgent(systemPrompt)</code>（loop.js:653）惰性创建 pi 的 <code>Agent</code>，跨轮复用（它持有对话状态）。我们的三件事都以钩子形式挂进去：</p>
+    <p><code>ensurePiAgent(systemPrompt)</code>（loop.js:720）惰性创建 pi 的 <code>Agent</code>，跨轮复用（它持有对话状态）。我们的三件事都以钩子形式挂进去：</p>
 <pre><code>piAgent = <span class="kw">new</span> Agent({
   initialState: {
     systemPrompt, model,
@@ -698,7 +713,7 @@ parts.<span class="fn">push</span>(<span class="fn">wrap</span>(<span class="str
   <span class="fn">beforeToolCall</span>: <span class="kw">async</span> ({ toolCall, args }) =&gt; { … },
 });
 piAgent.<span class="fn">subscribe</span>(handlePiEvent);   <span class="cm">// pi 事件 → fromPiEvent → agent 事件</span></code></pre>
-    <p class="srcline">src/agent/loop.js:653-800（节选，伪代码化）</p>
+    <p class="srcline">src/agent/loop.js:720-830（节选，伪代码化）</p>
 
     <h4>3c — 续接与发车</h4>
 <pre><code><span class="kw">const</span> agent = <span class="kw">await</span> <span class="fn">ensurePiAgent</span>(system);
@@ -712,9 +727,10 @@ piAgent.<span class="fn">subscribe</span>(handlePiEvent);   <span class="cm">// 
   agent.state.messages = existingSystem ? [existingSystem, ...piMessages] : piMessages;
 }
 
-<span class="kw">await</span> agent.<span class="fn">prompt</span>(userText);   <span class="cm">// ← 循环本体由 pi 驱动：请求 → 工具 → 再请求…</span>
+<span class="kw">await</span> agent.<span class="fn">prompt</span>(livePromptText);   <span class="cm">// ← 循环本体由 pi 驱动：请求 → 工具 → 再请求…</span>
 <span class="fn">harvestUsage</span>(usage);             <span class="cm">// 按消息身份收割本轮全部新 assistant 消息的用量</span></code></pre>
-    <p class="srcline">src/agent/loop.js:870-924（节选）</p>
+    <p class="srcline">src/agent/loop.js:870-957（节选）</p>
+    <p><code>livePromptText</code> 是 T-63/T-112 引入的<strong>第三个形态</strong>：送进 pi 的当轮那版用 <code>wrapUserText: false</code>（元数据仍包、用户原文裸奔），而 <code>USER_MESSAGE</code> 事件里的 <code>promptText</code> 仍是全包装版。两者同源于 <code>buildUserMessage</code>，差别只在一个布尔。</p>
     <p><strong>循环没有步数上限</strong>（T-75，用户拍板）：pi-agent-core 没有步数限制，何时停止由用户决定 — 点「停止」走 <code>abort()</code>（controller + piAgent 双中止）。<strong>错误收尾不发 DONE</strong>：pi 把失败编码成 assistant 消息的 stopReason，映射层转成 ERROR 事件，UI 靠「有没有 DONE」区分正常收尾与出错收尾。参数解析失败、未知工具等都在 pi/映射层转成错误观察值，不炸整轮。</p>
 
     <h4>3d — 溢出恢复（T-76，只试一次）</h4>
@@ -873,15 +889,15 @@ log(<span class="str">'turn.end'</span>, { stopped, aborted: controller.signal.a
      │                        模型看到拒绝观察值，自己换个做法或直接回答
      └─ approved === true  → return undefined → pi 执行 tool.execute(args, toolCtx)</div>
 
-<p><strong>为什么需要 <code>rejectedBy</code> 表</strong>（loop.js:560-570）：pi 的 <code>beforeToolCall</code> 返回 <code>{block:true}</code> 后，循环产出的失败工具结果是 <code>isError:true</code>，但 pi 不会告诉我们「这是用户拒的」。而 UI 契约要求「用户拒绝」独立于「工具失败」（REJECTED 琥珀色，不是红色错误 — <em>「前者不是模型的错，后者模型还能自纠」</em>）。所以钩子拦截时记下 toolCallId → 拒绝原因，映射层收到对应的 <code>tool_execution_end</code> 时把状态改成 REJECTED，并保持 observation 是包好的观察值。</p>
+<p><strong>为什么需要 <code>rejectedBy</code> 表</strong>（loop.js:526-532 / :671-685，钩子在 <code>:794</code>）：pi 的 <code>beforeToolCall</code> 返回 <code>{block:true}</code> 后，循环产出的失败工具结果是 <code>isError:true</code>，但 pi 不会告诉我们「这是用户拒的」。而 UI 契约要求「用户拒绝」独立于「工具失败」（REJECTED 琥珀色，不是红色错误 — <em>「前者不是模型的错，后者模型还能自纠」</em>）。所以钩子拦截时记下 toolCallId → 拒绝原因，映射层收到对应的 <code>tool_execution_end</code> 时把状态改成 REJECTED，并保持 observation 是包好的观察值。</p>
 
 <h3>四条必须放行（否）的路径</h3>
 <table>
 <tr><th>时机</th><th>代码</th><th>不做的后果</th></tr>
-<tr><td>切会话前</td><td><code>agentHost.js:134-139</code> <code>guardAgentSwitch()</code></td><td>旧会话的 loop 永远 await，这一轮永不收尾</td></tr>
-<tr><td>删除会话前</td><td>同上（<code>deleteAgentSession</code> 第一行就调）</td><td>同上</td></tr>
-<tr><td><strong>卡片所在面板卸载前</strong></td><td><code>AgentPanel.vue</code> <code>onBeforeUnmount</code> → <code>emit('confirm-answer', false)</code></td><td>侧栏三处 <code>v-if</code>（切走助手面板 / 打开块编辑卡 / 收起整个侧栏）任一触发，卡片连同面板一起被卸载，而 loop 还在 await —— <strong>宿主那个钩子只兜「整页卸载」，兜不住「面板被藏起来」</strong></td></tr>
-<tr><td>宿主卸载前</td><td><code>agentHost.js:323-328</code> <code>onBeforeUnmount</code></td><td>面板被关，loop 悬着，会话永不落盘</td></tr>
+<tr><td>切会话前</td><td><code>agentHost.js:191-198</code> <code>guardAgentSwitch()</code>（先问 <code>sessionAuth.planSwitch</code> 拿动作顺序，再执行）</td><td>旧会话的 loop 永远 await，这一轮永不收尾</td></tr>
+<tr><td>删除会话前</td><td>同上（<code>deleteAgentSession</code> <code>:234</code> 第一行就调）</td><td>同上</td></tr>
+<tr><td><strong>卡片所在面板卸载前</strong></td><td><code>AgentPanel.vue:239-241</code> <code>onBeforeUnmount</code> → <code>host.answerConfirm(false)</code></td><td>侧栏三处 <code>v-if</code>（切走助手面板 / 打开块编辑卡 / 收起整个侧栏）任一触发，卡片连同面板一起被卸载，而 loop 还在 await —— <strong>宿主那个钩子只兜「整页卸载」，兜不住「面板被藏起来」</strong></td></tr>
+<tr><td>宿主卸载前</td><td><code>agentHost.js:419-429</code> <code>onBeforeUnmount</code>（同一处还摘 <code>tabs.onRemoved/onUpdated</code> 监听）</td><td>面板被关，loop 悬着，会话永不落盘；监听不摘则面板反复开关后事件被处理多次</td></tr>
 </table>
 <pre><code><span class="cm">// src/composable/agentHost.js:323-328</span>
 onBeforeUnmount(() =&gt; {
@@ -910,22 +926,22 @@ onBeforeUnmount(() =&gt; {
 <p><code>isTargetable()</code> 排除掉 content script 根本没注入的地方 — <code>chrome://</code>、<code>about:</code>、扩展自己的页面、扩展商店。注释里记了一条踩坑：<strong>用 <code>getActiveTab()</code> 会返回 dashboard 自己</strong>（扩展页没注入 content script），导致每次工具调用都报 "Could not establish connection"。</p>
 
 <h3>第 2 层：pin — 会话级的目标页身份</h3>
-<pre><code><span class="cm">// src/agent/index.js:391-395（注释原文）</span>
+<pre><code><span class="cm">// src/agent/index.js:409-412（注释原文）</span>
 <span class="cm">// 会话 pin（P2 标签页定位）：{tabId, origin, title?} 列表。</span>
 <span class="cm">// pin 必须带 origin——Chrome 会复用已关闭 tab 的 id，裸信 tabId 会操作到</span>
 <span class="cm">// 复用后的陌生页面。pin 在会话内持续存在，首轮 send 自动捕获、</span>
 <span class="cm">// open_url/用户选择追加，删除会话即清空。</span></code></pre>
 <table>
 <tr><th>pin 从哪来</th><th>代码位置</th></tr>
-<tr><td>首轮 send 自动捕获当前 targetTab</td><td><code>index.js:611-618</code> 走 <code>targetState.js</code> 的 <code>initialPinsFromTab</code>（带 id &gt;= 0 守卫，假 tab 不能当身份）</td></tr>
-<tr><td>用户手动选（TabPicker）</td><td><code>index.js:797</code> <code>pickTab()</code> —「用户选的页」意图是「以后就用这个页」，所以 pin 一起更新（<code>upsertPin</code> 纯函数）</td></tr>
+<tr><td>首轮 send 自动捕获当前 targetTab</td><td><code>index.js:632-639</code> 走 <code>targetState.js</code> 的 <code>initialPinsFromTab</code>（带 id &gt;= 0 守卫，假 tab 不能当身份）</td></tr>
+<tr><td>用户手动选（TabPicker）</td><td><code>index.js:844</code> <code>pickTab()</code> —「用户选的页」意图是「以后就用这个页」，所以 pin 一起更新（<code>upsertPin</code> 纯函数）</td></tr>
 <tr><td><code>open_url</code> 打开新页</td><td><code>tabs.js</code> <code>openUrl</code> → <code>ctx.addPin</code></td></tr>
 <tr><td><code>focus_tab</code> 切到未 pin 的页</td><td><code>tabs.js:60-71</code> —「模型既然要点名它，意图就是明确的」</td></tr>
 <tr><td>会话保存 / 恢复</td><td>随会话记录存 pins 与 focusedTabId；<code>openSession</code> 按 focusedTabId 恢复</td></tr>
 </table>
 
 <h3>第 3 层：origin 校验 + 页面指纹 — 每次请求前的预检</h3>
-<p><code>preStepNotice()</code>（index.js:496）在 <strong>pi 每次 LLM 请求前</strong>由 <code>transformContext</code> 钩子调用（产物只用于当次请求、不写回 transcript），产出 <code>system-notice</code> 让<strong>模型自决</strong>，绝不硬停任务。判定与文案抽在 <code>targetState.js</code> 的纯函数里（T-43）——「把『判定』与『文案』拆开，runtime 只剩 IO 与去重键的存取」：</p>
+<p><code>preStepNotice()</code>（index.js:511）在 <strong>pi 每次 LLM 请求前</strong>由 <code>transformContext</code> 钩子调用（产物只用于当次请求、不写回 transcript），产出 <code>system-notice</code> 让<strong>模型自决</strong>，绝不硬停任务。判定与文案抽在 <code>targetState.js</code> 的纯函数里（T-43）——「把『判定』与『文案』拆开，runtime 只剩 IO 与去重键的存取」：</p>
 <table>
 <tr><th>检查</th><th>触发条件</th><th>产出（targetState.js）</th></tr>
 <tr><td>tab 存活</td><td><code>browser.tabs.get()</code> 抛错</td><td><code>tabClosedNotice()</code>：「目标页（id N）已经关闭。如需继续操作网页，请用 list_tabs…或直接基于已有信息回答。」</td></tr>
@@ -933,6 +949,15 @@ onBeforeUnmount(() =&gt; {
 <tr><td>内容变化</td><td>本轮做过一次 probe，且指纹 ≠ 上次 read_page 的指纹</td><td><code>fingerprintChangedNotice()</code>：「目标页内容已变化（指纹 X → Y）…如果页面没变，沿用上次结论即可，不要重复读页。」</td></tr>
 </table>
 <p><strong>去重机制</strong>：<code>originDriftKey</code> / <code>fingerprintKey</code> 各构造一个去重键，同一条提示不逐轮刷屏。而且指纹比对<strong>每轮最多一次 probe</strong>，且模型从没读过页就跳过（没有基线无从比起）。</p>
+
+<h3>UI 侧的目标页健康态（T-08）</h3>
+<p>预检是<strong>给模型看的</strong>，用户侧另有一份：目标页条显示 favicon + 「固定 / 自动」徽标 + 失效态。判定是 <code>tab.js</code> 的纯函数 <code>targetHealth(liveTab, snapshot)</code>，返回 <code>none</code> / <code>closed</code> / <code>drift</code> / <code>ok</code>：</p>
+<ul>
+<li><strong>漂移只看 origin</strong>，不比 url 全等 —— 与 pin 的口径一致（正常重定向不该报失效）。</li>
+<li><code>favIconUrl</code> <strong>只给显示用，任何判断都不得依赖它</strong>：浏览器可能不给、加载也可能失败。</li>
+<li>状态由 <code>agentHost.js</code> 订阅 <code>tabs.onRemoved</code> / <code>tabs.onUpdated</code> 维护（<code>targetState</code> / <code>targetPinned</code>），<strong>卸载时成对 removeListener</strong> —— 这两个监听挂在 browser 上不是组件上，不摘就是泄漏。</li>
+<li>不新增事件种类，也<strong>不自动换页</strong>：失效只提示，助手仍按预检走「让模型自决」。</li>
+</ul>
 
 <h4>页面指纹是怎么算的</h4>
 <pre><code><span class="cm">// src/content/blocksHandler/handlerAgentReadPage.js:803-831</span>
@@ -1036,15 +1061,15 @@ canvas: {
 </blockquote>
 
 <h3>阈值族：与 pi 对齐、按窗口比例缩放</h3>
-<pre><code><span class="cm">// src/agent/compaction.js:111-124</span>
+<pre><code><span class="cm">// src/agent/compaction.js:122-141</span>
 <span class="kw">const</span> reserveTokens     = Math.<span class="fn">round</span>(Math.<span class="fn">min</span>(<span class="num">16384</span>, Math.<span class="fn">max</span>(<span class="num">2048</span>, cw * <span class="num">0.15</span>)));
 <span class="kw">const</span> thresholdTokens   = Math.<span class="fn">max</span>(<span class="num">1024</span>, cw - reserveTokens);   <span class="cm">// 越过即触发</span>
 <span class="kw">const</span> keepRecentTokens  = Math.<span class="fn">round</span>(Math.<span class="fn">min</span>(<span class="num">20000</span>, Math.<span class="fn">max</span>(<span class="num">2048</span>, thresholdTokens * <span class="num">0.3</span>), thresholdTokens * <span class="num">0.5</span>));
 <span class="kw">const</span> summaryMaxTokens  = Math.<span class="fn">max</span>(<span class="num">512</span>, Math.<span class="fn">round</span>(reserveTokens * <span class="num">0.8</span>));</code></pre>
-<p>reserve 16384 / keepRecent 20000 是 pi 在 128k 窗口上的默认值，这里按 <code>contextWindow</code>（用户在设置页按自己的模型填）比例缩放，小窗口不至于「阈值比保留窗还小」的死锁。<strong>contextWindow &lt; 4096 或缺省 = 压缩不可用/关闭</strong>（<code>compactionThresholds</code> 返回 null，<code>createAgent</code> 的 <code>runCompaction</code> 直接短路）。</p>
+<p>reserve 16384 / keepRecent 20000 是 pi 在 128k 窗口上的默认值，这里按 <code>contextWindow</code>（用户在设置页按自己的模型填）比例缩放，小窗口不至于「阈值比保留窗还小」的死锁。<strong>reserve 的 16384 是上限</strong>，所以大窗口的触发点不是简单的 ×0.85：默认 200K 窗口的阈值是 <strong>183616</strong>（cw×0.15 = 30000 被截到 16384）。<code>summaryMaxTokens</code> 另有一道 <code>SUMMARY_MAX_TOKENS_CAP = 2048</code> 的上限（compaction.js:34）—— 摘要请求的输出上限<strong>不跟随用户的 maxTokens</strong>，否则用户填 512 会让摘要必然撞 <code>stopReason=length</code> → 抛错 → 压缩整体跳过。<strong>contextWindow &lt; 4096 或缺省 = 压缩不可用/关闭</strong>（<code>compactionThresholds</code> 返回 null，<code>createAgent</code> 的 <code>runCompaction</code> 直接短路）。</p>
 
 <h3>token 估算：CJK 感知、不用 usage 记账</h3>
-<pre><code><span class="cm">// src/agent/compaction.js:35-41（注释原文）</span>
+<pre><code><span class="cm">// src/agent/compaction.js:36-45（注释原文）</span>
 <span class="cm">/**
  * CJK 感知的 token 估算：中日韩字符 ≈ 1 token/字，其余 ≈ 1 token/4 字符。
  *
@@ -1055,7 +1080,7 @@ canvas: {
 <p><code>estimateHistoryTokens</code> 把整段历史（含 system prompt 与工具声明 JSON）估一遍，每个事件取「真正进 transcript 的那份」文本（<code>promptText</code> 优先于裸 <code>text</code>）。</p>
 
 <h3>切点规则：绝不劈开 user 轮</h3>
-<p><code>planCompaction</code>（compaction.js:159）从尾部向前累积 token，越过保留窗后把切口<strong>回退到所属 user 轮的起点</strong> —— TOOL_CALL 与 TOOL_RESULT 因此天然不分居两侧。返回 null 表示「这次不该压」，调用方必须尊重：</p>
+<p><code>planCompaction</code>（compaction.js:177）从尾部向前累积 token，越过保留窗后把切口<strong>回退到所属 user 轮的起点</strong> —— TOOL_CALL 与 TOOL_RESULT 因此天然不分居两侧。返回 null 表示「这次不该压」，调用方必须尊重：</p>
 <ul>
   <li>切口为 0：保留窗已覆盖全部历史，没有可压缩的完整轮次；</li>
   <li>最后一条 compaction 落在保留窗内：刚压过，再压只会空转；</li>
@@ -1088,10 +1113,10 @@ canvas: {
 <span class="cm"> *   agent_session_index        轻量索引 [{id, workflowId, title, status, ...}]</span>
 <span class="cm"> *   agent_session_&lt;id&gt;         完整会话 {events, ...}，索引里不带 events，</span>
 <span class="cm"> *                              列表渲染不用把全部历史拉进内存</span></code></pre>
-<p><strong>索引与本体分离</strong>是刻意的：会话列表渲染只需要 title / lastAccessedAt / status，不该为了画下拉框把所有历史读进内存。save / remove / patchTitle 共用一条<strong>写串行链</strong>（sessions.js:154）—— 没有它，patchTitle 的「读 → 改 → 写」会和另一轮的 save 交错。</p>
+<p><strong>索引与本体分离</strong>是刻意的：会话列表渲染只需要 title / lastAccessedAt / status，不该为了画下拉框把所有历史读进内存。save / remove / patchTitle 共用一条<strong>写串行链</strong>（sessions.js:159-165）—— 没有它，patchTitle 的「读 → 改 → 写」会和另一轮的 save 交错。</p>
 
 <h3>存储体积上限：按整轮裁剪</h3>
-<pre><code><span class="cm">// src/agent/sessions.js:23</span>
+<pre><code><span class="cm">// src/agent/sessions.js:22</span>
 <span class="cm">/** 存储里最多保留多少个用户轮次（模型侧另有压缩阈值，这里是存储体积上限） */</span>
 <span class="kw">export const</span> <span class="fn">MAX_SESSION_TURNS</span> = <span class="num">20</span>;</code></pre>
 <p>必须按整轮切（从某条 user-message 事件起）—「从中间切会把一轮的 tool-result 和它的 tool-call 拆开，wire 配对净化也救不回语义」。COMPACTION 事件是裁剪的锚点，<strong>不被 20 轮修剪裁掉</strong> —— 否则摘要丢了、transcript 投影就没了起点（见 §10）。</p>
@@ -1108,15 +1133,16 @@ canvas: {
    ├─ newSession() → 全部状态归零
    └─ deleteSession(id) → remove() + 若是当前会话则 currentSessionId = null</div>
 
-<p><strong>删除有二次确认</strong>（agentHost.js:175 起）— 会话是唯一的历史载体，且列表每行都带删除按钮（T-86：想删一条旧会话不该被迫先切过去）。确认回调里<strong>再核一次 busy 与 id</strong>：弹窗期间可能又开跑了一轮，删在途会话会被那一轮的 save 回写成「幽灵会话」。</p>
+<p><strong>删除有二次确认</strong>（agentHost.js:232 起）— 会话是唯一的历史载体，且列表每行都带删除按钮（T-86：想删一条旧会话不该被迫先切过去）。确认回调里<strong>再核一次 busy 与 id</strong>：弹窗期间可能又开跑了一轮，删在途会话会被那一轮的 save 回写成「幽灵会话」。</p>
 
-<h3>标题的两级兜底</h3>
+<h3>标题的三级兜底</h3>
 <table>
 <tr><th>级别</th><th>实现</th><th>失败时</th></tr>
-<tr><td>兜底</td><td><code>titleFromEvents()</code> — 首条用户消息前缀，截断 24 字（sessions.js）</td><td>总有值</td></tr>
-<tr><td>锦上添花</td><td><code>generateTitleAsync()</code> — 复用当轮模型配置发小请求（title.js），回写走 <code>patchTitle</code> 单字段补丁（T-35/B1）</td><td>静默回退到兜底</td></tr>
+<tr><td>兜底</td><td><code>titleFromEvents()</code>（sessions.js:45）— 首条用户消息前缀，截断 24 字</td><td>总有值</td></tr>
+<tr><td>锦上添花</td><td><code>generateTitleAsync()</code>（index.js:90）— 复用当轮模型配置发小请求（title.js），回写走 <code>patchTitle</code> 单字段补丁（T-35/B1）</td><td>静默回退到兜底</td></tr>
 </table>
-<p><code>patchTitle</code> 只改 title 一个字段而不是整记录 save —— 标题生成要几秒，期间用户可能已发出第二轮，整记录 save 会把首轮 events 快照盖到第二轮上；id 也在发起时捕获，避免落出 <code>agent_session_null</code> 幽灵会话。<code>sessionOptionLabel()</code>（sessions.js:116）拼装会话 chip 文案「标题 · MM-DD HH:mm」。它被抽成纯函数是因为「面板是 SFC，本仓没有组件测试基建，写在模板里的展示逻辑等于测不到」。</p>
+<p><strong>三级而不是两级</strong>（T-48，sessions.js:198-208）：<code>save()</code> 取 <code>session.title || 已存记录的 title || titleFromEvents(...)</code>。轮次 save <strong>不带 title 字段</strong>，所以少了中间那级的话，<code>patchTitle</code> 回写的 LLM 标题会在下一轮落盘时被冲回消息前缀 —— 标题生成要几秒，期间用户很可能已经发出第二轮。</p>
+<p><code>patchTitle</code> 只改 title 一个字段而不是整记录 save，理由同上（整记录 save 会把首轮 events 快照盖到第二轮上）；id 也在发起时捕获，避免落出 <code>agent_session_null</code> 幽灵会话。<code>sessionOptionLabel()</code>（sessions.js:116）拼装会话 chip 文案「标题 · MM-DD HH:mm」。它被抽成纯函数是因为「面板是 SFC，本仓没有组件测试基建，写在模板里的展示逻辑等于测不到」。</p>
 
 <h2 id="provider"><span class="n">12</span>Provider 层（pi 接线）<span class="anchor">#provider</span></h2>
 
@@ -1284,8 +1310,8 @@ canvas: {
 <tr><td><code>USER_MESSAGE</code></td><td>user</td><td>右对齐气泡</td></tr>
 <tr><td><code>TOOL_CALL</code> + <code>TOOL_RESULT</code></td><td>tool</td><td><strong>合并成一张卡</strong>：事件流已按调用拆开（T-74），这里按 <code>toolCallId</code> <strong>从后往前</strong>找归属卡 —— 同名并行调用（一条消息里两次 read_page）事件交错，旧键 name+step 会互相覆盖参数与观察值，归属卡也不一定是最后一张</td></tr>
 <tr><td><code>SYSTEM_NOTICE</code></td><td>notice</td><td>琥珀色提示条（含溢出恢复的 <code>RECOVERY_NOTICE</code>）</td></tr>
-<tr><td><code>ERROR</code></td><td>notice</td><td>同样渲染成 notice（与 notice 同色，已登记为 T-04）</td></tr>
-<tr><td><code>COMPACTION</code></td><td>—</td><td>无专属槽位，UI 不渲染（模型侧经投影进 transcript；用户可见的信号是恢复时那条 system-notice）。落盘与重放时保留</td></tr>
+<tr><td><code>ERROR</code></td><td>error</td><td><strong>独立红色错误卡</strong>（T-04）：图标 + <code>errorKind</code> 分类文案 + 「重试」/「复制详情」。重试用「出错这一轮之前最近那条用户消息」，<strong>不碰输入框草稿</strong></td></tr>
+<tr><td><code>COMPACTION</code></td><td>compaction</td><td><strong>默认收起的折叠卡</strong>，标题带被压轮数，展开可见摘要全文（<code>AgentTranscript.vue:135</code>）。落盘与重放时保留</td></tr>
 <tr><td><code>START</code> / <code>DONE</code> / <code>TARGET_TAB</code></td><td>—</td><td>不产生对话内容</td></tr>
 </table>
 
@@ -1303,32 +1329,62 @@ canvas: {
 
 <h2 id="config"><span class="n">15</span>配置<span class="anchor">#config</span></h2>
 
-<p>设置页在 <code>/settings#agent</code>，表单组件 <code>SettingsAgent.vue</code>，存储 key 是 <code>automaAgentConfig</code>。</p>
+<p>设置页是<strong>独立菜单项</strong>，路由 <code>/settings/agent</code>（不是主设置里的一个锚点），表单组件 <code>SettingsAgent.vue</code>，存储 key 是 <code>automaAgentConfig</code>。</p>
+
+<h3>存储形状 v2：多连接 × 每连接多模型</h3>
+<pre><code>{ version: 2,
+  providers: [ { id, name, templateId, baseUrl, apiKey<span class="cm">// 密文</span>,
+                 models: [ { id, contextWindow, maxTokens } ] } ],
+  activeProviderId, activeModelId, temperature }</code></pre>
 
 <table>
 <tr><th>字段</th><th>默认值</th><th>说明</th></tr>
-<tr><td><code>provider</code></td><td>openai</td><td>8 个预设：OpenAI / ModelScope / DeepSeek / Moonshot / 智谱 GLM / 阿里百炼 / OpenRouter / 自定义</td></tr>
-<tr><td><code>baseUrl</code></td><td>按 provider</td><td>缺 /v1 会自动补；必须是 http/https 开头</td></tr>
-<tr><td><code>model</code></td><td>按 provider</td><td>自由填写（datalist 只是提示不是限制 —「自建服务、反代、本地推理的模型名五花八门，下拉框根本列不完」）</td></tr>
-<tr><td><code>contextWindow</code></td><td>32000</td><td>驱动 T-76 压缩阈值（§10），pi 侧也拿它当模型元数据；用户要能按自己的模型调大，最小 1024（&lt; 4096 压缩视为不可用）</td></tr>
+<tr><td><code>templateId</code></td><td>openai</td><td>8 个模板：OpenAI / ModelScope / DeepSeek / Moonshot / 智谱 GLM / 阿里百炼 / OpenRouter / 自定义。<strong>模板只提供 baseUrl 与建议模型名，不是「只能用这些」</strong></td></tr>
+<tr><td><code>baseUrl</code></td><td>按模板</td><td>缺 /v1 会自动补；必须是 http/https 开头</td></tr>
+<tr><td><code>models[].id</code></td><td>按模板</td><td>自由填写 + 「抓取可用模型」抓 <code>GET {baseUrl}/models</code>。勾选添加是<strong>一次性快照，不与端点自动同步</strong> —— 自动同步会让端点一次抖动就把用户正在用的模型抹掉</td></tr>
+<tr><td><code>models[].contextWindow</code></td><td>按模板建议值</td><td>驱动 T-76 压缩阈值（§10）。模板各带建议值（openai 128K / deepseek 64K / zhipu、aliyun 128K / modelscope、moonshot 32K），可按模型用 <code>modelWindows</code> 覆盖；<strong>查不到才回落 <code>DEFAULT_CONFIG.contextWindow = 200000</code></strong>。最小 1024（&lt; 4096 压缩视为不可用）</td></tr>
+<tr><td><code>models[].maxTokens</code></td><td>0</td><td>单次回复输出上限，<strong>0 / 空 = 不传，交给端点默认</strong>；填了必须 ≥ 256</td></tr>
 <tr><td><code>temperature</code></td><td>0.2</td><td>校验在（0..2），但当前 UI 未暴露该字段</td></tr>
-<tr><td><code>apiKey</code></td><td>—</td><td><strong>单独存、加密，不进主设置表</strong></td></tr>
+<tr><td><code>apiKey</code></td><td>—</td><td>每条连接一份，<strong>存储态是密文</strong>；不进主设置表</td></tr>
 </table>
 
 <blockquote class="note">
-  <strong>为什么不进主设置？</strong><code>SettingsAgent.vue:59-62</code> 的注释：<em>「主设置是明文 JSON，还会跟着备份走；密钥放进去等于跟着导出走。」</em>
-  加密复用项目既有的 <code>credentialUtil</code>（AES + HMAC），不另造加密方案 —「两套加密并存只会让『到底哪套是当前有效的』变得无法回答」。
+  <strong>v2 为什么对运行时零改动。</strong> <code>loadConfig()</code> 仍是运行时的唯一入口，但它内部经 <code>resolveActiveConfig()</code>（config.js:505-531）把「当前连接 + 当前模型」摊平成<strong>与 v1 完全相同的扁平结构</strong>（<code>{provider, baseUrl, model, contextWindow, maxTokens, temperature, apiKey}</code>）。<code>provider.js</code> / <code>loop.js</code> / <code>compaction.js</code> 一行未改，<strong>迁移风险被关在配置层内</strong>。
+  <br><br>
+  <strong>删掉最后一条连接是合法操作</strong>：<code>resolveActiveConfig</code> 返回 <code>DEFAULT_CONFIG</code>（<code>apiKey: ''</code>），而 <code>index.js</code> 的 send 开头与 <code>AgentPanel.vue</code> 的 <code>configured</code> 都只看这一个字段 —— 删除后助手自动进入「未配置」态，那两处现有检查零改动接管。
+  <br><br>
+  <strong>v1 自动迁移</strong>（<code>migrateLegacy</code>）：纯函数、在 <code>normalizeDoc</code> 里跑、<strong>不写盘</strong>（写盘留给下次保存，读路径不带副作用）。
 </blockquote>
 
-<p><code>clearApiKey()</code> 单独开一个函数而不是复用 <code>saveConfig</code>：<em>「validateConfig 要求 apiKey 非空，而『删除密钥』恰恰要传空值 —— 走保存那条路根本删不掉。用户想撤回授权时必须真的能删干净。」</em></p>
+<h3>密钥：两个字段，最容易踩的坑</h3>
+<blockquote class="warn">
+  存储态 <code>providers[].apiKey</code> 是<strong>密文</strong>（沿用 v1 约定，迁移才能原样搬）；表单态 <code>apiKey</code> 只装用户<strong>当场敲的明文</strong>，加载时挪到 <code>encryptedKey</code>（UI 不可渲染）+ <code>hasKey</code>。第一版把两者在 <code>validateConfig</code> 里揉成一个字段，<code>saveConfig</code> 于是把密文再加密一次（<code>enc:enc:sk-…</code>）—— 被测试当场抓住。有效密钥 = <strong>明文优先，否则沿用密文</strong>，这样「没动密钥别写回空串」成了形状上的必然。
+  <br><br>
+  <code>loadConfig</code> 只解密<strong>当前那一条</strong>：解密 N 条既没意义（设置页要的是 <code>hasKey</code>），也让「打开一次面板」不至于把整串密钥摊在内存里。
+</blockquote>
 
-<p><code>loadConfig</code> 里有个容易忽略的细节：</p>
-<pre><code><span class="cm">// 解密实现当前是同步的，但 await 一个非 Promise 没有代价。</span>
-<span class="cm">// 不写 await 的话，哪天有人换成异步实现，apiKey 会变成一个 Promise，</span>
-<span class="cm">// 然后被当成 Bearer token 发出去 —— 而且不报错，只是鉴权失败。</span>
-<span class="kw">const</span> plainKey = raw.apiKey ? <span class="kw">await</span> io.<span class="fn">decrypt</span>(raw.apiKey) : <span class="str">''</span>;</code></pre>
+<blockquote class="note">
+  <strong>为什么不写进主设置？</strong> 早期版本的注释说「主设置是明文 JSON，还会跟着备份走；密钥放进去等于跟着导出走」。<strong>后半句在当前实现下不成立</strong> —— <code>SettingsBackup.vue:340-356</code> 的备份 payload 只含 workflows / tables / variables，<strong>不含主设置</strong>。真正成立的理由是前半句：主设置是明文 JSON。T-97 已把写往主设置的 <code>settings.agent</code> 镜像整个取消（实测全仓库无读取方，而它会把明文 Key 落到 <code>browser.storage.local</code>）。
+  <br><br>
+  加密复用项目既有的 <code>credentialUtil</code>（AES + HMAC），不另造加密方案。
+  <br><br>
+  <code>clearApiKey()</code> 这个导出<strong>已被删除</strong>：它绕过表单直接改存储，用户改完名字还没保存时去删密钥，存储里的旧文档会把那些改动吃掉（两个写者必然漂移）。改成清表单字段、随「保存」一起落盘。
+</blockquote>
 
-<p>表单<strong>单源读取</strong>：<code>onMounted</code> 只从 <code>loadConfig(configIO)</code> 读，注释说「<code>store.settings.agent</code> 只是同一份配置的备份镜像（随主设置导出），曾经两边都读，必然漂移」。</p>
+<p>表单<strong>单源读取</strong>：<code>onMounted</code> 只从 <code>loadConfig(configIO)</code> 读。</p>
+
+<h3>保存语义：写整份文档</h3>
+<p>保存按钮在页面底部，<strong>写整份文档</strong>（不是只写当前展开的那张卡）—— UI 的承诺必须与数据模型对上，所以按钮旁明写「保存会写入本页所有连接」。校验失败时用<strong>同一份 <code>validateConfig</code> 再单条跑一遍</strong>，把整份文档的错误拆进各自的卡，剩下的（temperature 越界、连接重名）留在页底；不用「按 <code>连接名：</code> 前缀反解归属」—— 那是复述报错格式，措辞一改就错位。有错的卡自动展开（收起状态下的错误看不见，等于没报）。</p>
+
+<h3>用户自定义内容（T-81a / T-81b）</h3>
+<p>与连接配置<strong>互不相干，各存各的 storage key、各有各的写者</strong>：</p>
+<table>
+<tr><th>内容</th><th>存储 key</th><th>怎么进 prompt</th></tr>
+<tr><td>自定义指令</td><td><code>automaAgentInstructions</code></td><td>每轮 send 现读，作为独立 section 拼在「# 输出约定」之后、「# 安全声明」之前。<strong>不包 untrusted</strong> —— 它是用户显式写入配置的内容（system prompt 三类白名单的第③类），安全声明保持全文末段，所以用户指令覆盖不了安全边界</td></tr>
+<tr><td><code>/</code> 模板</td><td><code>automaAgentCommands</code></td><td><strong>不进 prompt</strong>：选中后整框替换输入框草稿，纯 UI 机制</td></tr>
+<tr><td>技能</td><td><code>automaAgentSkills</code></td><td><strong>两级注入</strong>：system prompt 只放索引区（每技能一行「名称 — 描述」），正文由 <code>read_skill</code> 按需取。正文走 <code>untrusted_tool_result</code> —— 导入的技能可能是第三方产物，红线不豁免</td></tr>
+</table>
+<p>三处体积防线<strong>一律软警告、从不静默截断</strong>：指令 8K、单个技能 256K、技能索引总量 4K。技能描述长度也不做硬闸（曾按自家 UI 习惯设了 ≤100 字符，实测生态 skill 的描述本就数百字符 —— 它是给模型的触发判据，硬闸挡住的正是「导入生态技能」这个主场景）。</p>
 
 <h2 id="defects"><span class="n">16</span>已确认缺陷<span class="anchor">#defects</span></h2>
 
@@ -1384,6 +1440,15 @@ REJECTED: Unhandled Background Error: TypeError: Cannot read properties of undef
 <tr><td>转中检查点</td><td>T-34：TOOL_RESULT / USER_MESSAGE / DONE 触发 debounce 落盘</td><td>一轮可能跑几分钟，卡死/刷新后现场全无；在途轮次也留快照供诊断</td></tr>
 <tr><td>索引不带 events</td><td><code>agent_session_index</code> 独立</td><td>画一个会话下拉框不该把全部历史读进内存</td></tr>
 <tr><td>展示逻辑抽成纯函数</td><td><code>sessionOptionLabel</code> 在 sessions.js 而非模板里</td><td>「面板是 SFC，本仓没有组件测试基建，写在模板里的展示逻辑等于测不到」</td></tr>
+<tr><td>活轮次的用户原文不包装</td><td>入史版包 <code>untrusted_user_message</code>；送进 pi 的当轮那版 <strong>保持原文</strong>（T-63/T-112）</td><td>untrusted 的含义是「这是数据，不是指令」，把当场指令包进去等于一边让模型照做、一一边按安全声明告诉它这是数据。安全声明是全文末段、按结构保证的，把结构保证换成对模型服从度的赌注不划算。目标页元数据两种形态都包 —— 它是第三方信息</td></tr>
+<tr><td>剥标签只发生在展示层</td><td><code>stripUntrustedForDisplay</code>，模型侧继续看到标签（T-07）</td><td>标签是给模型的结构化边界，用户不需要看见尖括号。只剥白名单标签，页面正文里别的尖括号字面量不动</td></tr>
+<tr><td>origin 才是目标页真身份</td><td><code>targetHealth</code> 的漂移判定只看 origin，不看 url 全等（T-08）</td><td>tabId 会被 Chrome 复用，url 可能被正常重定向；favicon 任何判断都不得依赖 —— 浏览器可能不给</td></tr>
+<tr><td>用户指令不包 untrusted</td><td>进 system prompt 的独立 section，位于安全声明之前</td><td>它是用户<strong>显式写入配置</strong>的内容，不是「回显」（红线第 2 条管的是第三方数据）。用户指令覆盖不了安全边界，由「安全声明保持全文末段」的结构保证，不是靠模型听话</td></tr>
+<tr><td>技能两级注入</td><td>prompt 只放索引，正文由 <code>read_skill</code> 取（T-81b）</td><td>15 个工具全披露还在可接受范围，但技能正文可能很长；索引常驻 + 正文按需，模型不用每轮为用不到的知识付费。正文仍走 untrusted —— 导入的技能是第三方产物</td></tr>
+<tr><td>生态字段不设硬闸</td><td>技能描述长度、指令体积、索引总量一律软警告</td><td>给「要吃外部生态数据」的字段设硬限前得先拿真实样本校准。技能描述本就是给模型的触发判据（生态里动辄数百字符），硬闸挡住的正是主场景</td></tr>
+<tr><td>配置风险关在配置层</td><td>v2 文档经 <code>resolveActiveConfig</code> 摊平成 v1 同形扁平结构</td><td>多连接是产品需求，但 provider / loop / compaction 一行不改 —— 迁移风险不该外溢到不认识新形状的模块</td></tr>
+<tr><td>抓模型是一次性快照</td><td>勾选添加后不与端点自动同步</td><td>自动同步会让端点一次抖动就把用户正在用的模型从列表里抹掉</td></tr>
+<tr><td>保存写整份文档</td><td>保存按钮在页底，页面上明示「会写入本页所有连接」</td><td>UI 的承诺必须与数据模型对上。左右分栏把「保存会写入所有连接」这件事藏起来了（UI 改版时发现）</td></tr>
 </table>
 
 <h3>一条完整的心智模型</h3>
@@ -1399,7 +1464,7 @@ REJECTED: Unhandled Background Error: TypeError: Cannot read properties of undef
 
 <hr>
 <p style="color:var(--dim);font-size:.84rem">
-  本文档基于 <code>D:\project\automa</code> 工作区当前代码逐文件阅读整理，代码行号与函数签名均为实测引用（最后核对：2026-10-06，覆盖 ADR 0004 迁移票 01~08、T-76 上下文压缩与面板 UI 改造后的代码现状）。<br>
+  本文档基于 <code>D:\project\automa</code> 工作区当前代码逐文件阅读整理，代码行号与函数签名均为实测引用（最后核对：<strong>2026-10-06（本轮）</strong>，覆盖 ADR 0004 迁移票 01~08、T-76 上下文压缩、面板 UI 改造、T-65/T-63 修复，以及 <strong>T-81a（自定义指令 + <code>/</code> 模板）、T-81b（技能库 + <code>read_skill</code>）、配置 v2（多连接 × 每连接多模型 + 每模型 contextWindow/maxTokens）</strong>）。工具数与事件数以 <code>npm test</code> 实跑的 <code>TOOLS.length = 15</code>、<code>AGENT_EVENTS</code> 11 种、<code>UNTRUSTED_WRAPPER_TAGS</code> 8 个为准。<br>
   相关文档：<code>CONTEXT.md</code>（术语表）· <code>docs/adr/0001~0004</code>（架构决策）· <code>docs/agent-compaction-spec.md</code>（压缩设计全文）· <code>docs/backlog.md</code>（登记表：T 编号会话捕获 + B 编号助手欠账）
 </p>
 

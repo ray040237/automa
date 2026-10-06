@@ -7,6 +7,7 @@ import {
   riArrowGoBackLine,
   riArrowGoForwardLine,
   riArrowLeftLine,
+  riArrowRightSLine,
   riArrowLeftRightLine,
   riArrowLeftSLine,
   riArrowDownSLine,
@@ -69,6 +70,7 @@ import {
   riFocusLine,
   riFolderLine,
   riFolderOpenLine,
+  riFolderUploadLine,
   riFolderZipLine,
   riFontSize2,
   riFullscreenLine,
@@ -236,6 +238,7 @@ export const icons = {
   riFileEditLine,
   riCompass3Line,
   riFolderOpenLine,
+  riFolderUploadLine,
   riComputerLine,
   riFileCopyLine,
   riCalendarLine,
@@ -270,6 +273,10 @@ export const icons = {
   riDeleteBin7Line,
   riArrowLeftSLine,
   riArrowDownSLine,
+  // T-108/T-31: AgentPanel 会话 chip 的收起态箭头。import 了但没注册进 icons
+  // 时组件走 injectIcons[name] === undefined 分支, 只在控制台打一行 error、
+  // 渲染成空 SVG —— 同一时刻 eslint 也报 no-unused-vars, 两边在说同一件事。
+  riArrowRightSLine,
   riFullscreenLine,
   riFlashlightLine,
   riTimerFlashLine,

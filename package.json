@@ -84,6 +84,7 @@
     "json5": "^2.2.3",
     "jsonpath": "^1.1.1",
     "jspdf": "^2.5.1",
+    "jszip": "^3.10.2",
     "loader-utils": "^3.2.1",
     "lodash.clonedeep": "^4.5.0",
     "lodash.merge": "^4.6.2",

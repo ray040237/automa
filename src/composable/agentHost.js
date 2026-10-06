@@ -35,7 +35,10 @@ import {
   sessionStore,
 } from '@/agent';
 import { buildConfirmation, createSessionAuth } from '@/agent/confirm';
-import { ERROR_KIND, errorEvent } from '@/agent/events';
+import { targetHealth } from '@/agent/tab';
+import { AGENT_EVENTS, ERROR_KIND, errorEvent } from '@/agent/events';
+import { getActiveInstructionsFrom } from '@/agent/customizations';
+import { getSkillIndexFrom } from '@/agent/skills';
 
 /**
  * @param {Object} deps
@@ -69,6 +72,26 @@ export function useAgentHost(deps) {
         '() => null）——缺了会话归属静默变全局，编辑器侧看不到自己的历史。'
     );
   }
+  // T-50：getVariables 同样必填。漏传时 runtime 曾有个 `async () => ({})` 兜底，
+  // 于是任何漏注入的宿主都拿到「变量为空」—— 模型据此写模板引用必然引用到
+  // 不存在的变量名，而且没有任何报错。**没有工作流可读**的宿主要显式传
+  // `async () => ({ bound: false })`，那是与「空」不同的结论。
+  if (typeof deps.getVariables !== 'function') {
+    throw new Error(
+      'useAgentHost: deps.getVariables 必填（() => Promise<{bound, variables, globals}>）' +
+        '——缺了 get_variables 永远返回「（空）」，模型会据此编出不存在���变量名。' +
+        '没有工作流可读时传 async () => ({ bound: false })。'
+    );
+  }
+  // getWorkflowContext 可选：没有工作流上下文的宿主不传即可（返回 null）。
+  if (
+    deps.getWorkflowContext !== undefined &&
+    typeof deps.getWorkflowContext !== 'function'
+  ) {
+    throw new Error(
+      'useAgentHost: deps.getWorkflowContext 若传必须是函数（() => 摘要字符串 | null）'
+    );
+  }
 
   const { t } = useI18n();
   const toast = useToast();
@@ -79,6 +102,11 @@ export function useAgentHost(deps) {
     events: [],
     config: {},
     targetTab: null,
+    // T-08：目标页的健康状态与来源。targetState 取值见 targetHealth()：
+    //   'ok' 正常 / 'closed' 页被关掉 / 'drift' 同一个 tab 跳到了别的 origin / 'none' 还没有目标页
+    // targetPinned 表示这一页是**用户手选固定**的（false = 运行时自动解析出来的）。
+    targetState: 'none',
+    targetPinned: false,
     busy: false,
     runtime: null,
     sessions: [],
@@ -86,6 +114,38 @@ export function useAgentHost(deps) {
     usage: null,
     pendingConfirm: null,
   });
+
+  /**
+   * 目标页失效的监听（T-08）。
+   *
+   * 运行时每步开工前的 preStepNotice 已经判过「tab 没了 / origin 漂了」，但它的
+   * 结果只作为 system-notice 发给模型（index.js:511），面板这边看不到 —— 于是头
+   * 那一行一直显示着旧标题旧 URL，用户以为助手还在看原页面。
+   *
+   * 这里在**页面侧**自己判，不新增事件种类、不动事件历史（AGENTS.md 的 seam 约束）：
+   * 面板本来就有 browser.tabs 全权（listTabs 就是这么来的），onRemoved / onUpdated
+   * 是这两条事实的自然来源。判定逻辑放在 tab.js 的 targetHealth()，纯函数有单测。
+   *
+   * 只标记状态，不自动换页 —— 目标页是「这一轮结论的前提」，悄悄换成另一个页
+   * 比明着报警更糟（CONTEXT.md「pin」条：origin 才是真身份）。
+   */
+  function markTargetHealth(liveTab) {
+    agent.targetState = targetHealth(liveTab, agent.targetTab);
+  }
+
+  const onTabRemoved = (tabId) => {
+    if (agent.targetTab && tabId === agent.targetTab.id) markTargetHealth(null);
+  };
+
+  const onTabUpdated = (tabId, changeInfo, tab) => {
+    if (!agent.targetTab || tabId !== agent.targetTab.id) return;
+    // changeInfo 多数时候只有 favIconUrl / title；url 变了才算漂移，交给 targetHealth 判
+    if (!tab && !changeInfo) return;
+    markTargetHealth(tab || null);
+  };
+
+  browser.tabs.onRemoved.addListener(onTabRemoved);
+  browser.tabs.onUpdated.addListener(onTabUpdated);
 
   /**
    * 会话级授权 + 挂起确认的状态机（T-90，confirm.js 纯函数，有测试）。
@@ -226,6 +286,9 @@ export function useAgentHost(deps) {
     // 就是「以后就用这个页」的意图）、面板上显示的那一行
     agent.runtime.pickTab(tab);
     agent.targetTab = tab;
+    // T-08：用户手选 = 固定；新选的页此刻必然是活的（列表就是从 tabs.query 拉的）
+    agent.targetPinned = true;
+    agent.targetState = tab ? 'ok' : 'none';
   }
 
   function goToAgentSettings() {
@@ -256,16 +319,46 @@ export function useAgentHost(deps) {
 
     agent.busy = true;
 
+    // T-50：工作流上下文每轮现取（用户可能刚改过），空则不带这一段。
+    // buildUserMessage 会把它包进 untrusted_workflow_context —— 它是宿主里的
+    // 只读摘要，属第三方信息。
+    const workflowContext = deps.getWorkflowContext
+      ? await deps.getWorkflowContext()
+      : null;
+
     try {
       // 用户消息由 runtime 以 agent:user-message 事件入史并回显
       const result = await agent.runtime.send({
         userText,
+        ...(workflowContext ? { workflowContext } : {}),
         onEvent: (ev) => {
           if (ev && ev.kind === 'agent:target-tab') {
             agent.targetTab = ev.tab || agent.targetTab;
+            // T-08：只有 focus_tab 会发这个事件（index.js:500）—— 模型明确指定了
+            // 这一页，等同于「以后就用它」，与用户手选同级；快照刚从 tabs.get
+            // 拿到，此刻必然是活的，失效状态顺手清掉。
+            agent.targetPinned = true;
+            agent.targetState = agent.targetTab ? 'ok' : 'none';
             return;
           }
           if (ev) agent.events.push(ev);
+
+          // T-11（与 B7 同一条通道）：中止回执。
+          //
+          // loop 收尾时 DONE 事件带着 aborted（loop.js:1037），但 done 在
+          // transcript 里不渲染任何东西（`default:` 分支只丢弃、不产出内容）——
+          // 于是用户点停止后只能靠「按钮不转了」猜已经停住，缺一条明说的回执。
+          //
+          // 插一条 system-notice，与入队提示（workflow.agent.queued）同一个做法：
+          // 事件数组就是 runtime 自己的那份，所以这条会随会话一起落盘，
+          // 重开会话时仍能看到「上一轮是被我停掉的」。B7 那侧（重开页面发现
+          // 未收尾事件）要判的是另一个触发源，尚未实现，不在这里假装已经做了。
+          if (ev && ev.kind === AGENT_EVENTS.DONE && ev.aborted) {
+            agent.events.push({
+              kind: AGENT_EVENTS.SYSTEM_NOTICE,
+              text: t('workflow.agent.aborted'),
+            });
+          }
         },
       });
 
@@ -316,14 +409,26 @@ export function useAgentHost(deps) {
     }
 
     agent.targetTab = await resolveTarget({ windowId });
+    // T-08：resolveTargetTab 是从 tabs.query 的结果里挑的，拿到就是活的；
+    // 且这一页是自动解析的（用户没选），所以 targetPinned 保持 false。
+    agent.targetState = agent.targetTab ? 'ok' : 'none';
+    agent.targetPinned = false;
 
     // markRaw：runtime 是满是闭包/getter 的对象，塞进 reactive 会被深层代理
     // —— 方法碰巧不被包装才没炸（T-90）。零成本保险。
     agent.runtime = markRaw(
       createAgentRuntime({
         getConfig: () => loadConfig(configIO),
+        // 自定义指令（T-81a）：每轮 send 由 runtime 现读，改完下一轮生效。
+        // 读取失败的降级在 runtime 侧（warn + 空串），这里不重复包。
+        getInstructions: () => getActiveInstructionsFrom(configIO),
+        // 技能索引（T-81b）：同一模式。read_skill 工具的查找走 runtime 缺省实现
+        // （也读 configIO），这里不用传。
+        getSkillIndex: () => getSkillIndexFrom(configIO),
         targetTab: agent.targetTab,
         enabledGroups: deps.enabledGroups,
+        // T-50：变量数据源由宿主注入（runtime 不再兜底成空）。
+        getVariables: deps.getVariables,
         sessionStore,
         getWorkflowId: deps.getWorkflowId,
         ...(deps.canvas || {}),
@@ -346,6 +451,11 @@ export function useAgentHost(deps) {
     // 不会保存。必须显式放行（否），让 loop 拿 error 观察值收尾。
     // 会话级授权随闭包一起消失，不用另置 false（技术方案 §8.2：面板卸载即失效）。
     if (agent.pendingConfirm) agent.pendingConfirm.resolve(false);
+
+    // T-08：这两个监听挂在 browser 上，不是组件上 —— 不摘就是泄漏，
+    // 面板反复开关后同一个 tab 的事件会被处理多次。
+    browser.tabs.onRemoved.removeListener(onTabRemoved);
+    browser.tabs.onUpdated.removeListener(onTabUpdated);
   });
 
   return Object.assign(agent, {

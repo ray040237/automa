@@ -21,10 +21,15 @@ import { validateTools } from './index';
 /**
  * 工具返回值 → pi 的 AgentToolResult。
  *
- * 我们的工具返回三种形状，这里都要接住：
+ * 我们的工具返回两种形状，这里都要接住：
  *   1. 裸字符串/ 值（`get_variables`、`get_block_schema` 的多个出口）
  *   2. 信封 `{payload, status?, ...meta}`（`page.js` 等）
- *   3. 已经折好的 AgentToolResult（其他适配器或后续票产出）
+ *
+ * **第三种「已经折好的 AgentToolResult」曾在这里原样放行，T-65 已删**：
+ * 那个分支不做 escape、不截断、不补 untrusted 标签，等于给红线第 2 条开了个
+ * 暗门 —— 任何工具将来返回这个形状，内容就对模型裸奔，且没有任何测试会红。
+ * 现在这类值走「裸值」路径：JSON 化之后照常 escape + 截断 + 包装，
+ * 宁可让工具作者看到一段 JSON，也不要静默丢掉不可信边界（T-65）。
  *
  * **不做二次包装** —— 观察值的不可信包装由 `wrapObservation`（events.js，
  * 内部走 untrusted.js）在这里一次完成。曾经还有一个必填的 `wrapUntrusted`
@@ -36,16 +41,6 @@ import { validateTools } from './index';
 export function toToolResult(raw, opts = {}) {
   const wrapTag = opts.tag || 'untrusted_tool_result';
 
-  // 已经是 AgentToolResult 形状 —— 原样放行，不认识的结构不猜
-  if (
-    raw &&
-    typeof raw === 'object' &&
-    Array.isArray(raw.content) &&
-    'details' in raw
-  ) {
-    return { ...raw, isError: raw.isError === true };
-  }
-
   const isEnvelope =
     raw &&
     typeof raw === 'object' &&
@@ -55,6 +50,8 @@ export function toToolResult(raw, opts = {}) {
   let body;
   let details = {};
   let failed = false;
+  // 信封可带 maxChars 覆盖观察值预算（read_skill 用，其余工具走 8K 默认）
+  let observationMaxChars;
 
   if (!isEnvelope) {
     // 裸值：字符串直接给，别的 JSON 化。
@@ -64,14 +61,18 @@ export function toToolResult(raw, opts = {}) {
     else if (raw === undefined) body = '';
     else body = JSON.stringify(raw ?? null, null, 2);
   } else {
-    const { payload, status, ...meta } = raw;
+    const { payload, status, maxChars, ...meta } = raw;
     failed = status === TOOL_STATUS.ERROR || status === TOOL_STATUS.REJECTED;
     // meta 上提到 details：观察值文本可能被陈旧快照剔除换成占位符，
     // runtime 判断页面变没变只能读结构化字段，不能读文本。
+    // maxChars 单独拎出来 —— 它是观察值预算的覆盖（如 read_skill 的 32K），
+    // 混进 details 会变成一个没人读的暗字段。
     details = meta;
     if (failed) body = `工具未成功执行：${payload ?? '未知原因'}`;
     else if (typeof payload === 'string') body = payload;
     else body = JSON.stringify(payload ?? null, null, 2);
+
+    observationMaxChars = maxChars;
   }
 
   return {
@@ -85,7 +86,7 @@ export function toToolResult(raw, opts = {}) {
         text: wrapObservation(
           failed
             ? { status: TOOL_STATUS.ERROR, message: body, wrap: wrapTag }
-            : { payload: body, wrap: wrapTag }
+            : { payload: body, wrap: wrapTag, maxChars: observationMaxChars }
         ),
       },
     ],

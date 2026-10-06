@@ -159,5 +159,34 @@ export function normalize(tab) {
     url: tab.url,
     title: tab.title || tab.url,
     windowId: tab.windowId,
+    // T-08：面板上的目标页条要显示站点图标。tabs.query 的结果自带 favIconUrl。
+    // 只带展示用 —— 没有它时下面按 undefined 处理，各处都不该依赖它做判断。
+    // 缺省时**不写这个键**（同 errorEvent 的取舍：undefined 键会让 JSON 序列化
+    // 多出一个假字段），所以快照的形状本来就分「有图标 / 没图标」两种。
+    ...(tab.favIconUrl ? { favIconUrl: tab.favIconUrl } : {}),
   };
+}
+
+/**
+ * 目标页健康状态（T-08，面板展示用）。
+ *
+ * 口径与 CONTEXT.md「pin」条一致：**origin 才是真身份**，tabId 会被 Chrome 复用。
+ * 所以漂移不看 tabId 变没变，只看 origin 变没变。
+ *
+ * 运行时每步开工会跑 preStepNotice（index.js），但那边产出的 notice 只发给模型；
+ * 面板这条线自己判 —— 用户在面板上要一眼看出「助手看的那个页已经不在了」。
+ *
+ * @param {Object|null} liveTab  浏览器里的当前 tab（onUpdated 带 tab、onRemoved 传 null）
+ * @param {{id?: number, url?: string}=} snapshot  面板正在显示的目标页快照
+ * @returns {'none'|'closed'|'drift'|'ok'}
+ */
+export function targetHealth(liveTab, snapshot) {
+  if (!snapshot || typeof snapshot.id !== 'number') return 'none';
+  if (!liveTab || liveTab.id !== snapshot.id) return 'closed';
+
+  const expected = originOf(snapshot.url);
+  const actual = originOf(liveTab.url);
+  if (expected && actual && expected !== actual) return 'drift';
+
+  return 'ok';
 }

@@ -51,6 +51,18 @@ _欠账_: `components/newtab/workflow/agent/AgentTranscript.vue` 仍是这个名
 
 ## 会话
 
+**自定义指令(instructions)**:
+用户在设置页配置的一段持久文本(T-81a),每轮 send 现读后作为独立 section 拼进 system prompt(「# 输出约定」之后、「# 安全声明」之前)。它是**用户显式写入配置的内容,不属于「回显」**,因此不包 untrusted——这是 system prompt 三类白名单(常量/工具元数据/用户显式配置)修订后的第③类。安全声明保持全文末段,用户指令不能覆盖安全边界由结构保证。体积只有软限(8K 字符 UI 警告),永不硬截断。
+_Avoid_: 把它叫「用户消息」(那是每轮的 untrusted_user_message);与「插话(instruction)」混用——插话是 busy 期间的补充消息,入队走 drainInstructions,切会话即丢。
+
+**模板(command)**:
+用户配置的 `/` 触发消息片段(T-81a),存 `automaAgentCommands`。选中后**整框替换**输入框草稿,发送前可改;一期不做 `$1`/`$@` 参数替换。纯 UI 机制,不进 system prompt、不碰 agent 核心。
+_Avoid_: 把它叫 prompt/命令——「块命令」另有所指;与「自定义指令」混用(指令常驻,模板按需触发)。
+
+**技能(skill)**:
+用户导入的知识单元(T-81b),存 `automaAgentSkills`,形状 `{name, description, body, files, enabled}`。**两级注入**:system prompt 只放一行摘要(`# 可用技能` 索引区),正文由 `read_skill` 工具(class: read,group: context)按需取——正文经 `untrusted_tool_result` 包装,因为导入的技能可能是第三方产物,红线不豁免;「按技能办事」由索引区的说明交代,与安全声明冲突时以安全声明为准。`read_skill` 的观察值预算放宽到 32K(envelope 的 `maxChars` 覆盖,超限截断模型可见,不静默)。附带文件只收文本,二进制导入时拒收并上报。zip 往返与 pi / Claude Code 的 skill 文件夹形状互通。
+_Avoid_: 把技能正文当可信指令(它走 untrusted 通道);把技能与模板混用(模板是输入片段,技能是按需知识)。
+
 **会话(Session)**:
 一条可回看的对话,`agent_session_<id>`(事件历史)+ `agent_session_index` 条目。持有 pins/focusedTabId/usage/title。
 _Avoid_: chat(口语可用,持久命名不用)、conversation。
@@ -75,7 +87,8 @@ _Avoid_: 把压缩当「删除历史」——原始事件永不删除,只是不�
 ## 页面定位
 
 **目标页(targetTab)**:
-agent 当前操作指向的标签页快照 `{id, url, title, windowId}`。工具执行读的是"这一刻"的快照。
+agent 当前操作指向的标签页快照 `{id, url, title, windowId, favIconUrl?}`。工具执行读的是"这一刻"的快照。
+`favIconUrl` 只给面板显示用（T-08），**任何判断都不得依赖它** —— 浏览器可能不给、加载也可能失败。
 _Avoid_: activeTab(那是浏览器 UI 的概念)。
 
 **pin**:

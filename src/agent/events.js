@@ -137,7 +137,7 @@ export function wrapObservation(outcome) {
         : JSON.stringify(payload ?? null, null, 2);
   }
 
-  const { text, truncated } = truncateObservation(body);
+  const { text, truncated } = truncateObservation(body, outcome.maxChars);
 
   return wrapUntrusted(
     tag,

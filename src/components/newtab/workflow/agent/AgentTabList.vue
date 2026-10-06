@@ -25,7 +25,19 @@
           :class="{ 'bg-box-transparent': isCurrent(tab) }"
           @click="pick(tab)"
         >
-          <v-remixicon name="riEarthLine" class="shrink-0 text-gray-400" />
+          <!-- T-08：站点图标；拿不到就退回地球图标（faviconBroken 由 @error 置位） -->
+          <img
+            v-if="tab.favIconUrl && !brokenFavicons[tab.id]"
+            :src="tab.favIconUrl"
+            class="h-4 w-4 shrink-0 rounded-sm"
+            :alt="t('workflow.agent.pickTab.faviconAlt')"
+            @error="markBroken(tab.id)"
+          />
+          <v-remixicon
+            v-else
+            name="riEarthLine"
+            class="shrink-0 text-gray-400"
+          />
           <span class="min-w-0 flex-1">
             <span class="block truncate">{{ tab.title || tab.url }}</span>
             <span class="block truncate text-xs text-gray-400">
@@ -44,7 +56,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 /**
@@ -72,6 +84,15 @@ function isCurrent(tab) {
   return currentId.value === tab.id;
 }
 
+/**
+ * 加载失败的图标要记住（T-08）—— 否则每行每次重渲染都去请求同一个坏 URL。
+ * 用 reactive 对象而不是数组，key 就是 tabId。
+ */
+const brokenFavicons = reactive({});
+function markBroken(id) {
+  brokenFavicons[id] = true;
+}
+
 function windowLabel(id) {
   return id === 1
     ? t('workflow.agent.pickTab.mainWindow')
@@ -84,6 +105,8 @@ function pick(tab) {
     url: tab.url,
     title: tab.title || tab.url,
     windowId: tab.windowId,
+    // T-08：带上图标，chip 上那一行才能显示同一个站点的图标
+    favIconUrl: tab.favIconUrl || undefined,
   });
 }
 </script>

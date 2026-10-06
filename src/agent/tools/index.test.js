@@ -35,6 +35,7 @@ test('真实工具表全部通过校验', () => {
       'find_text',
       'get_variables',
       'get_block_schema',
+      'read_skill',
       'query_elements',
       'highlight_selector',
       'test_js',
@@ -97,6 +98,7 @@ test('每个真实工具的 ctx 声明与其实现用的键一一对应（T-71�
     find_text: ['findText'],
     get_variables: ['getVariables'],
     get_block_schema: ['getBlockSchema'],
+    read_skill: ['readSkill'],
     query_elements: ['targetTab', 'sendMessage'],
     highlight_selector: ['targetTab', 'sendMessage'],
     test_js: ['targetTab', 'sendMessage'],
@@ -262,6 +264,29 @@ test('get_variables 渲染出变量与全局变量', async () => {
   assert.ok(out.includes('当前工作流 id: wf-1'));
 });
 
+test('T-50：未绑定工作流时说的是「没有工作流可读」，不是「变量为空」', async () => {
+  // 这两种结论对模型完全不同：前者是「你得换个工作流页」，
+  // 后者是「这个工作流确实没定义变量」。混起来模型就会凭空编一个变量名。
+  const out = await getVariables.execute(
+    {},
+    { getVariables: async () => ({ bound: false }) }
+  );
+
+  assert.ok(out.includes('未绑定工作流'), out);
+  assert.ok(
+    !out.includes('（空）'),
+    '未绑定绝不能渲染成「（空）」：' + out
+  );
+  assert.ok(!out.includes('工作流变量:'), '未绑定时不列变量段：' + out);
+});
+
+test('T-50：getVariables 返回 undefined 也不炸，且按未绑定处理', async () => {
+  const out = await getVariables.execute(
+    {},
+    { getVariables: async () => undefined }
+  );
+  assert.ok(out.includes('未绑定工作流'), out);
+});
 test('get_variables 空值不炸，且明确标出是空的', async () => {
   const out = await getVariables.execute(
     {},

@@ -39,6 +39,9 @@ function deps(over = {}) {
       apiKey: 'sk-test',
     }),
     requestConfirmation: async () => true,
+    // T-50: getVariables 是必填依赖 (没有 async () => ({}) 兜底了),
+    // 测试装配也得给一个; bound:false 表示「没有工作流可读」。
+    getVariables: async () => ({ bound: false }),
     targetTab: TAB,
     ...over,
   };
@@ -93,6 +96,19 @@ describe('collectPromptFacts —— 装配层这一段的回归', () => {
 });
 
 describe('createAgentRuntime', () => {
+  test('T-50: 缺 getVariables 直接抛, 不给「变量为空」的兜底', () => {
+    // 旧兜底是 `async () => ({})`, 任何漏注入的宿主都拿到「（空）」——
+    // 模型据此写模板引用必然引用到不存在的变量名, 且没有任何报错。
+    const rest = deps();
+    delete rest.getVariables;
+
+    assert.throws(
+      () => createAgentRuntime(rest),
+      /缺 getVariables/,
+      '缺变量数据源必须装配期炸掉, 不能静默返回空'
+    );
+  });
+
   test('没配 apiKey 时抛的是带 kind 的可识别错误', async () => {
     const rt = createAgentRuntime(
       deps({ getConfig: async () => ({ model: 'm', apiKey: '' }) })
@@ -604,35 +620,62 @@ describe('配置读写往返（走 credentialUtil）', () => {
     mod.resetBrowser();
   });
 
-  test('保存后能原样读回，且落盘里看不到明文 key', async () => {
+  test('保存后能原样读回，且任一条连接的落盘里都看不到明文 key', async () => {
     const r = await saveConfig(configIO, {
-      provider: 'openai',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o-mini',
-      apiKey: 'sk-super-secret-value',
+      version: 2,
+      providers: [
+        {
+          id: 'p_1',
+          name: '公司反代',
+          templateId: 'custom',
+          baseUrl: 'https://gw.corp.example/v1',
+          apiKey: 'sk-super-secret-value',
+          models: [{ id: 'gpt-4o', contextWindow: 128000, maxTokens: 0 }],
+        },
+        {
+          id: 'p_2',
+          name: '个人号',
+          templateId: 'deepseek',
+          baseUrl: 'https://api.deepseek.com/v1',
+          apiKey: 'sk-second-secret-value',
+          models: [{ id: 'deepseek-chat', contextWindow: 65536, maxTokens: 0 }],
+        },
+      ],
+      activeProviderId: 'p_2',
+      activeModelId: 'deepseek-chat',
+      temperature: 0.2,
     });
 
     assert.ok(r.ok, r.errors && r.errors.join());
 
-    const raw = await configIO.get('automaAgentConfig');
+    const dumped = JSON.stringify(await configIO.get('automaAgentConfig'));
 
-    assert.ok(
-      !JSON.stringify(raw).includes('sk-super-secret-value'),
-      '落盘不能是明文'
-    );
+    assert.ok(!dumped.includes('sk-super-secret-value'), '落盘不能是明文');
+    assert.ok(!dumped.includes('sk-second-secret-value'), '落盘不能是明文');
 
     const back = await loadConfig(configIO);
 
-    assert.equal(back.apiKey, 'sk-super-secret-value');
-    assert.equal(back.model, 'gpt-4o-mini');
+    assert.equal(back.apiKey, 'sk-second-secret-value');
+    assert.equal(back.model, 'deepseek-chat');
+    assert.equal(back.provider, 'p_2', 'pi 侧按连接 id 归类');
   });
 
   test('apiKey 为空白时校验失败且不写盘', async () => {
     const r = await saveConfig(configIO, {
-      provider: 'openai',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o-mini',
-      apiKey: '   ',
+      version: 2,
+      providers: [
+        {
+          id: 'p_1',
+          name: '空的',
+          templateId: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: '   ',
+          models: [{ id: 'gpt-4o-mini', contextWindow: 128000 }],
+        },
+      ],
+      activeProviderId: 'p_1',
+      activeModelId: 'gpt-4o-mini',
+      temperature: 0.2,
     });
 
     assert.equal(r.ok, false);
@@ -644,14 +687,41 @@ describe('配置读写往返（走 credentialUtil）', () => {
 
   test('baseUrl 不是 http(s) 时拒绝写盘', async () => {
     const r = await saveConfig(configIO, {
-      provider: 'custom',
-      baseUrl: 'ftp://bad.example.com',
-      model: 'm',
-      apiKey: 'sk-x',
+      version: 2,
+      providers: [
+        {
+          id: 'p_1',
+          name: '坏地址',
+          templateId: 'custom',
+          baseUrl: 'ftp://bad.example.com',
+          apiKey: 'sk-x',
+          models: [{ id: 'm', contextWindow: 65536 }],
+        },
+      ],
+      activeProviderId: 'p_1',
+      activeModelId: 'm',
+      temperature: 0.2,
     });
 
     assert.equal(r.ok, false);
-    assert.match(r.errors.join(), /baseUrl/);
+    assert.match(r.errors.join(), /接口地址/);
+  });
+
+  test('删掉最后一条连接后运行时读到的是「未配置」，不是崩', async () => {
+    const r = await saveConfig(configIO, {
+      version: 2,
+      providers: [],
+      activeProviderId: '',
+      activeModelId: '',
+      temperature: 0.2,
+    });
+
+    assert.ok(r.ok, r.errors.join(';'));
+
+    const back = await loadConfig(configIO);
+
+    // index.js 的 send 开头与 AgentPanel 的 configured 都只看这一个字段
+    assert.equal(back.apiKey, '');
   });
 });
 
@@ -735,6 +805,7 @@ test('T-69/T-84 接线守卫：enabledGroups 支持函数求值，宿主装配�
   // 编辑器宿主必须传 getter 而不是 setup 期快照（T-69 本体）
   const pageSrc = readFileSync(
     join(ROOT, 'src/newtab/pages/workflows/[id].vue'),
+
     'utf8'
   );
   assert.match(
@@ -744,6 +815,70 @@ test('T-69/T-84 接线守卫：enabledGroups 支持函数求值，宿主装配�
   );
 });
 
+
+  // T-50：变量数据源与工作流上下文的宿主接线。这一段曾经整条缺失 ——
+  // runtime 有个 `async () => ({})` 兜底，于是所有宿主拿到的都是「（空）」。
+  test('T-50：两个宿主都必须注入 getVariables，独立页显式说未绑定', () => {
+    const pageSrc = readFileSync(
+      join(ROOT, 'src/newtab/pages/workflows/[id].vue'),
+      'utf8'
+    );
+    const standaloneSrc = readFileSync(
+      join(ROOT, 'src/newtab/pages/Agent.vue'),
+      'utf8'
+    );
+
+    assert.match(
+      hostSrc,
+      /deps\.getVariables 必填/,
+      'agentHost 必须校验 getVariables 缺失（否则又是「（空）」）'
+    );
+    assert.match(
+      hostSrc,
+      /getVariables:\s*deps\.getVariables/,
+      'agentHost 必须把 getVariables 原样透给 runtime，否则注入停在半路'
+    );
+    assert.match(
+      pageSrc,
+      /getVariables:\s*async\s*\(\s*\)\s*=>/,
+      '编辑器宿主必须注入变量数据源（§7.3 的 globalData + 全局变量表）'
+    );
+    assert.match(
+      pageSrc,
+      /bound:\s*true/,
+      '编辑器宿主持有工作流，返回值必须是 bound:true'
+    );
+    assert.match(
+      standaloneSrc,
+      /getVariables:\s*async\s*\(\s*\)\s*=>\s*\(\s*\{\s*bound:\s*false\s*\}\s*\)/,
+      '独立助手页没有工作流，必须显式 bound:false，不能靠空对象蒙混'
+    );
+  });
+
+  test('T-50：工作流上下文每轮现取，空的不传（不许传空串）', () => {
+    assert.match(
+      hostSrc,
+      /deps\.getWorkflowContext/,
+      'agentHost 必须接受 getWorkflowContext（可省，但传了就得用）'
+    );
+    assert.match(
+      hostSrc,
+      /workflowContext\s*\?\s*\{\s*workflowContext\s*\}\s*:\s*\{\}/,
+      '空上下文不许传空串（buildUserMessage 会包出一个空的 untrusted 段）'
+    );
+
+    // 独立页可以不给，但编辑器页必须有 —— 否则 untrusted_workflow_context
+    // 这个已登记标签永远不会被生产代码触发（那就是 T-50 登记时点名的病灶）
+    const pageSrc = readFileSync(
+      join(ROOT, 'src/newtab/pages/workflows/[id].vue'),
+      'utf8'
+    );
+    assert.match(
+      pageSrc,
+      /getWorkflowContext:\s*\(\s*\)\s*=>/,
+      '编辑器宿主必须提供工作流上下文摘要'
+    );
+  });
 test('T-90 接线守卫：面板收 :host 单绑定，两宿主不再逐字重复', () => {
   const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
   const panelSrc = readFileSync(
@@ -777,4 +912,86 @@ test('T-90 接线守卫：面板收 :host 单绑定，两宿主不再逐字重�
       page + ' 不许绕过 agentHost 直连 @/agent 拿 listTabs（T-90）'
     );
   }
+});
+
+test('T-81a 接线守卫：自定义指令从 storage 一路接到 system prompt 的事实表', () => {
+  const indexSrc = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+
+  // runtime 侧：每轮 send 取一次指令并盖进事实表（缺省空实现，测试装配可忽略）
+  assert.ok(
+    indexSrc.includes('getInstructions = async ()'),
+    'runtime 必须给 getInstructions 缺省空实现（测试装配不必关心指令）'
+  );
+  assert.ok(
+    /promptFacts: \(\) => \(\{[\s\S]*?instructions,/.test(indexSrc),
+    'promptFacts 闭包必须把 instructions 盖进事实表，否则指令进不了 system prompt'
+  );
+  // 读取失败降级 + 留痕（与事实表构建失败同一原则，不静默）
+  assert.ok(
+    indexSrc.includes("agentLog.warn('instructions.load.fail'"),
+    '指令读取失败必须 warn 留痕，不许静默当没配'
+  );
+
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+  // 宿主侧：agentHost 必须传真实读取实现（storage key -> 指令正文）
+  const hostSrc = readFileSync(
+    join(ROOT, 'src/composable/agentHost.js'),
+    'utf8'
+  );
+  assert.ok(
+    hostSrc.includes('getActiveInstructionsFrom'),
+    'agentHost 必须把 getActiveInstructionsFrom 接到 runtime 的 getInstructions'
+  );
+
+  // prompt 侧：section 拼接在「# 输出约定」之后、「# 安全声明」之前，
+  // 且 instructions 为空时一个字符都不能多（逐字节一致性由 prompt.test.js 钉）。
+  // 用 lastIndexOf 锚定真实的 say() 调用 —— 头注里也提到这些 section 名，
+  // indexOf 会错位到注释上，让断言对源码文本自说自话。
+  const promptSrc = readFileSync(
+    new URL('./prompt.js', import.meta.url),
+    'utf8'
+  );
+  const outputAt = promptSrc.lastIndexOf('# 输出约定');
+  const sectionAt = promptSrc.lastIndexOf('# 用户自定义指令');
+  const securityAt = promptSrc.lastIndexOf('# 安全声明');
+
+  assert.ok(outputAt < sectionAt && sectionAt < securityAt);
+  assert.match(
+    promptSrc,
+    /if \(instructions\) \{[\s\S]*?# 用户自定义指令/,
+    'section 必须条件拼接 —— 空指令时输出保持与旧版逐字节一致'
+  );
+});
+
+test('T-81b 接线守卫：技能索引进 prompt、read_skill 工具有查找实现', () => {
+  const indexSrc = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+
+  assert.ok(
+    /promptFacts: \(\) => \(\{[\s\S]*?skills: skillIndex,/.test(indexSrc),
+    'promptFacts 闭包必须把技能索引盖进事实表'
+  );
+  assert.ok(
+    indexSrc.includes("agentLog.warn('skills.index.load.fail'"),
+    '技能索引读取失败必须 warn 留痕，不许静默当没配'
+  );
+  assert.ok(
+    /readSkill: readSkill \|\| readSkillFrom\(configIO\)/.test(indexSrc),
+    'toolCtx 必须给 read_skill 提供查找实现（缺省读 configIO 技能库）'
+  );
+
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const hostSrc = readFileSync(
+    join(ROOT, 'src/composable/agentHost.js'),
+    'utf8'
+  );
+  assert.ok(
+    hostSrc.includes('getSkillIndexFrom'),
+    'agentHost 必须把 getSkillIndexFrom 接到 runtime 的 getSkillIndex'
+  );
+
+  // 工具注册：read_skill 必须显式 class: read（红线）且挂 context 组
+  const toolSrc = readFileSync(join(ROOT, 'src/agent/tools/skill.js'), 'utf8');
+  assert.match(toolSrc, /class: 'read'/);
+  assert.match(toolSrc, /group: 'context'/);
 });
