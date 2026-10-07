@@ -30,9 +30,15 @@
         v-html="block.html"
       />
 
+      <!-- T-157：这一段是**唯一没有自我约束的叶子** —— 代码块（line 41）与表格
+           （line 73）都已有 overflow-x-auto，而这个 <p> 只有 whitespace-pre-wrap。
+           正文里出现长 URL / 无空格长串时它不会断行，横向一路顶到 transcript
+           （overflow-y-auto 会把 overflow-x 一并算成 auto），整个面板出现左右滚动条。
+           break-words 让长串从中间断开；不加 overflow-x-auto 是刻意的 —— 文本该
+           换行而不是让人横向拖，断行后也就不存在需要滚动的残留。 -->
       <p
         v-else-if="block.type === 'p'"
-        class="mb-2 whitespace-pre-wrap"
+        class="mb-2 whitespace-pre-wrap break-words"
         v-html="block.html"
       />
 

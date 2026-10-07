@@ -24,12 +24,20 @@
       v-if="expanded"
       class="max-h-80 overflow-auto border-t border-gray-200 px-3 py-2 text-xs dark:border-gray-700"
     >
-      <pre v-if="prettyArgs" class="mb-2 whitespace-pre-wrap">{{
-        prettyArgs
-      }}</pre>
-      <pre v-if="displayObservation" class="whitespace-pre-wrap">{{
-        displayObservation
-      }}</pre>
+      <!-- T-157：观察值/参数里会出现长 URL、base64、data URI、单行压缩 JSON 这类
+           **无空格长串**。`whitespace-pre-wrap` 只在空格处断行，断不了就横向撑开。
+           `break-words` 让它在中间断开；`overflow-x-auto` 兜住仍装不下的残留，
+           把滚动留在叶子内部 —— 外层 div 的 overflow-auto 因此不再产生横向滚动条。 -->
+      <pre
+        v-if="prettyArgs"
+        class="mb-2 overflow-x-auto whitespace-pre-wrap break-words"
+        >{{ prettyArgs }}</pre
+      >
+      <pre
+        v-if="displayObservation"
+        class="overflow-x-auto whitespace-pre-wrap break-words"
+        >{{ displayObservation }}</pre
+      >
     </div>
   </div>
 </template>

@@ -195,11 +195,27 @@
         :usage="host.usage"
         :context-window="Number(host.config.contextWindow) || 0"
       />
+      <!--
+        T-159：忙碌时这个按钮改成**纯图标**。
+        实测（320px 内容区，headless Chromium + 编译产物 CSS）：停止按钮带文字时
+        56px 宽，加上 8px gap 就是 64px 全从 textarea 身上扣 —— 忙碌态 textarea
+        从空闲的 208px 掉到 **144px**，而忙碌恰恰是最需要打字的时刻（要插话）。
+        改 icon-only（p-2，40×40）后回到 160px。
+
+        为什么只改这个、不继续压：图标尺寸（24）与面板其余图标一致，gap 也没动，
+        视觉节奏不变；再往下压的两种（图标 20 → 164、gap-1.5 → 170）留着没做，
+        收益递减且要牺牲一致性。
+
+        去掉文字会丢掉无障碍名称，所以 title 之外**必须**补 aria-label —— 图标按钮
+        没有文字，读屏只会念「按钮」。UiButton 会把 $attrs 透传到根元素，aria-label 落得上。
+      -->
       <ui-button
         v-if="host.busy"
         variant="default"
+        icon
         type="button"
         :title="t('workflow.agent.stop')"
+        :aria-label="t('workflow.agent.stop')"
         @click="host.abort()"
       >
         <v-remixicon name="riStopLine" class="shrink-0" />

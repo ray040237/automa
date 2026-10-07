@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { describe } from 'node:test';
 import assert from 'node:assert';
 import {
   isTargetable,
@@ -192,6 +192,13 @@ test('originOf 解析真实 origin，受限页/坏 URL 返回空串', () => {
   assert.equal(originOf('about:blank'), '');
   assert.equal(originOf(''), '');
   assert.equal(originOf(undefined), '');
+  assert.equal(originOf('not a url'), '');
+});
+
+// T-161：下面两条原本嵌在 `originOf` 那条 test 的**回调内部**。node:test 会在父回调
+// 返回后把它们判成 cancelledByParent —— 文件照常报「通过」，断言却一次都没真正跑过
+// （npm test 那 2 个 fail 就是这么来的）。改成 describe 分组后子测试才会真正执行。
+describe('T-08：normalize 与 targetHealth', () => {
   test('T-08：normalize 带上 favIconUrl，缺省时干脆不写这个键', () => {
     const snap = normalize({
       id: 7,
@@ -248,6 +255,4 @@ test('originOf 解析真实 origin，受限页/坏 URL 返回空串', () => {
     const odd = { id: 7, url: 'not a url' };
     assert.equal(targetHealth({ id: 7, url: 'https://c.example/' }, odd), 'ok');
   });
-
-  assert.equal(originOf('not a url'), '');
 });

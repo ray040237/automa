@@ -29,27 +29,6 @@
 
 ### bug（先审，多数可快速定夺）
 
-## T-157 — 工具卡的观察值/参数长串撑开面板，产生横向滚动条
-
-登记日期：2026-10-07
-来源：2026-10-07 会话（用户反馈「对话中工具调用的细节会撑出容器、出现左右滚动条」）；`AgentToolStep.vue:27-32`
-现象：工具卡展开后的 `<pre>` 只有 `whitespace-pre-wrap`，既没有 `break-words` 也没有 `overflow-x-auto`。观察值/参数里出现超长无空格串（长 URL / base64 / data URI / 单行压缩 JSON）时不会在中间断行，横向撑开卡片 → 撑开 transcript；而 transcript 是 `overflow-y-auto`，按 CSS 规范 `overflow-x` 被一并计算为 `auto`，于是整个面板出现左右滚动条。
-证据：读代码实测——`AgentToolStep.vue:27` `class="mb-2 whitespace-pre-wrap"`、`:31` `class="whitespace-pre-wrap"`；对比 `AgentConfirmCard.vue:12` 同样承载不可信长文本，用的是 `max-h-48 overflow-auto whitespace-pre-wrap break-words`（有 break-words + overflow-auto）。未做浏览器渲染实测。
-影响：编辑器侧栏（内容区 320px）与独立助手页都会出现横向滚动条，对话区被整体横向推移，阅读中断；最坏是长串只能靠横向滚动才读得完。
-建议：两处 `<pre>` 加 `break-words`（极端串可用 `break-all`）+ `overflow-x-auto`，容器加 `min-w-0`——把滚动下沉到叶子节点，父级 transcript 不再横向滚。写法照抄确认卡；与 markdown 表格/代码块已有的 `overflow-x-auto` 保持一致。
-注：侧栏 `[id].vue:431` 是 `Math.max(360, startWidth + diffX)`，下限 360、只能拖宽不能拖窄，内容区恒 ≥320px——故「拖窄导致下拉硬编码宽度溢出」不成立，勿按那个方向修。
-状态：待审核
-
-## T-161 — `test()` 回调里嵌套 `test()`，子测试被静默取消（npm test 常态 2 fail）
-
-登记日期：2026-10-08
-来源：2026-10-08 会话（跑 `npm test` 验收 T-153 时发现）；`src/agent/compaction.test.js:371`、`:405`、`:415`、`:429`、`:448`、`:462`、`:493`；`src/agent/tab.test.js:184`、`:195`、`:218`
-现象：`compaction.test.js:371` 与 `tab.test.js:184` 的**顶层 `test()` 回调内部又写了 `test()`**。node:test 下父 test 的回调同步返回后，嵌套注册的子测试会被判 `cancelledByParent`（`test did not finish before its parent and was cancelled`），**一条都没真正执行**。表现：`npm test` 恒为 `# fail 2 / # cancelled 6`，其中 5 条是 compaction 的 T-95 用例、1 条是 tab 的 T-08 用例。
-证据：实测 —— 单独跑 `node --import ./utils/test-loader.mjs --test src/agent/compaction.test.js` 输出 `fail 1 / cancelled 5`；`npm test` 顶层失败为 `not ok 39 - projectAfterLastCompaction…` 与 `not ok 418 - originOf 解析真实 origin…`。两个文件 mtime 分别为 2026-10-07 12:45 与 2026-10-06 14:53，均早于本轮改动，**非本次引入**。
-影响：T-95（活轮次实测上下文）与 T-08（normalize/targetHealth）两组断言**实际未执行**，覆盖静默丢失 —— 表面「只挂了 2 条」，真相是 7 条断言从未跑过。与项目「不静默降级」红线同型：看起来在测，其实没测。
-建议：把嵌套的 `test()` 提取为顶层 `test()`（或包进 `describe` + `await`）。改完应见 `# fail 0 / # cancelled 0`。**未做**——超出本轮（T-153/T-158）范围，需单独开一轮并逐条确认提取后断言仍成立（T-95 那 5 条依赖父作用域里的 `piMsg` 辅助函数，提取时要一并搬）。
-注：登记源于验收时的一次完整 `npm test`，不是刻意排查 —— 这类「测试自己写坏了」的问题只有看汇总数字（cancelled > 0）才会暴露。
-状态：待审核
 
 ### 改进
 
@@ -118,16 +97,6 @@
 注：属「推断未实测用户反馈」——代码层溢出无提示是事实，但用户是否因此困惑未做可用性验证。
 状态：待审核
 
-## T-159 — busy 态输入区被两个按钮挤到约 208px
-
-登记日期：2026-10-07
-来源：2026-10-07 会话（追问空间优化时推算发现）；读 `AgentPanel.vue:173-191`
-现象：`host.busy` 时 form 内同时出现「停止」图标按钮与「插话」文字按钮：320 − 16(padding) − 36(停止) − ≈44(插话) − 16(gap) ≈ 208px 留给 textarea，比空闲时的约 240px **更窄**。而 busy 恰恰是用户最想打字（插话）的时候。
-证据：读代码 + 按 Tailwind spacing 与按钮 padding 推算，**未做浏览器实测**（实际宽度取决于 ui-button 的内边距与字号）。
-影响：插话时输入框可视宽度反而最小，长句要靠横向/纵向滚动才能回看已输入内容。
-建议：先量一次真实像素再定方案。可选方向：插话按钮在窄态退化为图标 + `title`；或把「停止」并入已存在的 pendingInterjections 行（`:148`，但该行仅在有排队时出现，需要常驻化）。
-注：**本轮不落地**——未实测就改容易改坏（插话是主操作，文字是其语义来源，图标化有风险）。
-状态：待审核（需先实测）
 
 ## T-160 — disabled 的发送按钮说不出「为什么点不动」
 

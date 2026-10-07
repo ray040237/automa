@@ -12,6 +12,32 @@ const PANEL = 'src/components/newtab/workflow/agent/AgentPanel.vue';
 const read = (p) => readFileSync(p, 'utf8');
 
 /**
+ * AgentPanel 的最小 host 替身。
+ *
+ * 面板只收一个 `host` 对象 prop（T-90），所以渲染它就要造一个——把默认值集中
+ * 在这里，免得每条用例各抄一份（抄漏一个 `abort` 就是「渲染时 method 不存在」，
+ * 报错指向组件内部，很难看出是用例的问题）。
+ */
+const panelHost = (over) => ({
+  events: [],
+  busy: false,
+  pendingInterjections: 0,
+  config: { apiKey: 'k', model: 'gpt-4o-mini', contextWindow: 128000 },
+  sessions: [],
+  sessionId: null,
+  usage: null,
+  pendingConfirm: null,
+  targetTab: null,
+  targetState: 'none',
+  targetPinned: false,
+  groups: [],
+  send: () => {},
+  abort: () => {},
+  init: () => Promise.resolve(),
+  ...over,
+});
+
+/**
  * T-128①：面板 UI 的**渲染**断言。
  *
  * 这一组测试存在的理由：静态守卫（panelUi.test.js 读源文本）看不见运行期条件 ——
@@ -122,27 +148,8 @@ test('T-153：模型名仍在会话下拉里渲染（搬走水位时别把它一
 });
 
 test('T-128：常驻插话提示只在 busy 且队列非空时渲染（T-12）', async () => {
-  const host = (over) => ({
-    events: [],
-    busy: false,
-    pendingInterjections: 0,
-    config: { apiKey: 'k', model: 'gpt-4o-mini', contextWindow: 128000 },
-    sessions: [],
-    sessionId: null,
-    usage: null,
-    pendingConfirm: null,
-    targetTab: null,
-    targetState: 'none',
-    targetPinned: false,
-    groups: [],
-    send: () => {},
-    abort: () => {},
-    init: () => Promise.resolve(),
-    ...over,
-  });
-
   const queued = await renderSfc(PANEL, {
-    props: { host: host({ busy: true, pendingInterjections: 2 }) },
+    props: { host: panelHost({ busy: true, pendingInterjections: 2 }) },
   });
   assert.ok(
     queued.includes('data-test="pending-interjections"'),
@@ -154,7 +161,7 @@ test('T-128：常驻插话提示只在 busy 且队列非空时渲染（T-12）',
   );
 
   const idle = await renderSfc(PANEL, {
-    props: { host: host({ busy: false, pendingInterjections: 0 }) },
+    props: { host: panelHost({ busy: false, pendingInterjections: 0 }) },
   });
   assert.equal(
     idle.includes('data-test="pending-interjections"'),
@@ -163,12 +170,53 @@ test('T-128：常驻插话提示只在 busy 且队列非空时渲染（T-12）',
   );
 
   const drained = await renderSfc(PANEL, {
-    props: { host: host({ busy: true, pendingInterjections: 0 }) },
+    props: { host: panelHost({ busy: true, pendingInterjections: 0 }) },
   });
   assert.equal(
     drained.includes('data-test="pending-interjections"'),
     false,
     '队列已排空（pendingInterjections=0）时提示行必须消失，否则会一直显示「已入队 0 条」'
+  );
+});
+
+test('T-159：忙碌态的停止按钮是纯图标（icon → p-2），且补了 aria-label', async () => {
+  // 为什么钉这条：停止按钮带文字时 56px 宽，加上 8px gap 全从 textarea 身上扣 ——
+  // 320px 侧栏里忙碌态 textarea 只剩 144px，而忙碌恰恰是最要打字的时刻。
+  // 改成 icon-only（40×40）后回到 160px（headless Chromium 实测）。
+  // 但**去掉文字会丢掉无障碍名称**，所以必须同时有 aria-label，
+  // 否则读屏念出来只是一个「按钮」。这两个断言是配套的，缺一不可。
+  const busy = await renderSfc(PANEL, {
+    props: { host: panelHost({ busy: true }) },
+  });
+
+  assert.ok(
+    /aria-label="workflow\.agent\.stop"/.test(busy),
+    '忙碌态停止按钮必须有 aria-label —— 图标按钮没有文字，读屏只能念「按钮」'
+  );
+  assert.ok(
+    /title="workflow\.agent\.stop"/.test(busy),
+    '鼠标用户要在 hover 时看到「停止」'
+  );
+  // 纯图标靠 UiButton 的 `icon` prop 触发 p-2（40×40）；若退回 py-2 px-4 就是 56px。
+  //
+  // 注意：utils/sfc-render.mjs 把子组件换成 `<i data-stub="ui-button" …>` 的桩，
+  // 真实 class 不落在 HTML 里，所以这里钉的是**导致 p-2 的那个 prop**，
+  // 而不是 p-2 本身 —— 桩把 props 原样输出成属性，正好看得见。
+  assert.match(
+    busy,
+    /data-stub="ui-button"[^>]*\bicon\b/,
+    '停止按钮要走 icon-only 分支（UiButton 的 icon → p-2，40×40）；' +
+      '退回文字按钮的 py-2 px-4 会多占 16px'
+  );
+
+  // 空闲态不该出现停止按钮（此时主按钮是「发送」）
+  const idle = await renderSfc(PANEL, {
+    props: { host: panelHost({ busy: false }) },
+  });
+  assert.equal(
+    /aria-label="workflow\.agent\.stop"/.test(idle),
+    false,
+    '空闲态没有「停止」可言，按钮不该渲染'
   );
 });
 

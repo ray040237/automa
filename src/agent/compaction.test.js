@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { AGENT_EVENTS } from './events';
@@ -388,9 +388,16 @@ test('projectAfterLastCompaction：无摘要原样返回，多条取最后一条
   const projected = projectAfterLastCompaction(multi);
   assert.equal(projected[0], c2);
   assert.equal(projected.length, multi.length - multi.indexOf(c2));
+});
 
-  // ---------------- T-95：活轮次的实测上下文 ----------------
+// ---------------- T-95：活轮次的实测上下文 ----------------
+//
+// T-161：这 6 条原本嵌在 `projectAfterLastCompaction` 那条 test 的**回调内部**。
+// node:test 会在父回调返回后把它们判成 cancelledByParent —— 文件照常报「通过」，
+// 断言却一次都没真正跑过。改成 describe 分组（项目里 assembly.test.js 等已在用），
+// 子测试才会真正执行；helper 一并跟着进组。
 
+describe('T-95：活轮次的实测上下文', () => {
   /** 造一条带 usage 的 pi assistant 消息（形状见 pi-ai 的 AssistantMessage）。 */
   function piMsg(usage, extra = {}) {
     return {

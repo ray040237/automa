@@ -757,13 +757,18 @@ test('T-52 守卫：工具卡的参数三段链路不许断（事件带 args →
   );
 
   // ③ 渲染层：args 非空即渲染参数块
+  //
+  // T-161 附注：`[\s\S]{0,80}?` 是刻意的 —— 原来写死 `<pre v-if="prettyArgs"`，
+  // 一给 <pre> 加 class 导致 prettier 把属性换行，守卫就误报「链路断了」（实测：
+  // T-157 加 break-words 后这条立刻假红）。守卫钉的是**语义**（参数块由
+  // prettyArgs 驱动），不是缩进格式，所以容忍换行；把 v-if 改成别的仍然会红。
   const step = stripComments(
     read('src/components/newtab/workflow/agent/AgentToolStep.vue')
   );
   assert.match(step, /const prettyArgs = computed/, '工具卡必须有 prettyArgs');
   assert.match(
     step,
-    /<pre v-if="prettyArgs"/,
+    /<pre[\s\S]{0,80}?v-if="prettyArgs"/,
     '参数块必须由 prettyArgs 驱动渲染，否则 args 到了也不显示'
   );
 });

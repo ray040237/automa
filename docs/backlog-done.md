@@ -2887,6 +2887,53 @@ tests 639 / suites 37 / pass 638 / fail 0 / skipped 1
 **未做浏览器实测**：68px 输入框的观感是否偏矮、header 收紧后的间距，都未在真机上看过。若嫌矮可取 72px。
 状态：已完成（2026-10-08）
 
+### T-161 — `test()` 回调里嵌套 `test()`，子测试被静默取消（npm test 常态 2 fail）
+
+登记日期：2026-10-08
+来源：2026-10-08 会话（跑 `npm test` 验收 T-153 时发现）；`src/agent/compaction.test.js:371`、`:405`…；`src/agent/tab.test.js:184`、`:195`、`:218`
+现象：`compaction.test.js:371` 与 `tab.test.js:184` 的**顶层 `test()` 回调内部又写了 `test()`**。node:test 下父回调同步返回后，嵌套注册的子测试被判 `cancelledByParent`，**一条都没真正执行**。表面是「只挂 2 条」，真相是 **8 条子测试**（compaction 6 + tab 2）从未跑过。
+证据：实测 —— `npm test` 恒为 `# fail 2 / # cancelled 6`；单独跑 compaction.test.js 输出 `fail 1 / cancelled 5`。两个文件 mtime（2026-10-07 12:45 / 2026-10-06 14:53）早于本轮改动，**非本次引入**。
+结论：把嵌套的 `test()` 改为 `describe()` 分组（项目里 `assembly.test.js`、`agentEvalInPage.test.js` 已在用，缩进也正好不用重排），helper `piMsg` 跟着进组；`tab.test.js` 里被嵌套测试夹在中间的 `assert.equal(originOf('not a url'), '')` 一并挪回外层 `originOf` 用例 —— 它本来就属于那一条。
+验收（改后实测）：`compaction.test.js` 22/22 pass、`cancelled 0`；`tab.test.js` 17/17 pass、`cancelled 0`；`npm test` 从 `679 pass / 2 fail` 变成 **687 pass / 0 fail / 0 cancelled**（+8 正好对上 6+2）。
+**变异验证**（确认这些断言不是空跑）：① `compaction.js` 的 `measuredContextTokens` 丢掉 `cacheRead` → compaction 测试 1 fail；② `tab.js` 的 `normalize` 改成无图标时也写 `favIconUrl` 键 → tab 测试 2 fail。两次变异后均已 `git checkout` 还原。
+状态：已完成（2026-10-08）
+
+### T-157 — 工具卡的观察值/参数长串撑开面板，产生横向滚动条
+
+登记日期：2026-10-07
+来源：2026-10-07 会话（用户反馈「对话中工具调用的细节会撑出容器、出现左右滚动条」）
+现象与证据：读代码实测 —— `AgentToolStep.vue:27/:31` 的 `<pre>` 只有 `whitespace-pre-wrap`，无 `break-words`。
+结论（**修正登记时的判断**）：
+- 展开容器 `AgentToolStep.vue:25` **本来就有 `overflow-auto`**，所以工具卡的溢出会被自己吃掉，**不是**面板级横向滚动条的来源。登记时写成「撑开 transcript」是推断过头了。
+- 真正**没有自我约束的叶子**是 `AgentMarkdown.vue:35` 的 `<p>` —— 只有 `whitespace-pre-wrap`。同文件里代码块（`:41`）与表格（`:73`）都已有 `overflow-x-auto`，唯独正文段落没有，长 URL / 无空格长串会一路顶到 transcript（`overflow-y-auto` 会把 `overflow-x` 一并算成 `auto`），这才是面板级横向滚动条的来源。
+- 两处都改：工具卡两个 `<pre>` 加 `break-words` + `overflow-x-auto`（滚动下沉到叶子）；正文 `<p>` 加 `break-words`（**不加** `overflow-x-auto` —— 文本该换行，而不是让人横向拖）。
+测试：`panelRender.test.js` 无新增（`utils/sfc-render.mjs` 不做布局，量不到溢出）；本条靠代码评审 + 与 `AgentConfirmCard.vue:12` 的既有写法对齐。
+**连带踩坑**：改完 `<pre>` 后 `panelUi.test.js` 的 T-52 守卫**假红** —— 它写死了 `/<pre v-if="prettyArgs"/`，prettier 因 class 变长把属性换行后就失配。守卫钉的应是语义不是缩进，已放宽为 `/<pre[\s\S]{0,80}?v-if="prettyArgs"/`；变异验证（改成 `v-if="true"`）仍会红。
+**未做浏览器实测**：断行后的观感（长 URL 从中间断开是否影响阅读）未在真机上看过。
+状态：已完成（2026-10-08）
+
+### T-159 — busy 态输入区被两个按钮挤窄
+
+登记日期：2026-10-07
+来源：2026-10-07 会话（追问空间优化时推算发现）
+现象：busy 时 form 内同时有「停止」与「插话」两个按钮，textarea 被挤得比空闲还窄，而 busy 恰恰最需要打字。登记时按 Tailwind spacing 推算为「约 208px」，**实际比推算更糟**。
+结论：**先实测**（headless Chromium + `build/newtab.css` 编译产物 + 复刻标记，复用 `~/.workbuddy/node/workspace/cdp-eval.js`）。侧栏 `padding: 20px`、`Math.max(360, …)` → 内容区**正好 320px 且只能拖宽**，是最坏值。实测（320px）：
+
+| 状态 | textarea | 环 | 停止 | 插话 | 溢出 |
+|---|---|---|---|---|---|
+| 现状·空闲 | 208 | 14 | – | 64 | 0 |
+| 现状·busy | **144** | 14 | 56 | 64 | 0 |
+| 停止改 icon-only | 160 | 14 | 40 | 64 | 0 |
+| 再缩图标到 20 | 164 | 14 | 36 | 64 | 0 |
+| 再收 gap 到 1.5 | 170 | 14 | 36 | 64 | 0 |
+
+- **溢出全为 0** —— 所以这是「挤」不是「撑破」，textarea 能自由收缩，没有 min-content 地板。T-157 与 T-159 是两回事。
+- 采纳**第一条**：停止按钮改纯图标（UiButton 的 `icon` → `p-2`，40×40），144 → **160px**。图标尺寸（24）与 gap 都不动，保持与面板其余部分一致；后两条（→164 / →170）收益递减且要牺牲一致性，**留着没做**。
+- **顺带补的无障碍**：去掉文字会让按钮丢掉无障碍名称（读屏只念「按钮」），所以 `title` 之外**必须**加 `aria-label`（都复用既有键 `workflow.agent.stop`，无新增 i18n 键；UiButton 透传 `$attrs`，落得上）。
+测试：新增 `panelRender.test.js` 用例钉住「busy 时 ui-button 带 `icon` 且有 aria-label / 空闲时不渲染停止按钮」。注意 `utils/sfc-render.mjs` 把子组件换成 `<i data-stub="ui-button" …>` 桩，**真实 class 不落 HTML**，所以钉的是 `icon` 这个 prop（它才是触发 `p-2` 的原因），不是 `p-2` 本身。变异验证：去掉 `icon` → 该用例红。
+顺带重构：把面板用例里的 `host` 工厂提到模块级 `panelHost`，三处调用统一。
+状态：已完成（2026-10-08）
+
 
 
 
