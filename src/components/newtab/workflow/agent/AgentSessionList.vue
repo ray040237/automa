@@ -65,14 +65,23 @@
       </div>
     </template>
 
-    <!-- token 用量是会话级信息，跟「当前是哪个会话」一起看最自然，
-         所以并进这个下拉，而不是在 header 再挂一个角标控件 -->
+    <!--
+      T-09②：模型名。
+      模型名原来只用来判断 apiKey 存不存在，换 provider / 换模型后无从确认
+      「这个答案是谁写的」。
+
+      T-153：上下文水位与 token 用量**不在这里了**。它们是「发送前」要知道的
+      信息 —— 快满了就该开新会话或等压缩 —— 藏在下拉里等于逼用户先开菜单才能
+      决定要不要按发送。已搬到输入区的圆环上（`AgentContextRing.vue`）：
+      常驻只占 14px，数字与用量收进 hover。
+    -->
     <p
-      v-if="usage"
-      class="mt-1 border-t border-gray-200 px-2 pt-2 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400"
-      :title="t('workflow.agent.usage', { in: usage.input, out: usage.output })"
+      v-if="model"
+      class="mt-1 truncate border-t border-gray-200 px-2 pt-2 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400"
+      :title="model"
+      data-test="model-name"
     >
-      {{ fmtTokens(usage.input) }}/{{ fmtTokens(usage.output) }}
+      {{ model }}
     </p>
   </div>
 </template>
@@ -82,22 +91,26 @@ import { useI18n } from 'vue-i18n';
 import { sessionOptionLabel } from '@/agent/sessions';
 
 /**
- * 会话下拉的内容：会话列表（每行自带删除）+ token 用量。
+ * 会话下拉的内容：会话列表（每行自带删除）+ 当前模型名。
  *
  * 原本 header 上还有一个「⋯」溢出菜单，专门用来装 token 用量与删除 —— 为了两个
  * 功能多出一层菜单、多一个按钮，删除要点两次。已收掉：这三件事本来就都属于
  * 「会话」，全放进这一个下拉。删除进一步改成**每行自带垃圾桶**（见模板里的注释）。
  *
+ * T-153：水位与用量从这里搬到了输入区的圆环 —— 见模板里 model-name 上方的注释。
+ *
  * 文案不在这里拼 —— 复用 sessions.js 的 sessionOptionLabel（已有单测钉住，
  * 它产出「标题 · 相对时间」）。更早那行原生 <select> 是靠给标题追加「（当前）」
  * 这种字符串后缀来标记当前会话的，换成列表后用勾选图标，不再往标题里塞字。
  */
-// 模板里直接用 props 的字段，不需要挂到变量上（optionText 是按项取值的）
+// 模板里直接用字段名，所以 defineProps 的返回值不必挂到变量上 ——
+// script 里已经没有任何地方要读 props（T-153 把水位搬走后，连 usage 都不读了）。
 defineProps({
   sessions: { type: Array, default: () => [] },
   currentSessionId: { type: String, default: null },
-  usage: { type: Object, default: null },
   disabled: { type: Boolean, default: false },
+  // T-09②：当前 provider 的模型名（config.model）
+  model: { type: String, default: '' },
 });
 
 const emit = defineEmits(['select', 'delete']);
@@ -106,11 +119,5 @@ const { t } = useI18n();
 
 function optionText(entry) {
   return sessionOptionLabel(entry, t('workflow.agent.session.untitled'));
-}
-
-/** token 数缩写：1234 -> 1.2k */
-function fmtTokens(n) {
-  const v = Number(n) || 0;
-  return v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v);
 }
 </script>

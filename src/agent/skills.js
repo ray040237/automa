@@ -59,6 +59,14 @@ export const TEXT_FILE_EXTENSIONS = new Set([
   'css',
 ]);
 
+/**
+ * 导入包的两道硬上限（T-146）：条目数与解压后累计字符数。刻意**抛错**而不是
+ * 静默截断 —— 一个刻意构造的超大 zip 会把全部内容读进内存再写进存储，
+ * 用户该看到「包太大」而不是「导入成功但少了东西」。
+ */
+export const MAX_IMPORT_ENTRIES = 500;
+export const MAX_IMPORT_CHARS = 8 * 1024 * 1024;
+
 export function isTextPath(path) {
   const ext = String(path || '')
     .split('.')
@@ -66,6 +74,30 @@ export function isTextPath(path) {
     .toLowerCase();
 
   return TEXT_FILE_EXTENSIONS.has(ext);
+}
+
+/** zip 条目数守卫（T-146）。超限直接抛，不静默裁。 */
+function assertWithinImportLimits(entries) {
+  if (entries.length > MAX_IMPORT_ENTRIES) {
+    throw new Error(
+      `技能包条目过多（${entries.length} 个，上限 ${MAX_IMPORT_ENTRIES}），已中止导入`
+    );
+  }
+}
+
+/** 解压后累计字符预算（T-146）。每读一段调用一次，超限抛错。 */
+function createCharBudget() {
+  let used = 0;
+
+  return (n) => {
+    used += n;
+
+    if (used > MAX_IMPORT_CHARS) {
+      throw new Error(
+        `技能包解压后内容过大（超过 ${MAX_IMPORT_CHARS} 字符），已中止导入`
+      );
+    }
+  };
 }
 
 /**
@@ -251,21 +283,51 @@ export function parseFrontmatter(md) {
     const kv = /^([A-Za-z_-]+)\s*:\s*(.*)$/.exec(line.trim());
 
     if (kv && ['name', 'description'].includes(kv[1].toLowerCase())) {
-      attrs[kv[1].toLowerCase()] = kv[2].trim().replace(/^["']|["']$/g, '');
+      attrs[kv[1].toLowerCase()] = parseFrontmatterValue(kv[2]);
     }
   });
 
   return { attrs, body: src.slice(m[0].length) };
 }
 
-/** frontmatter 反向生成（导出 SKILL.md 时用）。 */
-function frontmatterTo(name, description) {
-  const lines = ['---', `name: ${name}`];
+/**
+ * frontmatter 值 → 原值。**只剥成对的引号**（T-145）：值内或单侧的引号是
+ * 正文的一部分（旧实现的无条件 `^["']|["']$` 会把它们吃掉）。双引号内
+ * 的 `\"` 由生成侧转义，这里还原。
+ */
+function parseFrontmatterValue(raw) {
+  const v = String(raw || '').trim();
 
-  if (description) lines.push(`description: ${description}`);
+  if (/^"[\s\S]*"$/.test(v)) return v.slice(1, -1).replace(/\\"/g, '"');
+  if (/^'[\s\S]*'$/.test(v)) return v.slice(1, -1);
+
+  return v;
+}
+
+/**
+ * frontmatter 反向生成（导出 SKILL.md 时用）。**值必须单行**（T-145）：
+ * frontmatter 是逐行 key: value，值里的换行会把后面的内容挤成新的一行，
+ * 再解析时只取到首行。值以引号起止时加一层双引号，避免解析侧把它当引号剥掉。
+ */
+function frontmatterTo(name, description) {
+  const lines = ['---', frontmatterLine('name', name)];
+
+  if (description) lines.push(frontmatterLine('description', description));
   lines.push('---', '');
 
   return lines.join('\n');
+}
+
+function frontmatterLine(key, value) {
+  const v = String(value == null ? '' : value)
+    .replace(/[\r\n]+/g, ' ')
+    .trim();
+
+  if (/^["']/.test(v) || /["']$/.test(v)) {
+    return `${key}: "${v.replace(/"/g, '\\"')}"`;
+  }
+
+  return `${key}: ${v}`;
 }
 
 /**
@@ -304,6 +366,9 @@ export async function exportSkillZip(skill) {
 
   zip.file('SKILL.md', frontmatterTo(s.name, s.description) + s.body);
   Object.entries(s.files).forEach(([path, content]) => {
+    // 附带文件里若有 SKILL.md，会覆盖上面的技能入口（T-147a）
+    if (path.split('/').pop() === 'SKILL.md') return;
+
     zip.file(path, content);
   });
 
@@ -323,6 +388,9 @@ export async function exportSkillZip(skill) {
 export async function importSkillsZip(file) {
   const zip = await JSZip.loadAsync(file);
   const entries = Object.values(zip.files).filter((e) => !e.dir);
+
+  assertWithinImportLimits(entries);
+
   const skillEntries = entries.filter((e) => {
     const parts = e.name.split('/');
 
@@ -333,8 +401,18 @@ export async function importSkillsZip(file) {
     throw new Error('zip 里没有找到 SKILL.md —— 请确认这是技能包');
   }
 
+  // 每个技能入口的所在目录（根技能为 ''）：用来把**别的技能的整棵子树**
+  // 从本条技能的附带文件里排除（T-144）。只比 '=== SKILL.md' 挡不住
+  // 「根技能吞掉子目录技能」——根技能的 dir 是空串，前缀过滤不生效。
+  const skillDirs = skillEntries.map((e) => {
+    const at = e.name.lastIndexOf('/');
+
+    return at === -1 ? '' : e.name.slice(0, at);
+  });
+
   const skills = [];
   const rejected = [];
+  const budget = createCharBudget();
 
   for (const entry of skillEntries) {
     // 根目录的 SKILL.md 没有 '/' —— lastIndexOf 返回 -1 时目录必须取空串，
@@ -343,6 +421,8 @@ export async function importSkillsZip(file) {
     const dir = slashAt === -1 ? '' : entry.name.slice(0, slashAt);
     const folderName = dir ? dir.split('/').pop() : '';
     const md = await entry.async('string');
+
+    budget(md.length);
     const skill = skillFromMarkdown(
       md,
       folderName.replace(/\.md$/i, '') || 'skill'
@@ -361,6 +441,13 @@ export async function importSkillsZip(file) {
 
     for (const other of entries) {
       if (other === entry) continue;
+      // 落在别的技能目录里的条目属于那条技能，不是本条的附带文件（T-144）
+      if (
+        skillDirs.some((d) => d && d !== dir && other.name.startsWith(d + '/'))
+      ) {
+        continue;
+      }
+
       if (dir && !other.name.startsWith(dir + '/')) continue;
       // 根目录 SKILL.md 的技能吃下 zip 里全部其余文件（含子目录）——
       // 不要按「有没有 /」排除，那会把 reference/api.md 这类参考文档拒掉。
@@ -377,7 +464,10 @@ export async function importSkillsZip(file) {
         continue;
       }
 
-      files[rel] = await other.async('string');
+      const content = await other.async('string');
+
+      budget(content.length);
+      files[rel] = content;
     }
 
     skill.files = files;
@@ -399,6 +489,7 @@ export async function importSkillsZip(file) {
  */
 export async function exportBackupZip({ skills, commands, instructions }) {
   const zip = new JSZip();
+  const normalized = (skills || []).map(normalizeSkill);
 
   zip.file(
     'automa-agent-backup.json',
@@ -408,18 +499,42 @@ export async function exportBackupZip({ skills, commands, instructions }) {
         exportedAt: new Date().toISOString(),
         commands,
         instructions,
+        // 技能的正文与 files 走文件形状（与生态互通），但 enabled/id 是
+        // 记录级状态，文件形态带不了 —— 单独记在 JSON 里，否则恢复后
+        // 停用技能全部复活、id 全部重生（T-141）
+        skills: normalized.map((s) => ({
+          name: s.name,
+          description: s.description,
+          enabled: s.enabled,
+          id: s.id,
+        })),
       },
       null,
       2
     )
   );
 
-  for (const raw of skills || []) {
-    const s = normalizeSkill(raw);
-    const base = 'skills/' + sanitizeFolder(s.name);
+  // 目录名去重：两个技能名清洗后同名（A/B 与 A\B、大小写差异）会互相覆盖
+  // 而丢技能（T-147b）
+  const usedFolders = new Set();
+
+  for (const s of normalized) {
+    const stem = sanitizeFolder(s.name);
+    let folder = stem;
+    let n = 2;
+
+    while (usedFolders.has(folder.toLowerCase())) {
+      folder = `${stem}-${n}`;
+      n += 1;
+    }
+    usedFolders.add(folder.toLowerCase());
+
+    const base = 'skills/' + folder;
 
     zip.file(`${base}/SKILL.md`, frontmatterTo(s.name, s.description) + s.body);
     Object.entries(s.files).forEach(([path, content]) => {
+      if (path.split('/').pop() === 'SKILL.md') return;
+
       zip.file(`${base}/${path}`, content);
     });
   }
@@ -446,23 +561,48 @@ export async function importBackupZip(file) {
 
   const meta = JSON.parse(await jsonEntry.async('string'));
 
+  // 备份 JSON 里记的技能元数据（含 enabled/id —— 文件形态带不了的记录级状态，T-141）
+  const metaByName = new Map(
+    (Array.isArray(meta.skills) ? meta.skills : []).map((s) => [
+      String((s && s.name) || '').toLowerCase(),
+      s,
+    ])
+  );
+
   // 直接在备份包上扫描 skills/ 目录 —— 与 importSkillsZip 共用
   // 「SKILL.md 定位 + 文本过滤 + 拒收上报」的判定，不另写一份扫描逻辑。
   const entries = Object.values(zip.files).filter((e) => !e.dir);
+
+  assertWithinImportLimits(entries);
+
   const mdEntries = entries.filter((e) => e.name.endsWith('/SKILL.md'));
   const skills = [];
   const rejected = [];
+  const budget = createCharBudget();
 
   for (const entry of mdEntries) {
     const slashAt = entry.name.lastIndexOf('/');
     const dir = slashAt === -1 ? '' : entry.name.slice(0, slashAt);
     const md = await entry.async('string');
+
+    budget(md.length);
     const folderName = dir.split('/').pop() || '';
     const skill = skillFromMarkdown(md, folderName);
 
     if (!skill.name) {
       rejected.push({ path: entry.name, reason: 'SKILL.md 缺少名称' });
       continue;
+    }
+
+    // 以备份 JSON 里的记录级状态回盖（T-141）：恢复后停用技能仍是停用、
+    // id 保持稳定。JSON 缺这条（旧备份包）时保持 normalize 的默认。
+    const metaSkill = metaByName.get(skill.name.toLowerCase());
+
+    if (metaSkill) {
+      if (metaSkill.enabled !== undefined) {
+        skill.enabled = Boolean(metaSkill.enabled);
+      }
+      if (metaSkill.id) skill.id = String(metaSkill.id);
     }
 
     const files = {};
@@ -482,7 +622,10 @@ export async function importBackupZip(file) {
         continue;
       }
 
-      files[rel] = await other.async('string');
+      const content = await other.async('string');
+
+      budget(content.length);
+      files[rel] = content;
     }
 
     skill.files = files;
@@ -518,11 +661,21 @@ export function mergeSkills(existing, incoming) {
   let updated = 0;
 
   for (const raw of incoming || []) {
-    const s = normalizeSkill(raw);
+    const src = raw || {};
+    const s = normalizeSkill(src);
     const key = s.name.toLowerCase();
+    const prev = byName.get(key);
 
-    if (byName.has(key)) {
-      byName.set(key, { ...byName.get(key), ...s });
+    if (prev) {
+      // incoming 缺 enabled/id 时保留原有值（T-142）：normalizeSkill 会补
+      // enabled:true 与新 id，直接 {...prev, ...s} 会把用户停用的技能重新
+      // 启用、把稳定 id 换掉。zip/.md 导入的记录本就不带这两个字段。
+      const next = { ...prev, ...s };
+
+      if (src.enabled === undefined) next.enabled = prev.enabled;
+      if (!src.id) next.id = prev.id;
+
+      byName.set(key, next);
       updated += 1;
     } else {
       byName.set(key, s);

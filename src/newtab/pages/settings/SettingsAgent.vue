@@ -160,6 +160,45 @@
             </button>
           </div>
 
+          <!-- 测试连接：打的是生产同一条路（同 baseUrl / 模型 / 鉴权头），测出的错
+               就是用户真用时会看到的错。结果内联在卡内，与 fetchErrors 同一出口。 -->
+          <div class="flex flex-wrap items-center gap-3">
+            <ui-button
+              :loading="probe[p.id] && probe[p.id].state === 'testing'"
+              @click="testConnection(p)"
+            >
+              {{
+                probe[p.id] && probe[p.id].state === 'testing'
+                  ? t('settings.agent.test.testing')
+                  : t('settings.agent.test.button')
+              }}
+            </ui-button>
+
+            <span
+              v-if="probe[p.id] && probe[p.id].state === 'ok'"
+              class="text-xs text-green-600 dark:text-green-400"
+            >
+              {{ t('settings.agent.test.ok', { model: probe[p.id].model }) }}
+            </span>
+            <span
+              v-else-if="probe[p.id] && probe[p.id].state === 'needModel'"
+              class="text-xs text-gray-500 dark:text-gray-400"
+            >
+              {{ t('settings.agent.test.needModel') }}
+            </span>
+            <span
+              v-else-if="probe[p.id] && probe[p.id].state === 'fail'"
+              class="text-xs text-red-600 dark:text-red-400"
+            >
+              {{
+                t('settings.agent.test.' + probe[p.id].errorKey, {
+                  status: probe[p.id].status,
+                  msg: probe[p.id].message,
+                })
+              }}
+            </span>
+          </div>
+
           <!-- 每个模型一份上下文窗口与输出上限：同一条连接下不同模型差得很远，
                挂连接级就必然有填错的那几个（Q7） -->
           <div
@@ -348,6 +387,7 @@ import {
   PROVIDER_TEMPLATES,
   loadConfigDoc,
   newProviderId,
+  probeConnection,
   resolveContextWindow,
   revealApiKey,
   saveConfig,
@@ -392,6 +432,12 @@ const keyVisible = reactive({});
 const newModelNames = reactive({});
 const fetchErrors = reactive({});
 const fetching = reactive({});
+
+/**
+ * 「测试连接」的结果，按连接分开存，与 fetchErrors 同一套理由（多张卡同时展开）。
+ * 形状：`{state: 'testing'|'ok'|'fail'|'needModel', model?, errorKey?, status?, message?}`
+ */
+const probe = reactive({});
 
 const picker = reactive({ show: false, targetId: '', list: [], picked: {} });
 
@@ -659,6 +705,42 @@ async function fetchModels(p) {
   } finally {
     fetching[p.id] = false;
   }
+}
+
+/**
+ * 测试这条连接能不能真对话（A2）。
+ *
+ * 与「获取可用模型」不同：这一步**必须**有模型才测得了 —— 没有就给明确提示，
+ * 而不是随便编一个模型名去撞（那只会得到一个与真实使用无关的 404）。用的模型：
+ * 当前连接优先用正在用的那个，否则用列表第一个，结果里会写明测的是哪个。
+ */
+async function testConnection(p) {
+  let model = '';
+
+  if (isActive(p) && p.models.some((m) => m.id === activeModelId.value)) {
+    model = activeModelId.value;
+  } else if (p.models.length) {
+    model = p.models[0].id;
+  }
+
+  if (!model) {
+    probe[p.id] = { state: 'needModel' };
+
+    return;
+  }
+
+  probe[p.id] = { state: 'testing' };
+
+  // 表单里敲了就用敲的；没敲就用已存的那把（只为这一次探针解开），与 fetchModels 一致
+  const key = p.apiKey.trim() || (await revealApiKey(configIO, p.id));
+
+  const r = await probeConnection({
+    baseUrl: p.baseUrl.trim(),
+    apiKey: key,
+    model,
+  });
+
+  probe[p.id] = { state: r.ok ? 'ok' : 'fail', model, ...r };
 }
 
 function addPickedModels() {

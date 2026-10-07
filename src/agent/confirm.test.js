@@ -15,7 +15,7 @@ import {
 } from './confirm';
 import { TOOLS } from './tools';
 
-/** T-83：载荷里的 tool 由 loop 的闸带上 —— 测试里从真实注册表取，钉住整链。 */
+/** T-134：载荷里的 tool 由 loop 的闸带上 —— 测试里从真实注册表取，钉住整链。 */
 const toolByName = (name) => TOOLS.find((t) => t.name === name) || null;
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -123,14 +123,14 @@ test('画布块 data 带循环引用时兜底成字符串，不抛', () => {
   assert.ok(add.detail.includes('blockId: javascript-code'));
 });
 
-test('T-83：调用方没带 tool 时兜底 generic，参数原样摊开不猜', () => {
+test('T-134：调用方没带 tool 时兜底 generic，参数原样摊开不猜', () => {
   const c = buildConfirmation({ name: 'test_js', args: { code: 'x()' } });
 
   assert.equal(c.kind, 'generic');
   assert.ok(c.detail.includes('x()'));
 });
 
-test('T-83：read 类工具没有 confirmDetail，误入闸也走 generic', () => {
+test('T-134：read 类工具没有 confirmDetail，误入闸也走 generic', () => {
   const c = buildConfirmation({
     name: 'read_page',
     args: { detail: 'full' },
@@ -140,7 +140,7 @@ test('T-83：read 类工具没有 confirmDetail，误入闸也走 generic', () =
   assert.equal(c.kind, 'generic');
 });
 
-test('T-83：confirmDetail 不得覆盖闸与宿主的归属字段', () => {
+test('T-134：confirmDetail 不得覆盖闸与宿主的归属字段', () => {
   const fakeTool = {
     name: 'fake',
     class: 'write',

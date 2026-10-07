@@ -9,7 +9,12 @@ import {
 import getFile, { readFileAsBase64 } from '@/utils/getFile';
 import { sleep } from '@/utils/helper';
 import { MessageListener } from '@/utils/message';
-import { agentEvalInPage, raceTimeout } from '@/agent/agentEvalInPage';
+import {
+  agentEvalInPage,
+  cspBlockedMessage,
+  isCspBlockedResult,
+  raceTimeout,
+} from '@/agent/agentEvalInPage';
 
 // import { getDocumentCtx } from '@/content/handleSelector';
 import { automaRefDataStr } from '@/workflowEngine/helper';
@@ -541,16 +546,47 @@ const AGENT_PAGE_TIMEOUT_MS = 15000;
  * @param {Array=} args
  * @returns {Promise<Object>}
  */
-async function runInPage(tabId, func, args = []) {
+// executeScript 返回 [{result}]（单 frame）或多 frame 数组。统一成：
+//  - top/指定 frame：单个 result
+//  - all：各 frame 的 result 数组（供 query 合并、其余取第一个 ok 的）
+//  - 超时/异常返回的 {ok:false,error} 不是数组，原样带过
+function normalizeExecResults(res, frame) {
+  if (!Array.isArray(res)) return res;
+
+  const arr = res;
+
+  if (frame === 'all') {
+    return arr.map((r) => r && r.result).filter((v) => v !== undefined);
+  }
+
+  return arr[0] && arr[0].result;
+}
+
+async function runInPage(tabId, func, args = [], frame = 'top') {
   const exec = (async () => {
+    // frame 口径与 read_page 对齐（T-115/T-118）：top=只主 frame；
+    // all=所有 frame（executeScript 返回数组）；数字=指定 frameId。
+    // 默认 top，与改造前行为一致——test_js 这类要回单值的，all 没有意义。
+    let target;
+    if (frame === 'all') target = { tabId, allFrames: true };
+    else if (frame === 'top' || frame == null)
+      target = { tabId, frameIds: [0] };
+    else {
+      const n = Number(frame);
+      target = Number.isFinite(n)
+        ? { tabId, frameIds: [n] }
+        : { tabId, frameIds: [0] };
+    }
+
     const res = await browser.scripting.executeScript({
-      target: { tabId },
+      target,
       world: 'MAIN',
       func,
       args,
     });
 
-    return res && res[0] && res[0].result;
+    // all 时 res 是多个 frame 的结果数组，按调用方需要取第一个或全收
+    return res;
   })();
 
   return raceTimeout(exec, AGENT_PAGE_TIMEOUT_MS, {
@@ -558,19 +594,115 @@ async function runInPage(tabId, func, args = []) {
     error: `页面执行超时（${
       AGENT_PAGE_TIMEOUT_MS / 1000
     }s）。页面可能被同步代码占死了，请换个思路，别再在这页上执行代码。`,
-  }).catch((err) => ({
-    ok: false,
-    error: (err && err.message) || String(err),
-  }));
+  })
+    .then((res) => normalizeExecResults(res, frame))
+    .catch((err) => ({
+      ok: false,
+      error: (err && err.message) || String(err),
+    }));
+}
+
+/**
+ * 严格 CSP 页面下 test_js 的降级通道（backlog B6，惰性触发）。
+ *
+ * 页面 CSP 拦掉 MAIN world 的 new Function / eval 时，executeScript 注入的
+ * agentEvalInPage 会拿到 EvalError。这条通道用 chrome.debugger 的
+ * Runtime.evaluate 绕过页面 CSP 求值同一段代码。
+ *
+ * 调用方（runAgentJs）必须先判定 isCspBlockedResult 才会进来：attach 会弹
+ * 出「正在调试此浏览器」横幅，普通页面绝不允许走这里。执行完一律 detach。
+ *
+ * Runtime.evaluate 跑在标签主 frame，所以只对主 frame 的请求有把握。
+ */
+async function runAgentJsViaDebugger(tabId, code) {
+  const target = { tabId };
+  let attached = false;
+
+  try {
+    await new Promise((resolve, reject) => {
+      chrome.debugger.attach(target, '1.3', () => {
+        const err = chrome.runtime.lastError;
+        if (err) reject(new Error(err.message));
+        else resolve();
+      });
+    });
+    attached = true;
+
+    // 把页内求值函数整段序列化注入，复用同一套表达式/语句回退与序列化逻辑。
+    const expression = `(${agentEvalInPage.toString()})(${JSON.stringify(
+      code
+    )})`;
+
+    const r = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', {
+      expression,
+      userGesture: true,
+      awaitPromise: true,
+      returnByValue: true,
+    });
+
+    if (!r || !r.result) throw new Error('调试器没有返回结果');
+    if (r.exceptionDetails || r.result.subtype === 'error') {
+      throw new Error(
+        r.result.description ||
+          (r.exceptionDetails && r.exceptionDetails.text) ||
+          '调试器执行出错'
+      );
+    }
+
+    const { value } = r.result;
+
+    // agentEvalInPage 回的是 {ok,value,json} 对象，原样带回给调用方。
+    if (value && typeof value === 'object' && 'ok' in value) return value;
+
+    return { ok: true, value: String(value), json: false };
+  } catch (err) {
+    const why = (err && err.message) || String(err);
+
+    return {
+      ok: false,
+      error: `${cspBlockedMessage(false)}（调试器：${why}）`,
+    };
+  } finally {
+    if (attached) {
+      try {
+        await new Promise((resolve) => {
+          chrome.debugger.detach(target, resolve);
+        });
+      } catch (e) {
+        // detach 失败不影响已拿到的结果
+      }
+    }
+  }
 }
 
 async function runAgentJs(payload) {
-  const { tabId, code } = payload;
+  const { tabId, code, frame } = payload;
 
   if (!tabId) return { ok: false, error: 'no-tab-id' };
   if (!code || !code.trim()) return { ok: false, error: 'empty-code' };
 
-  return runInPage(tabId, agentEvalInPage, [code]);
+  const f = frame || 'top';
+  const raw = await runInPage(tabId, agentEvalInPage, [code], f);
+
+  // all 时取第一个有结果的 frame；test_js 要回单值，多 frame 取第一个即可
+  const res =
+    f === 'all' && Array.isArray(raw)
+      ? raw.find((r) => r !== undefined && r !== null) || {
+          ok: false,
+          error: 'no-result',
+        }
+      : raw;
+
+  // 惰性降级（backlog B6）：只有当结果被判为「被页面 CSP 拦掉了 eval」时才
+  // 动 debugger。普通页面这条分支从不进入 —— 不探测、不 attach、不弹调试
+  // 横幅，对现有路径零副作用。错误文案也在这里换掉，免得把 CSP 误报成语法错。
+  if (isCspBlockedResult(res)) {
+    if (IS_FIREFOX) return { ok: false, error: cspBlockedMessage(true) };
+
+    return runAgentJsViaDebugger(tabId, code);
+  }
+
+  return res;
 }
 
 message.on('agent:run-js', async (data) => runAgentJs(data));
@@ -627,14 +759,41 @@ function agentQueryInPage(sel, max) {
 }
 
 message.on('agent:query', async (data) => {
-  const { tabId, selector, limit: rawLimit } = data;
+  const { tabId, selector, limit: rawLimit, frame } = data;
   const limit = Math.max(1, Math.min(Number(rawLimit) || 5, 20));
 
   if (!tabId) return { ok: false, error: 'no-tab-id' };
   if (!selector || !selector.trim())
     return { ok: false, error: 'empty-selector' };
 
-  return runInPage(tabId, agentQueryInPage, [selector, limit]);
+  const res = await runInPage(
+    tabId,
+    agentQueryInPage,
+    [selector, limit],
+    frame || 'top'
+  );
+
+  // all：各 frame 的命中数相加，样本按 frame 标注来源
+  if (frame === 'all' && Array.isArray(res)) {
+    let count = 0;
+    const sample = [];
+
+    res.forEach((r, i) => {
+      if (r && r.ok) {
+        count += r.count;
+        (r.sample || []).forEach((s) => sample.push({ ...s, frame: i }));
+      }
+    });
+
+    return {
+      ok: true,
+      count,
+      sample: sample.slice(0, limit),
+      frames: res.length,
+    };
+  }
+
+  return res;
 });
 
 /**
@@ -692,7 +851,7 @@ function agentHighlightInPage(sel, max, ms) {
 }
 
 message.on('agent:highlight', async (data) => {
-  const { tabId, selector, limit, durationMs } = data;
+  const { tabId, selector, limit, durationMs, frame } = data;
   const max = Math.max(1, Math.min(Number(limit) || 10, 50));
   const ms = Math.max(500, Math.min(Number(durationMs) || 4000, 20000));
 
@@ -700,7 +859,19 @@ message.on('agent:highlight', async (data) => {
   if (!selector || !selector.trim())
     return { ok: false, error: 'empty-selector' };
 
-  return runInPage(tabId, agentHighlightInPage, [selector, max, ms]);
+  const res = await runInPage(
+    tabId,
+    agentHighlightInPage,
+    [selector, max, ms],
+    frame || 'top'
+  );
+
+  // all：取第一个有命中的 frame 的结果；高亮本身在多 frame 上都生效
+  if (frame === 'all' && Array.isArray(res)) {
+    return res.find((r) => r && r.ok) || { ok: false, error: 'no-match' };
+  }
+
+  return res;
 });
 
 message.on(

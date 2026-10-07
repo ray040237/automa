@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agent 面板 UI 改进点 · 当前 vs 改后</title>
+<style>
+  :root{
+    --bg:#14161a; --panel:#1b1e24; --card:#21252c; --border:#2e343d;
+    --text:#e6e9ee; --dim:#9aa3b0; --faint:#6b7480;
+    --amber:#f5b14c; --amber-bg:rgba(245,177,76,.10);
+    --accent:#5b8cff; --accent-bg:rgba(91,140,255,.10);
+    --red:#f0626a; --red-bg:rgba(240,98,106,.10);
+    --green:#3ecf8e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,sans-serif;
+       background:#0c0e11;color:var(--text);padding:28px 16px;line-height:1.6}
+  .wrap{max-width:900px;margin:0 auto}
+  h1{font-size:18px;margin-bottom:4px}
+  .sub{color:var(--faint);font-size:12.5px;margin-bottom:24px}
+
+  .sec{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:18px}
+  .sec>h2{font-size:14px;margin-bottom:4px;color:#fff}
+  .sec>.why{font-size:12px;color:var(--dim);margin-bottom:14px}
+
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .side{border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--card)}
+  .side .lbl{font-size:11px;font-weight:700;margin-bottom:10px;letter-spacing:.03em}
+  .side.cur .lbl{color:var(--faint)} .side.new .lbl{color:var(--accent)}
+
+  /* 三种卡片（统一容器，只换配色以暴露“撞色”） */
+  .c{border-radius:9px;padding:10px 12px;font-size:12px;margin-bottom:8px;border:1px solid}
+  .c .ct{font-weight:600;display:flex;align-items:center;gap:6px;margin-bottom:3px}
+  .c .cd{font-size:11.5px;opacity:.85}
+  .c.notice-c{background:var(--amber-bg);border-color:rgba(245,177,76,.35);color:#ffd596}
+  .c.confirm-c{background:var(--amber-bg);border-color:rgba(245,177,76,.55);color:#ffd596}
+  .c.config-c{background:var(--amber-bg);border-color:rgba(245,177,76,.45);color:#ffd596}
+  .c .row{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+  .c .btn{font-size:11.5px;padding:4px 12px;border-radius:7px;border:1px solid var(--border);background:#2b313a;color:var(--text)}
+  .c .btn.allow{background:var(--accent);border:none;color:#fff}
+
+  /* 改后 */
+  .c.notice-n{background:rgba(154,163,176,.08);border-color:rgba(154,163,176,.3);color:#c7cdd6}
+  .c.confirm-n{background:var(--accent-bg);border-color:rgba(91,140,255,.5);color:#cfe0ff}
+  .c.config-n{background:var(--red-bg);border-color:rgba(240,98,106,.5);color:#ffc3c7}
+
+  /* 用量 */
+  .usage{font-size:12px;display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .usage code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:rgba(91,140,255,.14);color:#a9c2ff;padding:1px 6px;border-radius:5px}
+  .meter{height:6px;border-radius:999px;background:#2b313a;overflow:hidden}
+  .meter>i{display:block;height:100%;border-radius:999px}
+  .u2{font-size:11px;color:var(--dim);margin-top:6px}
+  .lbl2{font-size:10.5px;color:var(--faint);margin-right:4px}
+
+  /* 折叠卡 */
+  .fold{border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;background:#1e2229}
+  .fold .fh{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:11.5px;color:var(--dim)}
+  .fold .fh .nm{font-weight:600}
+  .fold .fh .cnt{color:var(--faint);font-size:11px}
+  .fold.diff{border-color:rgba(91,140,255,.35)}
+  .fold.diff .fh{color:#a9c2ff}
+  .ico{width:15px;text-align:center;flex-shrink:0}
+
+  .foot{font-size:12px;color:var(--dim);margin-top:6px}
+  .foot b{color:var(--accent)}
+  code.f{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:rgba(91,140,255,.14);color:#a9c2ff;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Agent 面板 UI 改进点</h1>
+  <div class="sub">均读代码得出（<code class="f">AgentConfirmCard / AgentTranscript / AgentSessionList / AgentPanel</code>），左「当前」右「改后」。</div>
+
+  <!-- 1 撞色 -->
+  <div class="sec">
+    <h2>① 琥珀/黄色被三种语义共用，警示退化</h2>
+    <div class="why">当前 notice（善意提醒）、确认门（必须你裁决的写操作）、未配置 API Key（功能不可用）三卡配色几乎一致。语义天差地别却看不出区别——与 T-04 当年给 error 换红色是同一个毛病。</div>
+    <div class="pair">
+      <div class="side cur">
+        <div class="lbl">当前 · 三卡同色</div>
+        <div class="c notice-c"><div class="ct">⚠ 系统提示</div><div class="cd">目标页已跳到别的页面</div></div>
+        <div class="c confirm-c"><div class="ct">⚠ 需要确认：执行代码</div><div class="cd">此操作会修改页面</div>
+          <div class="row"><span class="btn">拒绝</span><span class="btn allow">允许</span></div></div>
+        <div class="c config-c"><div class="ct">⚠ 尚未配置 API Key</div><div class="cd">去设置</div></div>
+      </div>
+      <div class="side new">
+        <div class="lbl">改后 · 三级分层</div>
+        <div class="c notice-n"><div class="ct">ℹ 系统提示</div><div class="cd">目标页已跳到别的页面</div></div>
+        <div class="c confirm-n"><div class="ct">🔒 需要你确认</div><div class="cd">此操作会修改页面</div>
+          <div class="row"><span class="btn">拒绝</span><span class="btn allow">允许</span></div></div>
+        <div class="c config-n"><div class="ct">⛔ 尚未配置 API Key</div><div class="cd">去设置 · 发送已禁用</div></div>
+      </div>
+    </div>
+    <div class="foot"><b>改法：</b>notice 退中性灰（advisory）；确认门升主色蓝 + 明确双按钮（需你行动）；未配置改红色（阻塞）。零逻辑风险，纯 class 调整。</div>
+  </div>
+
+  <!-- 2 用量 -->
+  <div class="sec">
+    <h2>② 用量数字缺标签 + 水位只有两档</h2>
+    <div class="why"><code class="f">AgentSessionList.vue:80-107</code>：用量显示为裸的 <code class="f">1.2K/3.4K</code>，哪个是输入哪个是输出只有 hover 才知；水位条只有「蓝 / ≥90% 红」两档，接近上限前无渐进警示。</div>
+    <div class="pair">
+      <div class="side cur">
+        <div class="lbl">当前</div>
+        <div class="usage"><code>1.2K/3.4K</code><span style="color:var(--faint);font-size:11px">上下文 18%</span></div>
+        <div class="meter"><i style="width:18%;background:#5b8cff"></i></div>
+        <div class="u2">水位 ≥90% 才变红，70~90% 无任何提示。</div>
+      </div>
+      <div class="side new">
+        <div class="lbl">改后</div>
+        <div class="usage"><span><span class="lbl2">输入</span><code>1.2K</code></span><span><span class="lbl2">输出</span><code>3.4K</code></span><span style="color:var(--faint);font-size:11px">上下文 18%</span></div>
+        <div class="meter"><i style="width:18%;background:#5b8cff"></i></div>
+        <div class="u2">三档：<span style="color:#5b8cff">＜70 蓝</span> / <span style="color:var(--amber)">70~90 琥珀</span> / <span style="color:var(--red)">≥90 红</span>。</div>
+      </div>
+    </div>
+    <div class="foot"><b>改法：</b>加「输入 / 输出」小标签；水位阈值改三档。纯 UI，不改 <code class="f">usage.js</code> 的计算（那里有单测）。</div>
+  </div>
+
+  <!-- 3 折叠卡 -->
+  <div class="sec">
+    <h2>③ 思考过程卡与压缩摘要卡长得一模一样</h2>
+    <div class="why"><code class="f">AgentTranscript.vue:41-69</code> 与 <code class="f">:149-173</code>：两种卡结构、配色、箭头完全一致，但一个是「模型怎么想」，一个是「上面那些历史被压成了一段」——用户分不清。</div>
+    <div class="pair">
+      <div class="side cur">
+        <div class="lbl">当前 · 无法区分</div>
+        <div class="fold"><div class="fh"><span class="ico">▶</span><span class="nm">思考过程</span><span class="cnt">我先读一下页面…</span></div></div>
+        <div class="fold"><div class="fh"><span class="ico">▶</span><span class="nm">已压缩早期对话（3 轮）</span></div></div>
+      </div>
+      <div class="side new">
+        <div class="lbl">改后 · 图标+色调区分</div>
+        <div class="fold"><div class="fh"><span class="ico">💭</span><span class="nm">思考过程</span><span class="cnt">我先读一下页面…</span></div></div>
+        <div class="fold diff"><div class="fh"><span class="ico">🗂</span><span class="nm">已压缩早期对话（3 轮）</span><span class="cnt">历史摘要</span></div></div>
+      </div>
+    </div>
+    <div class="foot"><b>改法：</b>压缩摘要用档案图标 + 微蓝边框，与思考卡区分。零风险。</div>
+  </div>
+
+  <!-- 4 文字 -->
+  <div class="sec">
+    <h2>④ 其余（未在此稿演示，需评审）</h2>
+    <div class="foot" style="font-size:12.5px">
+      <b>a11y / 键盘</b>：<code class="f">AgentDropdown.vue</code> 的下拉没有 <code class="f">aria-expanded</code>、面板无 <code class="f">role="menu"</code>，会话/tab 列表打开后 ↑↓ 不能移动选择（对比 slash 菜单已有 ↑↓）。项目明显重视 a11y（T-13），建议补。<br>
+      <b>窄栏表格</b>：markdown 表格靠 <code class="f">overflow-x-auto</code> 横滑，320px 侧栏里常溢出却没有「可横滑」的视觉提示，建议加渐变遮罩或角标。
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -14,6 +14,7 @@
  */
 
 import { originOf } from '../tab';
+import { defineTool } from './define';
 
 /**
  * 列出可注入的标签页，按窗口分组、最近访问在前。
@@ -62,7 +63,7 @@ export async function listTabs(ctx) {
  *
  * @param {Object} ctx
  * @param {Array<{tabId: number, origin: string, title?: string}>} ctx.pins
- *   T-70 修正：契约是**数组**。index.js 的 toolCtx 用 JS getter 提供，
+ *   T-132 修正：契约是**数组**。index.js 的 toolCtx 用 JS getter 提供，
  *   adapter 每次 execute spread 时求值 —— 工具拿到的就是本步执行时刻的快照。
  *   不再要求函数形态：「getter」一词曾在两侧各说各话，focus_tab 生产全挂。
  * @param {Function} ctx.addPin (pin) => Promise<void>
@@ -177,7 +178,7 @@ export async function openUrl(ctx, params) {
   };
 }
 
-export const listTabsTool = {
+export const listTabsTool = defineTool({
   name: 'list_tabs',
   class: 'read',
   group: 'tab',
@@ -189,9 +190,9 @@ export const listTabsTool = {
   async execute(args, ctx) {
     return listTabs(ctx, args || {});
   },
-};
+});
 
-export const focusTabTool = {
+export const focusTabTool = defineTool({
   name: 'focus_tab',
   // 只改 agent 内部指针（用户浏览器视图不动），所以是 read 不是 write
   class: 'read',
@@ -211,9 +212,9 @@ export const focusTabTool = {
   async execute(args, ctx) {
     return focusTab(ctx, args || {});
   },
-};
+});
 
-export const openUrlTool = {
+export const openUrlTool = defineTool({
   name: 'open_url',
   class: 'write',
   group: 'tab',
@@ -234,4 +235,4 @@ export const openUrlTool = {
   async execute(args, ctx) {
     return openUrl(ctx, args || {});
   },
-};
+});

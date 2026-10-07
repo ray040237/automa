@@ -19,6 +19,8 @@ import { stripComments } from '../stripComments';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_DIR = path.resolve(here, '..');
+const ROOT = path.resolve(here, '../../..');
+const read = (p) => readFileSync(path.join(ROOT, p), 'utf8');
 
 /** 造一个够用的假画布。 */
 function fakeEditor(nodes) {
@@ -424,14 +426,15 @@ describe('G5：agent 永远不能保存工作流', () => {
 
   const FILES = walk(AGENT_DIR).filter((f) => !f.endsWith('.test.js'));
 
+  const FORBIDDEN = [
+    'saveWorkflow',
+    'workflowStore.update',
+    'workflowStore.save',
+    'registerWorkflowTrigger',
+    'dbStorage.workflows',
+  ];
+
   test('src/agent 下不允许出现任何落盘/触发器注册的符号', () => {
-    const FORBIDDEN = [
-      'saveWorkflow',
-      'workflowStore.update',
-      'workflowStore.save',
-      'registerWorkflowTrigger',
-      'dbStorage.workflows',
-    ];
     const offenders = [];
 
     FILES.forEach((f) => {
@@ -448,6 +451,94 @@ describe('G5：agent 永远不能保存工作流', () => {
       offenders,
       [],
       '这些符号一旦出现，agent 就能自己落盘：' + offenders.join(', ')
+    );
+  });
+
+  /* --- T-124：上面那条只扫 src/agent 下的 .js，而画布句柄是在 .vue 里构造的 ---
+   *
+   * 盲区是实测出来的：`[id].vue` 全文确实含 `workflowStore.update` 与
+   * `registerWorkflowTrigger`（用户点保存、注册触发器，本该有），所以不能把它
+   * 整个丢进上面的黑名单扫描；但**注入块本身**是干净的，那才是 agent 能碰到的
+   * 唯一入口。守住注入块就等于守住红线，不必扫全文件。
+   *
+   * 与 T-128 的盲区不同：那边是 v-if 之类「运行期条件对文本隐形」，这里的
+   * 失效形态本身就是文本改动（加一次落盘调用、给 onCanvasChanged 换实现），
+   * 文本守卫抓得住。 */
+  const VUE = 'src/newtab/pages/workflows/[id].vue';
+  const HOST = 'src/composable/agentHost.js';
+
+  /** 取出 `[id].vue` 里 `canvas: {` 那一块 —— 宿主交给 agent 的全部画布能力。 */
+  function canvasDepsBlock() {
+    const src = read(VUE);
+    const start = src.indexOf('\n  canvas: {');
+
+    assert.notEqual(start, -1, `没在 ${VUE} 里找到 canvas: { 注入块`);
+
+    const end = src.indexOf('\n  },', start);
+
+    assert.notEqual(end, -1, 'canvas: { 块没有正常收尾，文件可能改坏了');
+
+    return src.slice(start, end + 5);
+  }
+
+  test('画布注入块里不许出现任何落盘符号（[id].vue 的 canvas 块）', () => {
+    const block = stripComments(canvasDepsBlock());
+    const hits = FORBIDDEN.filter((s) => block.includes(s));
+
+    assert.deepEqual(
+      hits,
+      [],
+      `画布句柄的构造处出现落盘符号：${hits.join(', ')}。` +
+        '宿主给 agent 的东西里一旦有保存入口，agent 就能自己落盘，G5 失效'
+    );
+  });
+
+  test('画布句柄只暴露 4 个键 —— 多一个就是给 agent 开新入口', () => {
+    const block = stripComments(canvasDepsBlock());
+    const keys = [...block.matchAll(/^\s{4}([A-Za-z_$][\w$]*)\s*[,:]/gm)].map(
+      (m) => m[1]
+    );
+
+    assert.deepEqual(
+      keys.sort(),
+      ['blocks', 'getEditor', 'newId', 'onCanvasChanged'],
+      '宿主传给 agent 的画布句柄只该有这 4 个键。新增键前先问：' +
+        '这是 agent 执行写工具真正需要的吗，还是只是图方便'
+    );
+  });
+
+  test('getEditor 仍返回 vue-flow 的 editor ref，不能改成直接引 store', () => {
+    const block = stripComments(canvasDepsBlock());
+
+    assert.ok(
+      /getEditor:\s*\(\)\s*=>\s*editor\.value/.test(block),
+      'getEditor 必须仍是 `() => editor.value`：换成 workflowStore 或预取值，' +
+        'agent 拿到的就不再是纯内存画布'
+    );
+  });
+
+  test('onCanvasChanged 只标未保存，不得顺带做别的', () => {
+    const block = stripComments(canvasDepsBlock());
+
+    assert.ok(
+      /onCanvasChanged:\s*\(\)\s*=>\s*\{\s*state\.dataChanged\s*=\s*true;\s*\}/.test(
+        block
+      ),
+      'onCanvasChanged 现在只该做 `state.dataChanged = true` —— ' +
+        'G5 允许的唯一副作用。多一行就说明 agent 开始替用户落盘了'
+    );
+  });
+
+  test('注入链上的 agentHost.js 同样不许落盘', () => {
+    const src = stripComments(read(HOST));
+    const hits = FORBIDDEN.filter((s) => src.includes(s));
+
+    assert.deepEqual(
+      hits,
+      [],
+      `${HOST} 是把画布 deps 送进 runtime 的那一跳，出现落盘符号：${hits.join(
+        ', '
+      )}`
     );
   });
 

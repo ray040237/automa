@@ -608,7 +608,7 @@ const workflow = computed(() => {
  * onCanvasChanged 只标「未保存」：保存永远是用户自己的动作（G5）。
  */
 const agentHost = useAgentHost({
-  // T-69：haveEditAccess 是异步加载的响应式权限，setup 期求值会把它冻结成
+  // T-135：haveEditAccess 是异步加载的响应式权限，setup 期求值会把它冻结成
   // 快照（团队用户页面刚打开时多半还没就绪 → 助手永久缺 canvas 组）。
   // 传 getter，runtime 每次 send 求值，权限变化下一轮生效。
   enabledGroups: () =>
@@ -656,13 +656,13 @@ const agentHost = useAgentHost({
       : [];
     const vars = parseJSON(wf.globalData, {});
     const lines = [
-      '工作流: ' + (wf.name || '(未命名)') + '（id=' + workflowId + '）',
-      '块数: ' + nodes.length,
-      '工作流变量名: ' + (Object.keys(vars).join(', ') || '(无)'),
+      `工作流: ${wf.name || '(未命名)'}（id=${workflowId}）`,
+      `块数: ${nodes.length}`,
+      `工作流变量名: ${Object.keys(vars).join(', ') || '(无)'}`,
     ];
     const trigger = nodes.find((n) => n && n.label === 'trigger');
     if (trigger) {
-      lines.push('触发器: 有（类型 ' + (trigger.component || '未知') + '）');
+      lines.push(`触发器: 有（类型 ${trigger.component || '未知'}）`);
     }
     return lines.join('\n');
   },

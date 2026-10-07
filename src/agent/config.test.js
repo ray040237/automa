@@ -3,13 +3,17 @@ import assert from 'node:assert';
 import {
   CONFIG_VERSION,
   DEFAULT_CONFIG,
+  PROBE_MAX_TOKENS,
   PROVIDER_TEMPLATES,
   STORAGE_KEY,
+  classifyProbeResult,
   loadConfig,
   loadConfigDoc,
+  isHttpUrl,
   migrateLegacy,
   newProviderId,
   normalizeDoc,
+  probeConnection,
   redactConfig,
   resolveActiveConfig,
   resolveContextWindow,
@@ -651,4 +655,228 @@ test('脱敏只留后 4 位，日志里看不到完整密钥', () => {
 
 test('空密钥脱敏后不留下误导性的尾巴', () => {
   assert.equal(redactConfig({ apiKey: '' }).apiKey, '');
+});
+
+/**
+ * 一个会被 isHttpUrl 拒掉的 javascript: 端点。
+ *
+ * 字面量拆开拼：eslint 的 no-script-url 连测试样例也不放过，而这条规则
+ * 本身要守的东西正是我们想测的 —— 存储里出现这种串时必须被拦下来。
+ */
+const JS_SCHEME = ['javascript', 'void 0'].join(':');
+
+test('T-66：isHttpUrl 是保存路径与运行时解析共用的那一份判断', () => {
+  assert.equal(isHttpUrl('https://api.example.com/v1'), true);
+  assert.equal(isHttpUrl('http://127.0.0.1:8080/v1'), true);
+  assert.equal(isHttpUrl('  https://x/v1  '), true, '首尾空白要先 trim');
+  assert.equal(isHttpUrl('ftp://x/v1'), false);
+  assert.equal(isHttpUrl('file:///etc/passwd'), false);
+  assert.equal(isHttpUrl(JS_SCHEME), false);
+  assert.equal(isHttpUrl(''), false);
+  assert.equal(isHttpUrl(undefined), false);
+});
+
+test('T-66：存储里的坏协议不得原样进运行时配置', () => {
+  // 这条漏网是实测出来的：loadConfig 不跑 validateConfig，保存时的协议检查
+  // 只在写入那一刻有效；存储里的 ftp:// / file:// / javascript: 会一路
+  // 走到 buildModel，pi 再抛一句指不到真因的 provider 报错。
+  const storageDoc = (baseUrl) => ({
+    activeProviderId: 'p1',
+    providers: [
+      {
+        id: 'p1',
+        name: '自建',
+        baseUrl,
+        apiKey: 'enc',
+        models: [{ id: 'm1', contextWindow: 65536, maxTokens: 0 }],
+      },
+    ],
+  });
+
+  for (const bad of ['ftp://x/v1', 'file:///etc/passwd', JS_SCHEME]) {
+    const cfg = resolveActiveConfig(storageDoc(bad), 'sk-real');
+
+    assert.equal(cfg.baseUrl, '', bad + ' 不该原样进运行时配置');
+    // 原值要留着：报错时得能说出「你填的是这个」
+    assert.equal(cfg.baseUrlInvalid, bad);
+    // 其余字段不动 —— 整份退回 DEFAULT_CONFIG 会把 apiKey 一起清掉，
+    // 用户明明填过密钥，却看到「请先配置 API Key」。
+    assert.equal(cfg.apiKey, 'sk-real');
+    assert.equal(cfg.model, 'm1');
+  }
+});
+
+test('T-66：正常地址与既有兜底不受影响', () => {
+  const ok = resolveActiveConfig(
+    {
+      activeProviderId: 'p1',
+      providers: [
+        {
+          id: 'p1',
+          name: '自建',
+          baseUrl: 'https://api.example.com/v1',
+          apiKey: 'enc',
+          models: [{ id: 'm1', contextWindow: 65536, maxTokens: 0 }],
+        },
+      ],
+    },
+    'sk-real'
+  );
+
+  assert.equal(ok.baseUrl, 'https://api.example.com/v1');
+  assert.equal(ok.baseUrlInvalid, undefined, '没清洗过就不该有这个字段');
+
+  // 缺 baseUrl / 缺 model 仍旧整份退回 DEFAULT_CONFIG（登记时的既有行为）
+  const noUrl = resolveActiveConfig(
+    {
+      activeProviderId: 'p1',
+      providers: [
+        {
+          id: 'p1',
+          name: '自建',
+          baseUrl: '',
+          apiKey: 'enc',
+          models: [{ id: 'm1' }],
+        },
+      ],
+    },
+    'sk-real'
+  );
+  assert.deepEqual(noUrl, { ...DEFAULT_CONFIG });
+});
+
+// ---------------------------------------------------------------- 测试连接（B3 ①）
+
+test('classifyProbeResult：按状态码 / 超时 / 网络分类，术语与「获取可用模型」一致', () => {
+  assert.deepEqual(classifyProbeResult({ timedOut: true }), {
+    ok: false,
+    errorKey: 'timeout',
+  });
+  assert.deepEqual(classifyProbeResult({ error: new Error('boom') }), {
+    ok: false,
+    errorKey: 'network',
+  });
+  // 超时优先于网络异常：AbortError 也走 catch，但必须说「超时」而不是「连不上」
+  assert.deepEqual(
+    classifyProbeResult({ timedOut: true, error: new Error('aborted') }),
+    { ok: false, errorKey: 'timeout' }
+  );
+  assert.deepEqual(classifyProbeResult({ status: 401, ok: false }), {
+    ok: false,
+    errorKey: 'keyRejected',
+    status: 401,
+  });
+  assert.deepEqual(classifyProbeResult({ status: 403, ok: false }), {
+    ok: false,
+    errorKey: 'keyRejected',
+    status: 403,
+  });
+  assert.deepEqual(classifyProbeResult({ status: 429, ok: false }), {
+    ok: false,
+    errorKey: 'rateLimited',
+    status: 429,
+  });
+  assert.deepEqual(classifyProbeResult({ status: 404, ok: false }), {
+    ok: false,
+    errorKey: 'notFound',
+    status: 404,
+  });
+  assert.deepEqual(classifyProbeResult({ status: 500, ok: false }), {
+    ok: false,
+    errorKey: 'httpError',
+    status: 500,
+  });
+  // 200 但返回体没有 choices：连上了但认不出，算形状异常而非成功
+  assert.deepEqual(classifyProbeResult({ status: 200, ok: true }), {
+    ok: false,
+    errorKey: 'unknownShape',
+  });
+  assert.deepEqual(
+    classifyProbeResult({ status: 200, ok: true, hasChoices: true }),
+    { ok: true }
+  );
+});
+
+test('probeConnection：地址非法时不发请求', async () => {
+  let called = false;
+  const r = await probeConnection({
+    baseUrl: 'ftp://nope',
+    apiKey: 'k',
+    model: 'm',
+    fetchFn: async () => {
+      called = true;
+    },
+  });
+
+  assert.deepEqual(r, { ok: false, errorKey: 'badUrl' });
+  assert.equal(called, false, '地址都不合法就不该发请求');
+});
+
+test('probeConnection：走生产同一条路 —— 路径 / 鉴权头 / body 都对', async () => {
+  let seen = null;
+  const r = await probeConnection({
+    baseUrl: 'https://api.example.com/v1/',
+    apiKey: 'sk-x',
+    model: 'm1',
+    fetchFn: async (url, opts) => {
+      seen = { url, opts };
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: 'pong' } }] }),
+      };
+    },
+  });
+
+  assert.deepEqual(r, { ok: true });
+  assert.equal(seen.url, 'https://api.example.com/v1/chat/completions');
+  assert.equal(seen.opts.method, 'POST');
+  assert.equal(seen.opts.headers.Authorization, 'Bearer sk-x');
+  const body = JSON.parse(seen.opts.body);
+  assert.equal(body.model, 'm1');
+  assert.equal(body.max_tokens, PROBE_MAX_TOKENS);
+  assert.equal(body.stream, false);
+  assert.ok(body.messages.length);
+  assert.ok(seen.opts.signal, '必须带 AbortSignal，超时才有依据');
+});
+
+test('probeConnection：401 说「Key 被拒」，网络异常带上原因', async () => {
+  const denied = await probeConnection({
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'bad',
+    model: 'm1',
+    fetchFn: async () => ({ ok: false, status: 401, json: async () => ({}) }),
+  });
+  assert.equal(denied.errorKey, 'keyRejected');
+  assert.equal(denied.status, 401);
+
+  const offline = await probeConnection({
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'k',
+    model: 'm1',
+    fetchFn: async () => {
+      throw new Error('ECONNREFUSED');
+    },
+  });
+  assert.equal(offline.errorKey, 'network');
+  assert.equal(offline.message, 'ECONNREFUSED');
+});
+
+test('probeConnection：超时会中断请求（AbortController 真接线了）', async () => {
+  const r = await probeConnection({
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'k',
+    model: 'm1',
+    timeoutMs: 5,
+    fetchFn: (url, opts) =>
+      new Promise((_resolve, reject) => {
+        opts.signal.addEventListener('abort', () => {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      }),
+  });
+
+  assert.deepEqual(r, { ok: false, errorKey: 'timeout' });
 });

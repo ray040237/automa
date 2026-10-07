@@ -27,7 +27,7 @@ const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 const stripComments = (src) =>
   src.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
 
-test('T-61 回归守卫：面板里不得再出现 UiButton 不认识的 variant="text"', () => {
+test('T-130 回归守卫：面板里不得再出现 UiButton 不认识的 variant="text"', () => {
   // variants 表只有 transparent/{default} 与 fill/{default,accent,primary,danger}；
   // 传 table 外的名字取到 undefined，Vue 不输出 class，按钮就完全没有样式 ——
   // 当时表现为「会话删除按钮不可见」。
@@ -45,7 +45,7 @@ test('T-61 回归守卫：面板里不得再出现 UiButton 不认识的 variant
   }
 });
 
-test('T-61 守卫：UiButton 对未知 variant 会告警，不静默渲染成无样式', () => {
+test('T-130 守卫：UiButton 对未知 variant 会告警，不静默渲染成无样式', () => {
   const src = stripComments(read('src/components/ui/UiButton.vue'));
 
   assert.match(src, /unknown variant/, 'UiButton 必须对未知 variant 发出告警');
@@ -56,7 +56,7 @@ test('T-61 守卫：UiButton 对未知 variant 会告警，不静默渲染成无
   );
 });
 
-test('T-62 回归守卫：面板的滚动容器必须用项目现成的 .scroll 约定', () => {
+test('T-131 回归守卫：面板的滚动容器必须用项目现成的 .scroll 约定', () => {
   // .scroll / .scroll-xs 定义在 src/assets/css/tailwind.css，全仓 30+ 处在用；
   // 漏加就是浏览器默认滚动条（约 17px 宽），在 320px 侧栏里挤的是对话正文。
   const transcript = read(
@@ -641,9 +641,11 @@ test('T-04 守卫：错误独立成类，重试与复制详情都要有，且每
   const transcript = stripComments(
     read('src/components/newtab/workflow/agent/AgentTranscript.vue')
   );
+  // T-53：折叠分支搬到 fold.js，断言随之改锚（留在 .vue 上会永远为真）
+  const fold = stripComments(read('src/agent/fold.js'));
 
   // ① agent:error 不能再走 notice 通道
-  const errorCase = transcript.match(
+  const errorCase = fold.match(
     /case AGENT_EVENTS\.ERROR:[\s\S]{0,400}?return;/
   );
   assert.ok(errorCase, '没解析出 ERROR 分支，守卫本身失效');
@@ -746,11 +748,10 @@ test('T-52 守卫：工具卡的参数三段链路不许断（事件带 args →
   );
 
   // ② 合并层：TOOL_RESULT 事件本身没有 args，合并时不能把已有 args 抹掉
-  const transcript = stripComments(
-    read('src/components/newtab/workflow/agent/AgentTranscript.vue')
-  );
+  // （T-53：合并逻辑已搬到 fold.js）
+  const fold = stripComments(read('src/agent/fold.js'));
   assert.match(
-    transcript,
+    fold,
     /args:\s*ev\.args\s*!==\s*undefined\s*\?\s*ev\.args\s*:\s*target\.args/,
     '合并卡片的逻辑必须保留 TOOL_CALL 带进来的 args（ev.args 缺席时回落 target）'
   );
@@ -800,5 +801,535 @@ test('守卫：import 清单必须全部注册进 icons 表（半截接线不许
       '这些图标 import 了但没注册进 export const icons —— 会静默渲染成空 SVG：',
       ...missing,
     ].join('\n')
+  );
+});
+
+test('T-67：send 必须在碰 runtime 之前判空，且给出可读提示', () => {
+  const hostSrc = read('src/composable/agentHost.js');
+
+  const start = hostSrc.indexOf('async function send(userText)');
+  assert.ok(start > 0, 'agentHost 里的 send 找不到了');
+  const body = hostSrc.slice(
+    start,
+    hostSrc.indexOf('\n  async function init(', start)
+  );
+
+  const guardAt = body.indexOf('if (!agent.runtime)');
+  const firstUse = body.indexOf('agent.runtime.');
+
+  assert.ok(guardAt > 0, 'send 开头必须判 !agent.runtime');
+  assert.ok(
+    guardAt < firstUse,
+    [
+      '判空必须排在第一次用 agent.runtime 之前，否则 busy 插话分支仍然是裸调：',
+      'guard@' + guardAt + ' firstUse@' + firstUse,
+    ].join('\n')
+  );
+  // 提示语要走 i18n，且说的是「还在初始化」而不是内部形状
+  assert.ok(
+    body.includes("t('workflow.agent.initializing')"),
+    'runtime 未就绪要说清是初始化中，不能把 TypeError 文案漏给用户'
+  );
+});
+
+test('T-68：窗口分组一律显示「窗口 N」，不许特判 id === 1 当主窗口', () => {
+  const listSrc = read('src/components/newtab/workflow/agent/AgentTabList.vue');
+
+  const fnAt = listSrc.indexOf('function windowLabel(id)');
+  assert.ok(fnAt > 0, 'AgentTabList 里的 windowLabel 找不到了');
+  const body = listSrc.slice(fnAt, listSrc.indexOf('\n}', fnAt));
+
+  assert.ok(
+    !/id\s*===\s*1/.test(body),
+    'Chrome 的窗口 id 不保证是 1，特判会把标签标错：' + body
+  );
+  assert.ok(
+    !body.includes('mainWindow'),
+    '不再有「主窗口」这个概念，locale 键也应一并删掉'
+  );
+  assert.ok(
+    body.includes("t('workflow.agent.pickTab.window', { n: id })"),
+    '窗口标签必须是带 id 的通用形式'
+  );
+});
+
+test('T-68：mainWindow 这把 locale 键不能留成孤儿', () => {
+  const listSrc = read('src/components/newtab/workflow/agent/AgentTabList.vue');
+
+  for (const lang of ['zh', 'en']) {
+    const locale = read(`src/locales/${lang}/newtab.json`);
+    if (!locale.includes('"mainWindow"')) continue;
+
+    assert.fail(
+      `src/locales/${lang}/newtab.json 还留着 mainWindow，但代码里已无人引用（孤儿键）`
+    );
+  }
+  assert.ok(!listSrc.includes('mainWindow'), '组件侧也不该再提这个词');
+});
+test('T-66：specific 配置错误用自带文案，其余配置错误仍走 i18n', () => {
+  // 错在这里用户看到的是「请先配置 API Key」，而他明明填过密钥、
+  // 填的是 ftp:// —— 两句话都指不到真因。
+  const hostSrc = read('src/composable/agentHost.js');
+
+  assert.ok(
+    hostSrc.includes('useErrMessage'),
+    'agentHost 必须区分「有具体文案的配置错误」与「回落到 i18n 的配置错误」'
+  );
+  assert.ok(
+    hostSrc.includes('err.specific && err.message'),
+    '具体文案只在 specific 标记下生效，apiKey 空的老路径不能被改掉'
+  );
+});
+
+// —— T-12：输入框 autoresize + 插话入队的常驻反馈 ——
+
+test('T-12：面板输入框开 autoresize，且有 max-h 兜底（320px 侧栏不能被撑破）', () => {
+  // 先剥注释：说明文字里提到 rows="3" 是在讲「原来钉死了」，不是属性本身。
+  // 不剥的话这条守卫会被自己的注释判红（第一次跑就是这么红的）。
+  const panelSrc = stripComments(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
+  );
+
+  const at = panelSrc.indexOf('<ui-textarea');
+  assert.ok(at > 0, '面板里找不到 ui-textarea');
+  const tag = panelSrc.slice(at, panelSrc.indexOf('/>', at));
+
+  // 只认**裸属性** autoresize —— `:autoresize="false"` 里也有这五个字母，
+  // 用 \bautoresize\b 分不开（第一次变异就栽在这：改成 false 后守卫照样绿）。
+  assert.ok(
+    /(^|\s)autoresize(\s|=|\/>|$)/.test(tag) && !/:autoresize/.test(tag),
+    '输入框必须开 autoresize（且不能是 :autoresize="false"），否则长指令只能在固定三行里滚'
+  );
+  assert.ok(
+    !/rows="3"/.test(tag),
+    'rows="3" 与 autoresize 同时存在时，高度会被 rows 钉死'
+  );
+  assert.ok(
+    /max-h-\[\d+px\]/.test(tag),
+    'autoresize 必须配 max-h 兜底，否则长草稿会把对话正文挤没'
+  );
+  assert.ok(
+    /overflow-y-auto/.test(tag),
+    '超过 max-h 后要内部滚动，而不是把框继续撑高'
+  );
+});
+
+test('T-12：UiTextarea 的 autoresize 要在打字与程序化改值时都重算', () => {
+  const src = read('src/components/ui/UiTextarea.vue');
+
+  // 窗口定位用「emitValue …… onMounted 之间」这段，而不是找固定缩进的收尾大
+  // 括号 —— 那是脆弱写法：变异把收尾括号缩进改掉后窗口会一路越过函数尾，把
+  // watch 里的调用算进来，守卫假绿（变异 7 实测）。惰性匹配 + 后置上下文
+  // （后面必须紧跟 onMounted）保证匹配到的确实是 emitValue 的整个函数体。
+  const body =
+    /function emitValue[\s\S]*?\n\s*\}\s*\n\s*onMounted\(calcHeight\)/.exec(
+      src
+    );
+  assert.ok(body, '定位不到 emitValue 的函数体（守卫窗口失效）');
+  assert.ok(
+    /nextTick\(calcHeight\)/.test(body[0]),
+    'emitValue 里必须重算高度，否则只有 onMounted 那一次生效（这行曾被注释掉）'
+  );
+  assert.ok(
+    /watch\([\s\S]*props\.modelValue/.test(src),
+    '程序化改值（清空草稿、/ 模板填入）也要重算，否则框比内容慢一拍'
+  );
+});
+
+test('T-12：插话入队要有常驻反馈，且计数来自运行时真实队列长度', () => {
+  const panelSrc = read('src/components/newtab/workflow/agent/AgentPanel.vue');
+  const hostSrc = read('src/composable/agentHost.js');
+  const indexSrc = read('src/agent/index.js');
+
+  assert.ok(
+    /v-if="host\.busy && host\.pendingInterjections > 0"/.test(panelSrc),
+    '面板要常驻显示已入队的插话条数（busy 且队列非空）'
+  );
+  assert.ok(
+    panelSrc.includes("t('workflow.agent.queuedPending', {"),
+    '提示语要走 i18n'
+  );
+  assert.ok(
+    hostSrc.includes('pendingInstructionCount()'),
+    '宿主必须从运行时读真实队列长度，不能自己 +1 猜'
+  );
+  assert.ok(
+    indexSrc.includes('pendingInstructionCount() {'),
+    '运行时要有 pendingInstructionCount 这个只读入口'
+  );
+  // 送达方向也要有：队列在每步开工处被排空，面板收不到「排空了」事件，
+  // 所以必须在事件到达时重新读长度，否则计数只会涨不会落。
+  //
+  // **必须是位置断言**：只查「文件里出现过 syncPendingInterjections」会被函数
+  // 定义本身满足，删掉调用照样绿（变异 4 实测）。所以切到 onEvent 回调体里查。
+  const onEventAt = hostSrc.indexOf('onEvent: (ev) => {');
+  assert.ok(onEventAt > 0, 'send 里找不到 onEvent 回调');
+  const onEventBody = hostSrc.slice(
+    onEventAt,
+    hostSrc.indexOf('\n      };', onEventAt)
+  );
+  assert.ok(
+    /syncPendingInterjections\(\)/.test(onEventBody),
+    'onEvent 里要调 syncPendingInterjections，否则送达后计数不会落（只有函数定义不算）'
+  );
+});
+
+test('T-12：queuedPending 键不能只在一边有（zh/en 都要）', () => {
+  for (const lang of ['zh', 'en']) {
+    const locale = JSON.parse(read(`src/locales/${lang}/newtab.json`));
+
+    assert.equal(
+      typeof locale.workflow.agent.queuedPending,
+      'string',
+      `${lang}/newtab.json 缺 workflow.agent.queuedPending`
+    );
+    assert.ok(
+      locale.workflow.agent.queuedPending.includes('{n}'),
+      `${lang} 的 queuedPending 少了 {n} 占位符，条数显示不出来`
+    );
+  }
+});
+
+// —— T-16：整条回答可复制（原来只有代码块能复制）——
+
+test('T-16：assistant 回答要有整条复制入口，且复制的是原文', () => {
+  const src = read('src/components/newtab/workflow/agent/AgentMarkdown.vue');
+  const btnAt = src.indexOf('@click="copy(props.raw)"');
+  assert.ok(
+    btnAt > 0,
+    '找不到「复制整条」的按钮 —— 现在只有代码块能复制，assistant 长回答搬不走'
+  );
+  // 复制原文而不是把 blocks 拼回去：拼回去会丢原文换行与标记
+  assert.ok(
+    /@click="copy\(props\.raw\)"/.test(src),
+    '复制的内容必须是 props.raw（原始 markdown 全文）'
+  );
+  // 按钮得 hover/focus 都能显形，否则键盘用户永远看不到它。
+  // 窗口要从 <button 开始而不是从 @click 开始 —— class 属性在 @click **之前**，
+  // 只往后切会把 class 切出窗口（第一版就这么写的，守卫对着空窗口判红）。
+  const tag = src.slice(
+    src.lastIndexOf('<button', btnAt),
+    src.indexOf('</button>', btnAt)
+  );
+  assert.ok(/group-hover:opacity-100/.test(tag), '复制按钮要 hover 才显形');
+  assert.ok(
+    /focus:opacity-100/.test(tag),
+    '复制按钮要 focus 也显形（opacity-0 不影响 tab 顺序，但键盘用户看不到就等于没有）'
+  );
+});
+
+test('T-16：整条复制的反馈与文案都要走 i18n', () => {
+  const src = read('src/components/newtab/workflow/agent/AgentMarkdown.vue');
+
+  assert.ok(src.includes("t('workflow.agent.copyAll')"), '按钮文案要走 i18n');
+  assert.ok(
+    src.includes('copied === props.raw'),
+    '「已复制」反馈要认这条内容的身份，不能和代码块的 copied 串台'
+  );
+  for (const lang of ['zh', 'en']) {
+    const locale = JSON.parse(read(`src/locales/${lang}/newtab.json`));
+    assert.equal(
+      typeof locale.workflow.agent.copyAll,
+      'string',
+      `${lang}/newtab.json 缺 workflow.agent.copyAll`
+    );
+    assert.ok(
+      locale.workflow.agent.copyAll.trim().length > 0,
+      `${lang} 的 copyAll 是空串`
+    );
+  }
+});
+// —— T-14：流式增量解析的组件接线 ——
+//
+// 为什么这条守卫是**静态**的：panelRender.test.js 走 SSR，而 SSR **不跑 watcher**
+// （见 utils/sfc-render.mjs 的头注），所以「watcher 里到底调了什么」在 SSR 下
+// 完全没有覆盖 —— 把 `blocks.value = stream.push(raw)` 换回 `markdownToBlocks(raw)`
+// 渲染结果一模一样，变异测试实测 catch 不到。只能在这里钉住接线本身。
+
+test('T-14：AgentMarkdown 要走增量流，且首屏/SSR 仍能整段解析', () => {
+  const src = stripComments(
+    read('src/components/newtab/workflow/agent/AgentMarkdown.vue')
+  );
+
+  assert.ok(
+    /import\s*\{[^}]*createMarkdownStream[^}]*\}\s*from\s*'@\/agent\/markdown'/.test(
+      src
+    ),
+    '没从 @/agent/markdown 引入 createMarkdownStream —— 流式又退回整段重解析'
+  );
+  assert.ok(
+    /blocks\.value\s*=\s*stream\.push\(raw\)/.test(src),
+    'watcher 里没有用 stream.push(raw) 填充 blocks'
+  );
+  assert.ok(
+    /const blocks = ref\(markdownToBlocks\(props\.raw\)\)/.test(src),
+    'blocks 的初值必须同步算出来：SSR 不跑 watcher，初值空的话首屏正文直接没了'
+  );
+  assert.ok(
+    !/computed\(\(\)\s*=>\s*markdownToBlocks\(props\.raw\)\)/.test(src),
+    'computed + 整段重解析就是 T-14 要治的那个写法，别改回去'
+  );
+});
+
+test('T-16：整条复制的按钮必须在 markdown 根容器上（定位要相对整条，不是某个块）', () => {
+  const src = read('src/components/newtab/workflow/agent/AgentMarkdown.vue');
+  const rootAt = src.indexOf('<div class="group relative');
+  assert.ok(
+    rootAt > 0,
+    'markdown 根容器要带 relative group，按钮的 absolute 才有参照、hover 才认整条消息'
+  );
+  assert.ok(
+    src.indexOf('@click="copy(props.raw)"') > rootAt,
+    '复制按钮要挂在根容器内部'
+  );
+});
+
+// —— T-10：空态的示例问法与工具组徽标 ——
+
+test('T-10：徽标与示例必须由宿主的 enabledGroups 推导，组件不许自己含能力知识', () => {
+  const hostSrc = read('src/composable/agentHost.js');
+  const panelSrc = read('src/components/newtab/workflow/agent/AgentPanel.vue');
+  const transcriptSrc = read(
+    'src/components/newtab/workflow/agent/AgentTranscript.vue'
+  );
+
+  assert.ok(
+    hostSrc.includes('groups: capabilityGroups(deps.enabledGroups)'),
+    '宿主要从 enabledGroups 推导 groups —— 各页自己写一份清单迟早对不上真实开放项'
+  );
+  // 「面板说有画布、其实没有」比不说更糟：组件里不许出现按组名的能力分支
+  for (const group of ['canvas', 'page', 'context', 'tab']) {
+    // 窗口要允许谓词里再出现括号：`groups.some((x) => x.id === 'canvas')`
+    // 用 [^)]* 会在这第一层括号就断掉，测不出来（变异 2 实测）。上限 120 字符
+    // 防止跨到文件别处误报。
+    const branch = new RegExp(
+      `groups\\.(some|find|filter|includes)\\([\\s\\S]{0,120}?${group}`
+    );
+    assert.ok(
+      !branch.test(transcriptSrc),
+      `AgentTranscript 里出现了对 '${group}' 的特判，能力知识跑到组件里了`
+    );
+  }
+  assert.ok(
+    panelSrc.includes('suggestExamples(props.host.groups)'),
+    '示例问法要从 host.groups 推导，不能写死在面板里'
+  );
+});
+
+test('T-10：示例点击只填入草稿，不自动发送', () => {
+  const panelSrc = read('src/components/newtab/workflow/agent/AgentPanel.vue');
+  const transcriptSrc = read(
+    'src/components/newtab/workflow/agent/AgentTranscript.vue'
+  );
+
+  assert.ok(
+    /@pick-example="draft = \$event"/.test(panelSrc),
+    '面板要把 pick-example 接成「填入草稿」，不能接成 host.send（示例是猜的，要能先改）'
+  );
+  assert.ok(
+    /emit\('pick-example', ex\.text\)/.test(transcriptSrc),
+    '示例按钮要 emit 文本'
+  );
+});
+
+test('T-10：空态仍要引用 workflow.agent.empty（T-109 回归）', () => {
+  const transcriptSrc = read(
+    'src/components/newtab/workflow/agent/AgentTranscript.vue'
+  );
+  assert.ok(
+    /v-if="items\.length === 0"/.test(transcriptSrc),
+    '空态分支不见了：items 为空时正文区一片空白'
+  );
+  assert.ok(
+    transcriptSrc.includes("t('workflow.agent.empty')"),
+    '空态原有的一句提示不能被示例替换掉 —— 示例可能一条都没有（limit=0）'
+  );
+});
+
+test('T-10：四个工具组的徽标文案 zh/en 都要在', () => {
+  for (const lang of ['zh', 'en']) {
+    const locale = JSON.parse(read(`src/locales/${lang}/newtab.json`));
+    for (const group of ['page', 'context', 'tab', 'canvas']) {
+      assert.equal(
+        typeof locale.workflow.agent.group[group],
+        'string',
+        `${lang}/newtab.json 缺 workflow.agent.group.${group}，徽标会渲染成裸 key`
+      );
+      assert.ok(
+        locale.workflow.agent.group[group].trim().length > 0,
+        `${lang} 的 group.${group} 是空串`
+      );
+    }
+  }
+});
+
+// —— T-09：轮次分隔、模型名、上下文水位 ——
+
+test('T-09：START 必须带 at 时间戳，且折叠层要有 turn 分支（原来一律丢弃）', () => {
+  const loopSrc = read('src/agent/loop.js');
+  const transcriptSrc = read(
+    'src/components/newtab/workflow/agent/AgentTranscript.vue'
+  );
+  // T-53：折叠层已抽到 fold.js，分支断言随之改锚到那里 —— 留在 .vue 上会
+  // 变成永远为真的假通过。
+  const foldSrc = read('src/agent/fold.js');
+
+  assert.ok(
+    /kind: AGENT_EVENTS\.START, at: Date\.now\(\)/.test(loopSrc),
+    'START 要带 at —— 分隔线上的时间必须是真实发生时刻，回看历史会话时不是「打开的时间」'
+  );
+  assert.ok(
+    /case AGENT_EVENTS\.START:[\s\S]{0,200}?push\(\{ type: 'turn'/.test(
+      foldSrc
+    ),
+    '折叠层必须有 START 分支并折成 turn 槽位（以前一律落 default 被丢弃）'
+  );
+  assert.ok(
+    /v-else-if="item\.type === 'turn'"/.test(transcriptSrc),
+    'turn 槽位要有渲染分支，否则折出来也没人画'
+  );
+});
+
+test('T-09 / T-153：模型名与上下文水位要真的从 config 传下去', () => {
+  const panelSrc = read('src/components/newtab/workflow/agent/AgentPanel.vue');
+  const listSrc = read(
+    'src/components/newtab/workflow/agent/AgentSessionList.vue'
+  );
+  const ringSrc = read(
+    'src/components/newtab/workflow/agent/AgentContextRing.vue'
+  );
+
+  assert.ok(
+    panelSrc.includes(':model="host.config.model"'),
+    'config.model 以前只用来判 apiKey —— 换模型后无从确认答案是谁写的'
+  );
+  // 值断言而不是「有这个属性」：写成 :context-window="0" 也算有，传的却是常量
+  // 0 —— 水位永远算不出来，整环不显示，而属性存在这条守卫照样绿（变异 5 实测）。
+  assert.ok(
+    /:context-window="[^"]*host\.config\.contextWindow[^"]*"/.test(panelSrc),
+    'contextWindow 必须从 host.config 传下去，不能传常量 0（那会让水位永远不显示）'
+  );
+  // T-153：水位从会话下拉搬到了输入区的圆环，usage 必须跟着一起搬 ——
+  // 只传 contextWindow 不传 usage，contextPercent 恒为 null，环永远不出现，
+  // 而上面那条守卫照样绿。
+  assert.ok(
+    /:usage="host\.usage"/.test(panelSrc),
+    'usage 必须传到圆环上 —— 少了它水位永远算不出来，环等于不存在'
+  );
+  assert.ok(listSrc.includes('data-test="model-name"'), '模型名要有渲染点');
+  assert.ok(
+    ringSrc.includes('data-test="context-meter"'),
+    '水位要有渲染点 —— T-153 起它在输入区的圆环上，不在会话下拉里了'
+  );
+  // 水位判定必须在纯模块里：.vue 里的分支一条都测不到
+  assert.ok(
+    ringSrc.includes("from '@/agent/usage'"),
+    '水位/时刻/缩写的判定要来自 @/agent/usage（那里有单测），不能留在组件里'
+  );
+});
+
+test('T-153：圆环 tooltip 复用既有文案键，不留孤儿键', () => {
+  const ringSrc = read(
+    'src/components/newtab/workflow/agent/AgentContextRing.vue'
+  );
+
+  // 水位搬走后，会话下拉不再引用这三个键。若圆环不接手，它们就成了 locale 里
+  // 没人用的孤儿键（T-109 踩过：键还在、全仓零引用，check:i18n 查不出来）。
+  for (const key of ['contextShort', 'contextHint', 'usage']) {
+    assert.ok(
+      ringSrc.includes(`workflow.agent.${key}`),
+      `圆环要接手 workflow.agent.${key} —— 水位已从会话下拉搬走，没人引用它就成了孤儿键`
+    );
+  }
+
+  // 估算说明必须仍在：分母是用户填的建议值，不写明等于假装百分比是准的
+  // （contextHint 自带这句，这里钉的是「圆环用的是 contextHint 而不是自己拼」）
+  assert.ok(
+    ringSrc.includes('contextHint'),
+    'tooltip 必须走 contextHint（里面写明是估算），不能自己拼一句没说明的百分比'
+  );
+});
+
+test('T-09：水位的 tooltip 必须写明是估算（分母是用户填的建议值）', () => {
+  for (const lang of ['zh', 'en']) {
+    const locale = JSON.parse(read(`src/locales/${lang}/newtab.json`));
+    assert.ok(
+      typeof locale.workflow.agent.contextHint === 'string',
+      `${lang} 缺 contextHint`
+    );
+    assert.ok(
+      /\{pct\}/.test(locale.workflow.agent.contextHint),
+      `${lang} 的 contextHint 少了 {pct}`
+    );
+    assert.ok(
+      /估算|estimate/i.test(locale.workflow.agent.contextHint),
+      `${lang} 的 contextHint 没写明「估算」—— contextWindow 是用户填的建议值，` +
+        '不写明就等于假装这个百分比是准的'
+    );
+  }
+});
+
+test('T-53：折叠逻辑只能住在 fold.js 里，组件只准留薄封装', () => {
+  const transcriptSrc = read(
+    'src/components/newtab/workflow/agent/AgentTranscript.vue'
+  );
+
+  assert.ok(
+    transcriptSrc.includes("from '@/agent/fold'"),
+    'AgentTranscript 要用 fold.js —— 不接的话折叠层等于搬走了却没人用'
+  );
+  assert.ok(
+    /const folder = createFolder\(\{ items, t \}\)/.test(transcriptSrc),
+    'folder 必须接组件自己的 reactive items（普通数组的改动 Vue 追踪不到）'
+  );
+  // 这条是变异测试逼出来的：把 reactive 换成普通数组，createFolder 那条照样
+  // 通过（形状没变），丢响应式却没有任何断言拦得住。SSR 单次渲染也照样通过 ——
+  // 只有真浏览器里新槽位不刷新才看得出来，而静态守卫必须能拦。
+  assert.match(
+    transcriptSrc,
+    /const items = reactive\(\[\]\)/,
+    '喂给 folder 的数组必须是 reactive([]) —— 普通数组的 push 与就地并槽 Vue 追踪不到，' +
+      '表现是「模型在说话但面板不更新」'
+  );
+  // 组件里不该再出现折叠规则本体。这几条断言的形态是「**不在**」—— 所以逐条
+  // 盯着具体形状，别写成一个宽泛的 includes 反面。
+  const forbidden = [
+    ["appendDelta('text'", 'delta 并槽逻辑回到了组件里'],
+    ["push({ type: 'turn'", 'START 的 turn 分支回到了组件里'],
+    ["push({ type: 'user'", '用户消息分支回到了组件里'],
+    ['it.step.toolCallId ===', '工具卡按 toolCallId 配对的逻辑回到了组件里'],
+    ['previousSource', '换会话重放的状态又写回组件里了'],
+    ['let cursor = 0', '游标状态又写回组件里了'],
+  ];
+  for (const [needle, why] of forbidden) {
+    assert.ok(
+      !transcriptSrc.includes(needle),
+      why + '（这些规则由 fold.test.js 钉住，留在 .vue 里等于两处各说各话）'
+    );
+  }
+});
+
+test('T-53：fold.js 不许碰 Vue 与浏览器全局（它得能在 node 里单测）', () => {
+  // 剥掉注释再断言：fold.js 的头注里就写着「组件传 reactive([])」——
+  // 不剥的话这条守卫会把说明文字当成代码（本条第一次跑就是这么红的）。
+  const foldSrc = stripComments(read('src/agent/fold.js'));
+  for (const needle of [
+    "from 'vue'",
+    'reactive(',
+    'navigator',
+    'document',
+    'window.',
+    "from 'vue-i18n'",
+  ]) {
+    assert.ok(
+      !foldSrc.includes(needle),
+      'fold.js 里出现了 ' +
+        needle +
+        ' —— 折叠层要能在 node 里跑，这些依赖会挡住单测'
+    );
+  }
+  assert.ok(
+    foldSrc.includes("from './events'"),
+    '事件种类与工具状态要从 events.js 引，别复制一份常量（复制就会各说各话）'
   );
 });

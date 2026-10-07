@@ -13,7 +13,7 @@
   ></textarea>
 </template>
 <script>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch, nextTick } from 'vue';
 import { useComponentId } from '@/composable/componentId';
 
 export default {
@@ -61,15 +61,23 @@ export default {
 
       emit('update:modelValue', value);
       emit('change', value);
-      // calcHeight();
+      // T-12：这一行一直被注释着，于是 autoresize 只在 onMounted 跑一次 ——
+      // 用户打字时高度不动，长指令只能在固定高度的小窗里滚。
+      nextTick(calcHeight);
     }
 
     onMounted(calcHeight);
+
+    // 程序化改值（父组件清空草稿、/ 模板填入、切换会话……）也要跟着长高。
+    // flush: 'post' 本身就是 DOM 更新**之后**触发，所以这里不必再套 nextTick
+    // （vue/valid-next-tick 也会拦这条）。
+    watch(() => props.modelValue, calcHeight, { flush: 'post' });
 
     return {
       textarea,
       emitValue,
       textareaId,
+      calcHeight,
     };
   },
 };

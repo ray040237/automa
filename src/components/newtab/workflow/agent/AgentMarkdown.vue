@@ -2,7 +2,25 @@
   <!-- v-html 的内容全部来自 @/agent/markdown：先转义再做行内替换，
        链接只放行 http/https/mailto，所以这里不需要 DOMPurify 之类的二次清洗 -->
   <!-- eslint-disable vue/no-v-html -->
-  <div class="text-sm leading-relaxed">
+  <div class="group relative text-sm leading-relaxed">
+    <!-- T-16：整条回答的复制入口（原来只有代码块有复制按钮）。
+         放右上角、hover / focus 才显形；给不透明底色是为了盖住下面的字 ——
+         侧栏只有 320px 宽，按钮压在首行上要是半透明，两边都读不清。
+         键盘可达：opacity-0 不影响 tab 顺序，focus 时会显形。
+         复制的是 props.raw（原始 markdown 全文），不是把 blocks 拼回去 ——
+         后者会丢掉原文的换行与标记。 -->
+    <button
+      type="button"
+      class="absolute right-0 top-0 z-10 rounded bg-gray-100/95 px-1.5 py-0.5 text-xs text-gray-600 opacity-0 backdrop-blur focus:opacity-100 group-hover:opacity-100 dark:bg-gray-800/95 dark:text-gray-300"
+      @click="copy(props.raw)"
+    >
+      {{
+        copied === props.raw
+          ? t('workflow.agent.copied')
+          : t('workflow.agent.copyAll')
+      }}
+    </button>
+
     <template v-for="(block, i) in blocks" :key="i">
       <div
         v-if="block.type === 'heading'"
@@ -83,9 +101,9 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { markdownToBlocks } from '@/agent/markdown';
+import { createMarkdownStream, markdownToBlocks } from '@/agent/markdown';
 
 const props = defineProps({
   raw: { type: String, default: '' },
@@ -94,7 +112,23 @@ const props = defineProps({
 const { t } = useI18n();
 const copied = ref('');
 
-const blocks = computed(() => markdownToBlocks(props.raw));
+// T-14：raw 每来一个 delta 就变一次，整段重解析的**累计**成本随回答长度平方
+// 增长（实测 20K 字按 40 字一个 delta 累计 313ms，按 10 字一个 delta 累计 1.1s；
+// 单次只有 0.5ms/万字，所以不是掉帧，是白烧主线程）。改成「已完成块缓存、只重解析
+// 最后一个未完成块」后同样输入约 4ms。
+//
+// 首屏与 SSR 仍走整段解析：SSR 不跑 watcher（见 utils/sfc-render.mjs 的头注），
+// 所以初值必须是同步算出来的，不能只在 watcher 里填。
+const stream = createMarkdownStream();
+const blocks = ref(markdownToBlocks(props.raw));
+
+watch(
+  () => props.raw,
+  (raw) => {
+    blocks.value = stream.push(raw);
+  },
+  { flush: 'post' }
+);
 
 /** 标题字号按层级递减，但都不超过正文太多 —— 侧栏只有 360px 宽 */
 const HEADING_CLASS = [

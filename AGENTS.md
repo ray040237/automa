@@ -13,7 +13,7 @@ Automa 分支版：上游 [AutomaApp/automa](https://github.com/AutomaApp/automa
 以下四条是硬约束，违反即视为缺陷，不论当前任务是不是它：
 
 - **agent 永不保存工作流。** 助手只允许改内存画布并置 dirty（`onCanvasChanged`），保存动作由用户自己点。`saveWorkflow` / `workflowStore.update` 出现在 agent 可达路径上即是违规（G5）。
-- **第三方内容一律 untrusted 包裹。** 页面正文、工具返回、用户输入回显进 prompt 前必须包 `<untrusted_*>` 并做逃逸清洗；新增标签必须登记进 `UNTRUSTED_WRAPPER_TAGS`（当前 8 个，被测试钉死）。
+- **第三方内容一律 untrusted 包裹。** 页面正文、工具返回、用户输入回显进 prompt 前必须包 `<untrusted_*>` 并做逃逸清洗；新增标签必须登记进 `UNTRUSTED_WRAPPER_TAGS`（当前 9 个，被测试钉死）。
 - **工具必须显式声明 `class: read | write`。** 缺失或未知一律走确认门，`validateTools` 在模块加载期就 throw，不存在「默认放行」。改工具特权前查 `docs/adr/0002`。
 - **`/pie-ai-agent` 与 `/pi` 只读。** 两个第三方参考仓库（各 1.6 万 / 2 万文件，均已 gitignore），只在本机翻阅汲取机制：不改动它们，也不把实现搬进 `src/`。`pi` 的运行时依赖走 npm 装 `@earendil-works/pi-*`（见 `docs/adr/0004`）。
 
@@ -22,6 +22,7 @@ Automa 分支版：上游 [AutomaApp/automa](https://github.com/AutomaApp/automa
 命令以 `package.json` scripts 为准（`npm run <script>`）。几个查不出来的坑：
 
 - 测试：`npm test` 跑 `src/agent/**/*.test.js`（node:test + `utils/test-loader.mjs`）；`npm run test:dom` 跑 `.agent-test/dom.test.mjs`，需要本机 Chrome 与 playwright harness。
+- **`npm run build` 默认是 offline 构建（2026-10-07 实测确认）**：`package.json:10` 的 `build` 跑的是 `cross-env OFFLINE_MODE=1 node utils/build.js`，完整构建叫 **`build:full`**（`build:offline` 只是 `build` 的别名，名字和语义是反的）。`webpack.config.js:151` 把 `IS_OFFLINE` 用 DefinePlugin 编成常量，terser 随后把 `if (IS_OFFLINE)` 之外的分支**当死代码删掉** —— 实测默认产物 `build/offscreen.bundle.js` 里 `handlerAiWorkflow` 只剩一句 `throw new Error("AI Workflow block is not available in offline mode")`，整个函数体（含 `await this.setVariable`）根本不在产物里。**两个产物的字节数精确相等时会误判「改动没生效」**：改云端块处理器（`handlerAiWorkflow`、`handlerWebhook` 之类）后跑默认 build 验不到任何东西。判据看 `utils/build.js:19` 打的 `[build] target:` 那行；验证云端块改动必须 `npm run build:full`，**验完再 `npm run build` 把默认产物换回来**，否则用户装进浏览器的是含云端代码的调试产物。
 - **构建会先清空 `build/`**：在 agent 通道里单轮删除超过阈值会撞文件安全守卫而失败。构建因删除失败中断时，**把 `build/` 重命名挪开**，在空目录重新构建，不要反复重试同一命令。
 - **新增依赖可以直接装**（2026-10-05 实测推翻旧结论）：`pnpm add <pkg>` 与 `pnpm install` 在 agent 通道均能跑通，链接阶段不再触发守卫。若某个包仍装不上，把命令交给用户自己跑。**装完必须验证产物完整性**——本机曾出现 `pi/` 里`openai@7.19.0` 的 ESM 产物（`*.mjs`）整体缺失、只剩 CJS 的情况，`package.json` 的 `exports` 指向一个不存在的文件，从npm 装则正常。判据：`(Get-ChildItem <pkg> -Recurse -Filter *.mjs).Count` 与 `exports["."]` 指向的文件是否存在。
 - 提交前：`npm run lint`（simple-git-hooks 已挂 lint-staged）。动了多语言文案顺手跑 `npm run check:i18n`。

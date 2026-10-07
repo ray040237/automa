@@ -380,6 +380,20 @@
         "unknownShape": "接口有响应，但返回体不是本页能认得的模型列表。请在下方手填模型名。",
         "network": "连不上这个接口：{msg}"
       },
+      "test": {
+        "button": "测试连接",
+        "testing": "测试中…",
+        "ok": "连接成功：{model} 能正常响应。",
+        "needModel": "这条连接还没有模型，先在下面添加一个再测试。",
+        "badUrl": "先填一个以 http:// 或 https:// 开头的接口地址。",
+        "keyRejected": "接口拒绝了这条 Key（HTTP {status}）。请检查 Key 后重试。",
+        "rateLimited": "接口限流了（HTTP 429）——连接本身是通的，稍后再试。",
+        "notFound": "接口没有 /chat/completions（HTTP {status}）。请检查接口地址是否完整。",
+        "httpError": "接口返回了 HTTP {status}。",
+        "unknownShape": "接口有响应，但返回体不是本页能认得的 chat 结果。",
+        "network": "连不上这个接口：{msg}",
+        "timeout": "15 秒内没有响应。请检查接口地址与网络。"
+      },
       "picker": {
         "title": "可用模型",
         "empty": "接口返回了空列表。",
@@ -757,8 +771,7 @@
         "title": "选择目标页",
         "loading": "正在读取标签页…",
         "empty": "请先打开一个普通网页",
-        "mainWindow": "主窗口",
-        "window": "窗口 {n}",
+          "window": "窗口 {n}",
         "pinned": "固定",
         "auto": "自动",
         "staleClosed": "目标页已关闭",
@@ -768,6 +781,10 @@
       },
       "copy": "复制",
       "copied": "已复制",
+      "copyAll": "复制全文",
+      "contextShort": "上下文 {pct}%",
+      "contextHint":
+        "上下文已用约 {pct}%（窗口 {win}）。窗口大小是设置页里的建议值，BYOK 下协议不暴露真实窗口，所以这是估算。",
       "notConfigured": "请先配置 API Key",
       "error": "出了点问题",
       "tool": {
@@ -810,6 +827,14 @@
       "interject": "插话",
       "stop": "停止生成",
       "queued": "已排队",
+      "queuedPending": "已入队 {n} 条插话，下一步开工前送达",
+      "group": {
+        "page": "读页面",
+        "context": "变量与块",
+        "tab": "标签页",
+        "canvas": "画布"
+      },
+      "initializing": "助手还在初始化，请稍后再试",
       "usage": "本会话 token 用量：输入 {in} / 输出 {out}",
       "session": {
         "new": "新会话",

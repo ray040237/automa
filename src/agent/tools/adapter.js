@@ -16,6 +16,7 @@
  */
 
 import { TOOL_STATUS, wrapObservation } from '../events';
+import { raceTimeout } from '../agentEvalInPage';
 import { validateTools } from './index';
 
 /**
@@ -106,6 +107,7 @@ export function toToolResult(raw, opts = {}) {
  * @param {Array<Object>} tools 我们的工具定义
  * @param {Object} deps
  * @param {Object} deps.toolCtx 工具执行上下文（读页、发消息等）
+ * @param {number} [deps.toolTimeoutMs] 工具级硬超时毫秒数，缺省 60000
  * @returns {Array<Object>} pi 的 AgentTool[]
  */
 export function toAgentTools(tools, deps = {}) {
@@ -116,11 +118,31 @@ export function toAgentTools(tools, deps = {}) {
         '默认回落全量 TOOLS 会泄露画布工具给无画布的宿主'
     );
   }
+
+  /**
+   * 工具级硬超时。
+   *
+   * 每个工具内部的通道超时（`toBackground` 20s、`readPageFromTab` 15s、
+   * `runInPage` 的 10s）是各家保的，**但没有任何一个模块钉住「整轮最长能等
+   * 多少」** —— 一旦 canvas、`browser.tabs.create` 等工具的 execute 永不
+   * settle，loop 就会一直 `await`，那一轮不收尾、不落盘（T-123）。
+   *
+   * 60s 的依据：页内执行最长 10s + `toBackground` 20s + 回程，正常路径 ≈
+   * 30s。留 2x 余量，不截胡正常长任务；同时不会让「整轮卡死」变成「等 5
+   * 分钟才报错」。
+   *
+   * 不 reject —— 超时返回 error 观察值，loop 照常收尾。语义与
+   * `raceTimeout`（`agentEvalInPage.js`）一致：拿不到结果 ≠ 通道坏了。
+   */
+  const toolTimeoutMs =
+    Number.isFinite(deps.toolTimeoutMs) && deps.toolTimeoutMs >= 0
+      ? deps.toolTimeoutMs
+      : 60000;
   // 模块期校验不能丢 —— pi 不会替我们炸。缺 class 就等于给写操作免确认，
   // 直接违反 ADR 0002。
   validateTools(tools);
 
-  // 键绑定校验（T-71）：工具声明了的 ctx 键必须在 toolCtx 里真实存在。
+  // 键绑定校验（T-133）：工具声明了的 ctx 键必须在 toolCtx 里真实存在。
   // 宿主漏传依赖（比如 canvas 组开着却没给画布句柄）在这里炸出人话——
   // 点名哪个工具缺哪个键，而不是等工具执行时才静默退化成一句观察值。
   const ctxKeys = deps.toolCtx || {};
@@ -158,7 +180,20 @@ export function toAgentTools(tools, deps = {}) {
           ? 'untrusted_page_content'
           : 'untrusted_tool_result';
       try {
-        return toToolResult(await tool.execute(params || {}, ctx), { tag });
+        return toToolResult(
+          await raceTimeout(
+            tool.execute(params || {}, ctx),
+            toolTimeoutMs,
+            // 超时返回 error 观察值（不是 reject），loop 照常收尾并把这条写
+            // 进历史——与通道层超时（index.js toBackground / readPageFromTab）
+            // 的语义对齐：拿不到结果 ≠ 通道坏了。
+            {
+              status: TOOL_STATUS.ERROR,
+              payload: `工具执行超过 ${toolTimeoutMs}ms 未返回。停止对当前会话的下一步推断，改用 read_block / read_page 等只读工具看一眼状态再继续。`,
+            }
+          ),
+          { tag }
+        );
       } catch (err) {
         // 工具抛错不终止循环（技术方案 §4.1「错误即观察值」）。
         // 这里返回 isError 而不重抛 —— 重抛会让 pi 把整个 run 打断。

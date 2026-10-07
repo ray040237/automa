@@ -80,6 +80,34 @@ export function errorEvent({ message, errorKind, httpStatus } = {}) {
   return ev;
 }
 
+/**
+ * 给一次事件里的「工具调用」列表。新协议（T-74）一条事件带一个 `calls[]`
+ * 数组，但旧的历史事件是扁平的「一条事件一个调用」：没有 `calls`，只有
+ * `name/args/toolCallId`。消费点（transcript 重建、token 估算、摘要
+ * 序列化、UI 展示）要兼容两种形状。
+ *
+ * T-125：原先同样的判定在 `loop.js` / `compaction.js` 三处各抄一份。
+ * 入口收进这里后，**新增一类事件形状时只改这一处**，其余 4 个消费点
+ * 跟着行为走。
+ *
+ * @param {{kind?: string, calls?: Array, name?: string, args?: Object, toolCallId?: string}} ev
+ * @returns {Array<{name: string, args: Object, toolCallId?: string}>}
+ */
+export function toolCallsOf(ev) {
+  if (!ev || typeof ev !== 'object') return [];
+  if (Array.isArray(ev.calls) && ev.calls.length) return ev.calls;
+
+  if (ev.name === undefined || ev.name === null) return [];
+
+  return [
+    {
+      name: ev.name,
+      args: ev.args || {},
+      toolCallId: ev.toolCallId,
+    },
+  ];
+}
+
 /** 观察值硬截断上限（8K 字符）。原在 window.js，T-82 随死接口清理并入本文件。 */
 export const MAX_OBSERVATION_CHARS = 8000;
 

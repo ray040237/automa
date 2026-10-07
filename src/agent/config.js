@@ -210,7 +210,130 @@ function cleanModel(raw, ctx) {
 }
 
 /**
- * 校验并补全一条连接。
+ * 接口地址是不是一个我们真能发请求的 http(s) 端点。
+ *
+ * T-66：`/^https?:\/\//` 这个判断原本只长在 `cleanProvider`（保存路径）里，
+ * 于是存储里的坏值能绕过它 —— `loadConfig` 不跑 `validateConfig`，
+ * `ftp://`、`file://`、`javascript:` 原样进 `buildModel` 再交给 pi 请求层。
+ * 抽成谓词让保存路径与运行时解析共用一份判断。
+ *
+ * @param {string} value
+ * @returns {boolean}
+ */
+export function isHttpUrl(value) {
+  return /^https?:\/\//.test(String(value || '').trim());
+}
+
+/** 「测试连接」探针的超时（15s）。卡死的端点不能把设置页按钮一起拖住。 */
+export const PROBE_TIMEOUT_MS = 15000;
+
+/** 探针只验证「能不能通」，16 token 够模型回一句话，省流量也省用户的钱。 */
+export const PROBE_MAX_TOKENS = 16;
+
+/**
+ * 「测试连接」的结果分类（纯函数，node --test 钉死）。
+ *
+ * 术语与设置页「获取可用模型」的那套刻意保持一致 —— 同一类失败在两处必须
+ * 说同一句话，否则用户会以为遇到了两种毛病（`fetch` 那块的注释同理）。
+ * 分类只认状态码、超时与网络异常，不碰响应正文，所以是确定性的。
+ *
+ * @param {{status?: number, ok?: boolean, hasChoices?: boolean,
+ *          timedOut?: boolean, error?: *}} input
+ * @returns {{ok: true} | {ok: false, errorKey: string, status?: number}}
+ */
+export function classifyProbeResult({
+  status,
+  ok,
+  hasChoices,
+  timedOut,
+  error,
+} = {}) {
+  if (timedOut) return { ok: false, errorKey: 'timeout' };
+  if (error) return { ok: false, errorKey: 'network' };
+  if (status === 401 || status === 403) {
+    return { ok: false, errorKey: 'keyRejected', status };
+  }
+  if (status === 429) return { ok: false, errorKey: 'rateLimited', status };
+  if (status === 404 || status === 405) {
+    return { ok: false, errorKey: 'notFound', status };
+  }
+  if (!ok) return { ok: false, errorKey: 'httpError', status };
+  if (!hasChoices) return { ok: false, errorKey: 'unknownShape' };
+  return { ok: true };
+}
+
+/**
+ * 真发一次 chat 请求，验证这条连接能不能用（A2 的「测试连接」）。
+ *
+ * **为什么不能只测 `/models`**：很多端点不实现它（所以「获取可用模型」永远
+ * 留着手填入口），而且列表能拉 ≠ chat 能通。这里打的是**生产同一条路** ——
+ * 同一个 baseUrl、同一个模型、同一种 Bearer 鉴权，所以测出来的错就是用户
+ * 真用时会看到的错，不会出现「测试通过、真用报错」。
+ *
+ * fetch 与 AbortController 都可注入，测试不碰真网络。
+ *
+ * @param {Object} input
+ * @param {string} input.baseUrl
+ * @param {string} input.apiKey
+ * @param {string} input.model
+ * @param {Function=} input.fetchFn
+ * @param {number=} input.timeoutMs
+ * @returns {Promise<{ok: boolean, errorKey?: string, status?: number, message?: string}>}
+ */
+export async function probeConnection({
+  baseUrl,
+  apiKey,
+  model,
+  fetchFn = fetch,
+  timeoutMs = PROBE_TIMEOUT_MS,
+} = {}) {
+  const url = String(baseUrl || '').trim();
+  if (!isHttpUrl(url)) return { ok: false, errorKey: 'badUrl' };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetchFn(`${url.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: PROBE_MAX_TOKENS,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+
+    // 正文解析失败不单独成一类：能连上但返回体认不出，与「没有 choices」
+    // 是同一件事，都走 unknownShape。
+    const data = await res.json().catch(() => null);
+    const hasChoices = Boolean(
+      data && Array.isArray(data.choices) && data.choices.length
+    );
+
+    return classifyProbeResult({ status: res.status, ok: res.ok, hasChoices });
+  } catch (err) {
+    const result = classifyProbeResult({
+      timedOut: Boolean(err && err.name === 'AbortError'),
+      error: err,
+    });
+    // 网络层失败的原因（地址错、证书、CORS）各不相同，原样带出去让 UI 说清楚，
+    // 不要塌成一句「连不上」。
+    if (result.errorKey === 'network') {
+      result.message = err && err.message ? err.message : String(err);
+    }
+    return result;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** * 校验并补全一条连接。
  *
  * @param {Object} raw
  * @param {number} index 在列表里的位置，只用于报错时称呼
@@ -225,7 +348,7 @@ function cleanProvider(raw, index) {
 
   if (!baseUrl) {
     errors.push(`${tag}：缺少接口地址`);
-  } else if (!/^https?:\/\//.test(baseUrl)) {
+  } else if (!isHttpUrl(baseUrl)) {
     errors.push(`${tag}：接口地址必须以 http:// 或 https:// 开头`);
   }
 
@@ -508,7 +631,7 @@ export function resolveActiveConfig(doc, apiKey) {
 
   if (providers.length === 0) return { ...DEFAULT_CONFIG };
 
-  const provider =
+  let provider =
     providers.find((p) => p.id === src.activeProviderId) || providers[0];
   const model =
     (provider.models || []).find((m) => m.id === src.activeModelId) ||
@@ -516,9 +639,31 @@ export function resolveActiveConfig(doc, apiKey) {
 
   if (!provider.baseUrl || !model) return { ...DEFAULT_CONFIG };
 
+  // T-66：协议也要在这一层把关。存储里的值可能来自旧版本、手改、或者别的
+  // 设备同步过来的 —— `loadConfig` 不跑 validateConfig，保存时那道协议检查
+  // 管不到这里，坏端点会原样交给 pi。
+  //
+  // 刻意**只清 baseUrl**，不整份退回 DEFAULT_CONFIG：清空后 send 处的 isHttpUrl
+  // 检查会给出带具体值的错误（「必须以 http:// 或 https:// 开头（当前：ftp://…）」）。
+  // 整份退回会把 apiKey 一起清掉，用户看到的就是「请先配置 API Key」——
+  // 而他明明填过密钥，那样比 provider 的 400 还指不到真因。
+  if (!isHttpUrl(provider.baseUrl)) {
+    // 原值留在 baseUrlInvalid 上：报错时要能说出「你填的是 ftp://…」，
+    // 只说「地址非法」等于让用户回去自己猜。
+    provider = {
+      ...provider,
+      baseUrl: '',
+      baseUrlInvalid: String(provider.baseUrl),
+    };
+  }
+
   return {
     provider: provider.id,
     baseUrl: provider.baseUrl,
+    // 仅当上面清洗过才有值：报错时要说出用户原本填的那个串
+    ...(provider.baseUrlInvalid
+      ? { baseUrlInvalid: provider.baseUrlInvalid }
+      : {}),
     model: model.id,
     contextWindow: model.contextWindow,
     maxTokens: model.maxTokens,

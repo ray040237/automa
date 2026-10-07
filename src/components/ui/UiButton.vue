@@ -80,7 +80,7 @@ export default {
      * 助手面板三处传过 `variant="text"`，而 variants 表里从来没有这个名字，
      * 取到 undefined 后 Vue 不输出任何 class —— 按钮既没底色也没 hover 反馈，
      * 用户看到的是「删除按钮不可见」。lint 与测试都抓不到（variant 是自由字符串），
-     * 所以在这里补一道会响的检查（T-61）。
+     * 所以在这里补一道会响的检查（T-130）。
      *
      * 只有在颜色真的来自 variants 时才检查：传了 color 就绕过了这张表。
      */

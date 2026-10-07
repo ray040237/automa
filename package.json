@@ -23,9 +23,10 @@
     "dev:firefox": "cross-env BROWSER=firefox npm run dev",
     "prettier": "prettier --write '**/*.{js,jsx,css,html}'",
     "lint": "eslint --ext .js,.vue --ignore-path .gitignore .",
-    "test": "node --import ./utils/test-loader.mjs --test \"src/agent/**/*.test.js\"",
+    "test": "node --import ./utils/test-loader.mjs --test \"src/agent/**/*.test.js\" \"src/workflowEngine/**/*.test.js\"",
     "check:i18n": "node utils/check-i18n.js",
-    "test:dom": "node --test .agent-test/dom.test.mjs"
+    "test:dom": "node --test .agent-test/dom.test.mjs",
+    "test:eval": "node --import ./utils/test-loader.mjs .agent-test/eval/runner.mjs"
   },
   "engines": {
     "node": ">=14.18.1"

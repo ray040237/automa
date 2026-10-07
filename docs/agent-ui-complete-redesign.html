@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agent 面板 · 全量改进整合稿（当前 vs 改后）</title>
+<style>
+  :root{
+    --bg:#14161a;--panel:#1b1e24;--card:#21252c;--card2:#262b33;--border:#2e343d;
+    --text:#e6e9ee;--dim:#9aa3b0;--faint:#6b7480;
+    --amber:#f5b14c;--amber-bg:rgba(245,177,76,.10);--amber-bd:rgba(245,177,76,.35);
+    --accent:#5b8cff;--accent-bg:rgba(91,140,255,.10);--accent-bd:rgba(91,140,255,.5);
+    --red:#f0626a;--red-bg:rgba(240,98,106,.10);--red-bd:rgba(240,98,106,.5);
+    --yellow-bg:rgba(245,177,76,.10);--yellow-bd:#f5b14c;
+    --gray-bg:rgba(154,163,176,.08);--gray-bd:rgba(154,163,176,.3);
+    --green:#3ecf8e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,sans-serif;
+    background:#0c0e11;color:var(--text);padding:26px 14px;line-height:1.6}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:19px;margin-bottom:4px}
+  .sub{color:var(--faint);font-size:12.5px;margin-bottom:22px}
+
+  .hero{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+  .ph{font-size:12px;font-weight:700;margin-bottom:10px;letter-spacing:.03em}
+  .ph.cur{color:var(--faint)}.ph.new{color:var(--accent)}
+
+  .panel{background:var(--bg);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+  .ph2{padding:7px 9px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;gap:6px;align-items:center}
+  .sess{flex:1;min-width:0;display:flex;align-items:center;gap:6px;background:var(--card);
+    border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12.5px;cursor:pointer}
+  .sess .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sess .ic{color:var(--faint);font-size:12px}
+  .nb{width:32px;height:32px;flex-shrink:0;border:1px solid var(--border);border-radius:8px;
+    background:var(--card);color:var(--text);font-size:14px;display:grid;place-items:center}
+
+  .tr{padding:11px;display:flex;flex-direction:column;gap:10px;min-height:430px}
+  .ub{align-self:flex-end;background:rgba(91,140,255,.15);padding:7px 11px;border-radius:10px;font-size:12.5px;max-width:86%}
+  .td{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--faint)}
+  .td .ln{flex:1;height:1px;background:var(--border)}
+  .md{font-size:12.5px}
+  .md h3{font-size:14px;font-weight:600;margin:4px 0 3px}
+  .md ul{margin:5px 0 5px 18px}.md li{margin:2px 0}
+  .tblwrap{position:relative;margin:7px 0;border:1px solid var(--border);border-radius:8px;overflow-x:auto}
+  .md table{width:100%;border-collapse:collapse;font-size:11.5px;min-width:290px}
+  .md th,.md td{border:1px solid var(--border);padding:4px 7px;text-align:left}
+  .md th{background:var(--panel);font-weight:600}
+  .md code{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:rgba(91,140,255,.14);color:#a9c2ff;padding:1px 4px;border-radius:4px}
+  .swipe{position:absolute;top:0;right:0;bottom:0;width:34px;pointer-events:none;
+    background:linear-gradient(90deg,rgba(20,22,26,0),rgba(20,22,26,.92));display:flex;align-items:center;justify-content:flex-end;padding-right:4px}
+  .swipe span{font-size:9.5px;color:var(--dim);background:rgba(91,140,255,.2);border:1px solid var(--accent-bd);
+    padding:1px 4px;border-radius:999px;white-space:nowrap}
+
+  .tool{border:1px solid var(--border);border-radius:9px;font-size:12px;overflow:hidden}
+  .tool .th{display:flex;align-items:center;gap:7px;padding:7px 11px}
+  .tool .tn{font-weight:600}
+  .tb{margin-left:auto;font-size:10px;padding:1px 7px;border-radius:999px;background:rgba(62,207,142,.15);color:var(--green)}
+
+  .c{border-radius:9px;padding:9px 11px;font-size:11.5px;border:1px solid;position:relative}
+  .c .ct{font-weight:600;display:flex;align-items:center;gap:6px;margin-bottom:2px;font-size:12px}
+  .c .cd{opacity:.85;font-size:11px}
+  .c .row{display:flex;gap:7px;justify-content:flex-end;margin-top:8px}
+  .cb{font-size:11px;padding:4px 11px;border-radius:7px;border:1px solid var(--border);background:#2b313a;color:var(--text)}
+  .cb.allow{background:var(--accent);border:none;color:#fff}
+
+  /* 当前：三色撞车 */
+  .notice-c{background:var(--amber-bg);border-color:var(--amber-bd);color:#ffd596}
+  .conf-c{background:var(--amber-bg);border-color:rgba(245,177,76,.55);color:#ffd596}
+  /* 改后：分层 */
+  .notice-n{background:var(--gray-bg);border-color:var(--gray-bd);color:#c7cdd6}
+  .conf-n{background:var(--accent-bg);border-color:var(--accent-bd);color:#cfe0ff}
+
+  .fold{border:1px solid var(--border);border-radius:8px;background:#1e2229;overflow:hidden}
+  .fold .fh{display:flex;align-items:center;gap:7px;padding:6px 10px;font-size:11.5px;color:var(--dim)}
+  .fold .nm{font-weight:600}
+  .fold .cnt{color:var(--faint);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fold.cp{border-color:var(--accent-bd);background:rgba(91,140,255,.06)}
+  .fold.cp .fh{color:#a9c2ff}
+
+  .chip{display:flex;align-items:center;gap:6px;margin:7px 9px 0;background:var(--card);
+    border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:11.5px;cursor:pointer}
+  .chip img{width:15px;height:15px;border-radius:3px}
+  .chip .tn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bg2{font-size:9.5px;padding:1px 6px;border-radius:999px;border:1px solid var(--border)}
+  .bg2.auto{background:var(--card2);color:var(--dim)}
+  .bg2.follow{background:var(--card2);color:var(--dim)}
+  .bg2.pin{background:rgba(91,140,255,.18);color:var(--accent);border-color:var(--accent-bd)}
+  .ft{border-top:1px solid var(--border);background:var(--panel);padding:7px 9px}
+  .ta{width:100%;min-height:52px;resize:none;background:var(--card);border:1px solid var(--border);
+    border-radius:9px;color:var(--text);font-size:12px;padding:8px 9px;font-family:inherit;outline:none}
+  .snd{width:34px;height:34px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:14px;display:grid;place-items:center}
+
+  /* 徽章 */
+  .badge-n{position:absolute;top:-7px;right:-7px;width:18px;height:18px;border-radius:50%;
+    background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;display:grid;place-items:center;
+    box-shadow:0 0 0 2px var(--bg);z-index:5}
+  .rel{position:relative}
+
+  /* 下拉对比 */
+  .ddc{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+  .dd{border:1px solid var(--border);border-radius:10px;background:var(--card);overflow:hidden;width:100%}
+  .dd .r{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:12px}
+  .dd .r.sel{background:var(--card2)}
+  .dd .u{font-size:10px;color:var(--faint)}
+  .dd .ck{color:var(--accent);margin-left:auto}
+  .dd .sep{height:1px;background:var(--border)}
+  .dd .ub{padding:8px 10px;border-top:1px solid var(--border);font-size:11.5px;color:var(--dim)}
+  .mt{height:5px;border-radius:999px;background:#2b313a;overflow:hidden;margin-top:6px}
+  .mt>i{display:block;height:100%;border-radius:999px}
+  .lg{font-size:10.5px;color:var(--faint);margin-right:3px}
+
+  /* 三色卡 */
+  .tri{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+  .tri .col{border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--panel)}
+  .tri h4{font-size:12px;margin-bottom:9px}
+  .tri h4.c{color:var(--faint)}.tri h4.n{color:var(--accent)}
+  .cfg-c{background:var(--yellow-bg);border:1px solid var(--yellow-bd);color:#ffd596;border-radius:9px;padding:9px 11px;font-size:11.5px}
+  .cfg-n{background:var(--red-bg);border:1px solid var(--red-bd);color:#ffc3c7;border-radius:9px;padding:9px 11px;font-size:11.5px}
+
+  /* 清单 */
+  .lst{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+  .lst h2{font-size:14px;margin-bottom:12px;color:#fff}
+  table.cl{width:100%;border-collapse:collapse;font-size:12px}
+  table.cl th,table.cl td{border:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top}
+  table.cl th{background:var(--card);font-weight:600;font-size:11px;color:var(--dim)}
+  table.cl code{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:rgba(91,140,255,.14);color:#a9c2ff;padding:1px 4px;border-radius:4px}
+  .risk{font-size:10.5px;padding:1px 6px;border-radius:999px;white-space:nowrap}
+  .risk.s{background:rgba(62,207,142,.18);color:var(--green)}
+  .risk.r{background:rgba(245,177,76,.18);color:var(--amber)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Agent 面板 · 全量改进整合稿</h1>
+  <div class="sub">左＝当前，右＝改后（T-150 / 152 / 153 / 154 / 156 全部落地）。改动处右侧标编号徽章，与底部清单对应。<b style="color:var(--amber)">未改任何 <code>src/</code> 代码</b>，仅是设计稿。</div>
+
+  <!-- ===== 两个完整面板 ===== -->
+  <div class="hero">
+    <!-- 当前 -->
+    <div>
+      <div class="ph cur">当前</div>
+      <div class="panel">
+        <div class="ph2"><div class="sess"><span class="ic">💬</span><span class="nm">页面功能说明</span><span class="ic">▾</span></div><div class="nb">＋</div></div>
+        <div class="tr">
+          <div class="ub">帮我看看这个网站是干什么的</div>
+          <div class="td"><span class="ln"></span>10-07 15:41<span class="ln"></span></div>
+          <div class="md">
+            <h3>页面功能说明</h3>
+            <ul><li>多模型接入；推理加速</li><li>统一计费与配额</li></ul>
+            <div class="tblwrap">
+              <table><thead><tr><th>方法</th><th>端点</th><th>用途</th></tr></thead>
+              <tbody><tr><td><code>POST</code></td><td><code>/v1/chat</code></td><td>对话补全</td></tr>
+              <tr><td><code>GET</code></td><td><code>/models</code></td><td>模型列表</td></tr></tbody></table>
+            </div>
+          </div>
+          <div class="tool"><div class="th"><span>🔧</span><span class="tn">read_page</span><span class="tb">成功</span></div></div>
+          <div class="c notice-c"><div class="ct">⚠ 系统提示</div><div class="cd">目标页已跳到别的页面</div></div>
+          <div class="fold"><div class="fh"><span>▶</span><span class="nm">思考过程</span><span class="cnt">我先读一下页面…</span></div></div>
+          <div class="fold"><div class="fh"><span>▶</span><span class="nm">已压缩早期对话（3 轮）</span></div></div>
+          <div class="c conf-c"><div class="ct">⚠ 需要确认：执行代码</div><div class="cd">此操作会修改页面</div>
+            <div class="row"><span class="cb">拒绝</span><span class="cb allow">允许</span></div></div>
+        </div>
+        <div class="chip"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' rx='3' fill='%235b8cff'/%3E%3C/svg%3E"/><span class="tn">DMXAPI官网</span><span class="bg2 auto">自动</span><span style="color:var(--faint)">▾</span></div>
+        <div class="ft"><textarea class="ta" placeholder="问问这个页面…"></textarea></div>
+      </div>
+    </div>
+
+    <!-- 改后 -->
+    <div>
+      <div class="ph new">改后</div>
+      <div class="panel">
+        <div class="ph2"><div class="sess"><span class="ic">💬</span><span class="nm">页面功能说明</span><span class="ic">▾</span></div><div class="nb">＋</div></div>
+        <div class="tr">
+          <div class="ub">帮我看看这个网站是干什么的</div>
+          <div class="td"><span class="ln"></span>10-07 15:41<span class="ln"></span></div>
+          <div class="md">
+            <h3>页面功能说明</h3>
+            <ul><li>多模型接入；推理加速</li><li>统一计费与配额</li></ul>
+            <div class="rel tblwrap"><span class="badge-n">⑦</span>
+              <div class="swipe"><span>可横滑</span></div>
+              <table><thead><tr><th>方法</th><th>端点</th><th>用途</th></tr></thead>
+              <tbody><tr><td><code>POST</code></td><td><code>/v1/chat</code></td><td>对话补全</td></tr>
+              <tr><td><code>GET</code></td><td><code>/models</code></td><td>模型列表</td></tr></tbody></table>
+            </div>
+          </div>
+          <div class="tool"><div class="th"><span>🔧</span><span class="tn">read_page</span><span class="tb">成功</span></div></div>
+          <div class="rel"><span class="badge-n">②</span><div class="c notice-n"><div class="ct">ℹ 系统提示</div><div class="cd">目标页已跳到别的页面</div></div></div>
+          <div class="fold"><div class="fh"><span>💭</span><span class="nm">思考过程</span><span class="cnt">我先读一下页面…</span></div></div>
+          <div class="rel"><span class="badge-n">⑥</span><div class="fold cp"><div class="fh"><span>🗂</span><span class="nm">已压缩早期对话（3 轮）</span><span class="cnt">历史摘要</span></div></div></div>
+          <div class="rel"><span class="badge-n">①</span><div class="c conf-n"><div class="ct">🔒 需要你确认</div><div class="cd">此操作会修改页面</div>
+            <div class="row"><span class="cb">拒绝</span><span class="cb allow">允许</span></div></div></div>
+        </div>
+        <div class="rel"><span class="badge-n">④</span>
+          <div class="chip" title="助手自动选当前页；点开可锁定某一页"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' rx='3' fill='%235b8cff'/%3E%3C/svg%3E"/><span class="tn">DMXAPI官网</span><span class="bg2 follow">跟随当前页</span><span style="color:var(--faint)">▾</span></div>
+        </div>
+        <div class="ft"><textarea class="ta" placeholder="问问这个页面…"></textarea></div>
+      </div>
+      <div style="margin-top:8px" class="rel"><span class="badge-n" style="top:2px;right:2px">④</span>
+        <div class="chip" title="你已锁定此页；点开可解除"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' rx='3' fill='%235b8cff'/%3E%3C/svg%3E"/><span class="tn">DMXAPI官网</span><span class="bg2 pin">已固定</span><span style="color:var(--faint)">▾</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 会话下拉用量 ===== -->
+  <h2 style="font-size:13px;margin-bottom:10px;color:#fff">⑤ 会话下拉：用量与上下文水位</h2>
+  <div class="ddc">
+    <div>
+      <div class="ph cur">当前</div>
+      <div class="dd">
+        <div class="r sel"><span>💬</span><span>页面功能说明 · 3 分钟前</span><span class="ck">✓</span></div>
+        <div class="r"><span>💬</span><span>未命名会话</span></div>
+        <div class="ub">
+          <span style="font-family:ui-monospace,Menlo,monospace">1.2K/3.4K</span>
+          <span style="float:right">上下文 18%</span>
+          <div class="mt"><i style="width:18%;background:#5b8cff"></i></div>
+          <div style="font-size:10.5px;color:var(--faint);margin-top:5px">两个数字无标签；水位仅两档（≥90% 才变红）</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="ph new">改后</div>
+      <div class="dd">
+        <div class="r sel"><span>💬</span><span>页面功能说明 · 3 分钟前</span><span class="ck">✓</span></div>
+        <div class="r"><span>💬</span><span>未命名会话</span></div>
+        <div class="ub">
+          <span><span class="lg">输入</span><span style="font-family:ui-monospace,Menlo,monospace">1.2K</span></span>
+          <span style="margin-left:10px"><span class="lg">输出</span><span style="font-family:ui-monospace,Menlo,monospace">3.4K</span></span>
+          <span style="float:right">上下文 18%</span>
+          <div class="mt"><i style="width:18%;background:#5b8cff"></i></div>
+          <div style="font-size:10.5px;color:var(--faint);margin-top:5px">三档：<span style="color:#5b8cff">＜70 蓝</span> · <span style="color:var(--amber)">70~90 琥珀</span> · <span style="color:var(--red)">≥90 红</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 三色分层 ===== -->
+  <h2 style="font-size:13px;margin-bottom:10px;color:#fff">③ 未配置 API Key 横幅（与上面两卡一起构成三级分层）</h2>
+  <div class="tri">
+    <div class="col"><h4 class="c">当前 · 又是琥珀黄</h4>
+      <div class="cfg-c"><b>⚠ 尚未配置 API Key</b><div style="font-size:11px;margin-top:2px">去设置</div></div>
+      <div style="font-size:10.5px;color:var(--faint);margin-top:8px">与 notice、确认门同为黄系 → 「功能不可用」被看成轻提醒。</div>
+    </div>
+    <div class="col"><h4 class="n">改后 · 红色阻塞</h4>
+      <div class="cfg-n"><b>⛔ 尚未配置 API Key</b><div style="font-size:11px;margin-top:2px">去设置 · 发送已禁用</div></div>
+      <div style="font-size:10.5px;color:var(--faint);margin-top:8px">三级分层：notice 灰 / 确认门 蓝 / 不可用 红。</div>
+    </div>
+  </div>
+
+  <!-- ===== 清单 ===== -->
+  <div class="lst">
+    <h2>改动对照清单</h2>
+    <table class="cl">
+      <thead><tr><th style="width:34px">#</th><th style="width:74px">票</th><th>改动</th><th>落点</th><th style="width:66px">风险</th></tr></thead>
+      <tbody>
+        <tr><td>①</td><td>T-152</td><td>确认门：琥珀 → 主色蓝 + 双按钮（「需要你确认」）</td><td><code>AgentConfirmCard.vue:2-4</code></td><td><span class="risk s">零</span></td></tr>
+        <tr><td>②</td><td>T-152</td><td>notice：琥珀 → 中性灰（advisory 降级）</td><td><code>AgentTranscript.vue:79-81</code></td><td><span class="risk s">零</span></td></tr>
+        <tr><td>③</td><td>T-152</td><td>未配置横幅：黄 → 红，写明「发送已禁用」</td><td><code>AgentPanel.vue:88-89</code></td><td><span class="risk s">零</span></td></tr>
+        <tr><td>④</td><td>T-150</td><td>chip 徽标「自动」→「跟随当前页」+ tooltip；pinned「已固定」高亮</td><td><code>locales/*/newtab.json:775-776</code>、<code>AgentTabPicker.vue:39-49</code></td><td><span class="risk s">零</span></td></tr>
+        <tr><td>⑤</td><td>T-153</td><td>用量加「输入/输出」标签；水位改三档</td><td><code>AgentSessionList.vue:80-107</code></td><td><span class="risk s">零</span></td></tr>
+        <tr><td>⑥</td><td>T-154</td><td>压缩摘要卡：档案图标 + 微蓝边框，与思考卡区分</td><td><code>AgentTranscript.vue:149-173</code></td><td><span class="risk s">零</span></td></tr>
+        <tr><td>⑦</td><td>T-156</td><td>表格溢出加「可横滑」渐变提示</td><td><code>AgentMarkdown.vue:73</code></td><td><span class="risk s">零</span></td></tr>
+        <tr><td>—</td><td>T-155</td><td>下拉补 <code>aria-expanded</code> / <code>role="menu"</code> 与 ↑↓ 键盘导航（未在本稿演示）</td><td><code>AgentDropdown.vue</code></td><td><span class="risk r">评审</span></td></tr>
+      </tbody>
+    </table>
+    <div style="font-size:12px;color:var(--dim);margin-top:12px">
+      ①~⑦ 均为纯 class / i18n 改动，零逻辑风险，可一轮落地并重建产物。T-155 涉及键盘交互，建议单独一轮。
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -15,6 +15,21 @@
  */
 
 /**
+ * 全链路日志实例（模块级单例）。
+ *
+ * **为什么放在这里而不是装配层 `index.js`**（T-126 第二步）：`browserAdapter.js`
+ * 与 `index.js` 要写同一条日志（`channel.send` / `channel.reply` /
+ * `channel.timeout`），而环形缓冲**必须是一个** —— 拆成两个实例，页面卡死时
+ * 从 `window.__agentLogs` 导出的现场就只剩一半。装配层仍然 re-export 它，
+ * 导出面不变（`assembly.test.js` 具名解构 `agentLog`，那条不用改）。
+ *
+ * 移到本文件前它在 `index.js`（`export const agentLog = createAgentLog()`）。
+ *
+ * 声明放在 `createAgentLog` 定义之后 —— `export const` 在模块求值时按顺序
+ * 执行，函数声明会提升，所以放前面也能跑，但放后面读起来不必想这件事。
+ */
+
+/**
  * 创建日志器。
  *
  * @param {Object=} opts
@@ -54,6 +69,19 @@ export function createAgentLog({
 
   return log;
 }
+
+/**
+ * 全链路日志实例（模块级单例）。
+ *
+ * **为什么放在这里而不是装配层 `index.js`**（T-126 第二步）：`browserAdapter.js`
+ * 与 `index.js` 要写同一条日志（`channel.send` / `channel.reply` /
+ * `channel.timeout`），而环形缓冲**必须是一个** —— 拆成两个实例，页面卡死时
+ * 从 `window.__agentLogs` 导出的现场就只剩一半。装配层仍然 re-export 它，
+ * 导出面不变（`assembly.test.js` 具名解构 `agentLog`，那条不用改）。
+ *
+ * 移到本文件前它在 `index.js`（`export const agentLog = createAgentLog()`）。
+ */
+export const agentLog = createAgentLog();
 
 /**
  * 什么都不做的日志 —— loop 等纯模块的默认值，测试与未接日志的调用方

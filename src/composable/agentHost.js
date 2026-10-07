@@ -5,7 +5,7 @@
  * （src/agent/index.js 的 createAgentRuntime）和同一块面板（AgentPanel.vue，
  * 收单个 :host 对象 —— T-90）。实测依赖差分：独立页传 enabledGroups +
  * getWorkflowId(=> null)；编辑器侧多传 sessionWorkflowId、canvas 四句柄，
- * 且 enabledGroups 以 getter 传（T-69，响应式权限不被冻结）。宿主本身除了
+ * 且 enabledGroups 以 getter 传（T-135，响应式权限不被冻结）。宿主本身除了
  * 接线没有别的逻辑，所以接线放这里，避免两份各自漂移。
  *
  * 三个陷阱，改这里之前先读：
@@ -38,12 +38,13 @@ import { buildConfirmation, createSessionAuth } from '@/agent/confirm';
 import { targetHealth } from '@/agent/tab';
 import { AGENT_EVENTS, ERROR_KIND, errorEvent } from '@/agent/events';
 import { getActiveInstructionsFrom } from '@/agent/customizations';
+import { capabilityGroups } from '@/agent/examples';
 import { getSkillIndexFrom } from '@/agent/skills';
 
 /**
  * @param {Object} deps
  * @param {Array<string>|(() => Array<string>)} deps.enabledGroups 该宿主开放的工具组；
- *   传函数时 runtime 每次 send 求值（T-69：响应式权限不被冻结）
+ *   传函数时 runtime 每次 send 求值（T-135：响应式权限不被冻结）
  * @param {() => (string|null)} deps.getWorkflowId 会话归属的工作流 id；独立页恒为 null
  * @param {string=} deps.sessionWorkflowId 会话列表按哪个工作流过滤；不传就是全局列表
  * @param {Object=} deps.canvas 画布句柄，给了并且工具组里有 canvas，助手才能改画布
@@ -63,7 +64,7 @@ export function useAgentHost(deps) {
   ) {
     throw new Error(
       'useAgentHost: deps.enabledGroups 必填（数组或 () => 数组，' +
-        '后者供响应式权限用，见 T-69）。'
+        '后者供响应式权限用，见 T-135）。'
     );
   }
   if (typeof deps.getWorkflowId !== 'function') {
@@ -113,6 +114,16 @@ export function useAgentHost(deps) {
     sessionId: null,
     usage: null,
     pendingConfirm: null,
+    // T-12：已入队但还没送达模型的插话条数。面板常驻显示它 —— 原来唯一的确认
+    // 是事件流里一条「已排队」的 notice，点完插话输入框就空了，用户会怀疑
+    // 消息丢了。值每次入队后、以及每个事件到达时从运行时重新读（队列在
+    // loop 的每步开工处被排空，面板收不到「排空了」这个信号，见 syncPending）。
+    pendingInterjections: 0,
+    // T-10：宿主开放的工具组徽标。**直接从 deps.enabledGroups 推导**，
+    // 不让各宿主自己写一份清单 —— 写死的清单迟早与真实开放项对不上，
+    // 而「面板说有画布、其实没有」比不说更糟。与 runtime 同一份值：
+    // 传函数时每次求值，团队权限变化下一轮生效（T-135）。
+    groups: capabilityGroups(deps.enabledGroups),
   });
 
   /**
@@ -301,13 +312,45 @@ export function useAgentHost(deps) {
    */
   function abort() {
     if (agent.runtime) agent.runtime.abort();
+    // T-12：中止后队列不该还挂着计数（轮已死，插话不会送达了）
+    agent.pendingInterjections = 0;
     sessionAuth.invalidate();
   }
 
+  /**
+   * 把运行时插话队列的长度同步到面板状态（T-12）。
+   *
+   * 为什么每次都重新读而不是入队时 +1：队列在 `loop.js` 的每步开工处被排空，
+   * 那一侧不发事件，面板没有「送达」的信号。借事件到达的时机读一次长度，
+   * 是零新增事件种类就能跟上进度的办法（AGENTS.md 的 seam 约束：不新增事件种类，
+   * 面板本来就有读运行时的全权）。读不到运行时（未初始化 / 已销毁）就归零。
+   */
+  function syncPendingInterjections() {
+    const { runtime } = agent;
+    agent.pendingInterjections = runtime
+      ? runtime.pendingInstructionCount()
+      : 0;
+  }
+
   async function send(userText) {
+    // T-67：runtime 还没建好就点发送，原来两个分支都答非所问 ——
+    //   busy（插话）分支在 try 之外裸调 enqueueInstruction，TypeError 直接把
+    //   整个 send 的 promise reject 掉，面板什么都收不到；
+    //   非 busy 分支被 catch 包成 error 事件，文案是一句
+    //   「Cannot read properties of null」。
+    // 说清真实原因（助手还在初始化），而不是把内部形状漏给用户。
+    // 风险窗口是真实存在的：编辑器侧惰性 init（打开侧栏才建）+ loadConfig
+    // 慢，用户完全可能在这段时间里点发送。
+    if (!agent.runtime) {
+      agent.events.push(
+        errorEvent({ message: t('workflow.agent.initializing') })
+      );
+      return;
+    }
     // busy 时不打断任务，把输入送进插话队列，下一步开工前送达模型
     if (agent.busy) {
       const queued = agent.runtime.enqueueInstruction(userText);
+      syncPendingInterjections();
       if (queued) {
         agent.events.push({
           kind: 'agent:system-notice',
@@ -342,6 +385,9 @@ export function useAgentHost(deps) {
             return;
           }
           if (ev) agent.events.push(ev);
+          // 插话队列在 loop 的每步开工处被排空，没有「排空了」事件 —— 借每个
+          // 事件到达的机会读一次长度，面板上的计数就能跟着送达走（T-12）。
+          syncPendingInterjections();
 
           // T-11（与 B7 同一条通道）：中止回执。
           //
@@ -372,11 +418,20 @@ export function useAgentHost(deps) {
       // 宿主侧兜的错也走同一份形状（T-40）：这里原先是裸写的
       // { kind: 'agent:error', message }，绕过了 AGENT_EVENTS 常量表。
       const isConfig = !!err && err.kind === 'config';
+      // T-66：标了 specific 的配置错误自带可读文案（比如「接口地址必须以
+      // http:// 开头（当前：ftp://…）」），比通用那句「请先配置 API Key」
+      // 有用得多；没标的（apiKey 空）仍旧走 i18n 文案。
+      const useErrMessage = isConfig && !!err.specific && err.message;
+      // 三档优先级写成 if 而不是嵌套三元：
+      // ① 自带具体文案（specific）② 配置错误回落到 i18n ③ 原样带出 err.message
+      let message;
+      if (useErrMessage) message = err.message;
+      else if (isConfig) message = t('workflow.agent.notConfigured');
+      else message = (err && err.message) || String(err);
+
       agent.events.push(
         errorEvent({
-          message: isConfig
-            ? t('workflow.agent.notConfigured')
-            : (err && err.message) || String(err),
+          message,
           errorKind: isConfig ? ERROR_KIND.CONFIG : undefined,
         })
       );

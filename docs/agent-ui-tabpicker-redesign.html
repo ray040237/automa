@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>目标页 chip 改进方案（T-150）· 当前 vs 改后</title>
+<style>
+  :root {
+    --bg:#14161a; --panel:#1b1e24; --card:#21252c; --border:#2e343d;
+    --text:#e6e9ee; --dim:#9aa3b0; --faint:#6b7480;
+    --accent:#5b8cff; --radius:12px;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,sans-serif;
+    background:#0c0e11; color:var(--text); padding:28px 16px; line-height:1.6;
+  }
+  .wrap { max-width:920px; margin:0 auto; }
+  h1 { font-size:18px; margin-bottom:4px; }
+  .sub { color:var(--faint); font-size:12.5px; margin-bottom:22px; }
+
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .col { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px; }
+  .col h2 { font-size:13px; margin-bottom:12px; }
+  .col.cur h2 { color:var(--faint); }
+  .col.new h2 { color:var(--accent); }
+
+  /* chip */
+  .chip { display:flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:6px 8px; font-size:12px; width:fit-content; }
+  .chip img { width:16px; height:16px; border-radius:3px; }
+  .chip .tname { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:150px; }
+  .badge { font-size:10px; padding:1px 6px; border-radius:999px; border:1px solid var(--border); }
+  .badge.auto { background:var(--card); color:var(--dim); }
+  .badge.pinned { background:rgba(91,140,255,.18); color:var(--accent); border-color:rgba(91,140,255,.4); }
+  .caret { color:var(--faint); }
+  .note { font-size:11px; color:var(--faint); margin-top:8px; }
+
+  /* dropdown */
+  .dd { margin-top:14px; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .dd .wh { font-size:10px; text-transform:uppercase; color:var(--faint); padding:6px 10px; }
+  .dd .row { display:flex; align-items:center; gap:6px; padding:7px 10px; font-size:12px; }
+  .dd .row.cur { background:var(--card); }
+  .dd .row .u { font-size:10px; color:var(--faint); }
+  .dd .check { color:var(--accent); margin-left:auto; }
+  .dd .sep { height:1px; background:var(--border); }
+  .dd .unpin { color:var(--amber,#f5b14c); }
+
+  /* 方案 */
+  .plan { margin-top:26px; background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px 20px; }
+  .plan h2 { font-size:15px; margin-bottom:14px; color:#fff; }
+  .tier { border-left:3px solid var(--border); padding:8px 0 8px 14px; margin-bottom:14px; }
+  .tier .tag { font-size:11px; font-weight:700; padding:1px 8px; border-radius:999px; margin-right:8px; }
+  .tier.safe .tag { background:rgba(62,207,142,.18); color:#3ecf8e; }
+  .tier.review .tag { background:rgba(245,177,76,.18); color:#f5b14c; }
+  .tier b { color:#fff; }
+  .tier code { font-family:ui-monospace,Menlo,monospace; font-size:11.5px; background:rgba(91,140,255,.14); color:#a9c2ff; padding:1px 5px; border-radius:4px; }
+  .tier ul { margin:8px 0 0 18px; font-size:12.5px; display:flex; flex-direction:column; gap:6px; }
+  .order { font-size:12.5px; color:var(--dim); margin-top:6px; }
+  .order b { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>目标页 chip 改进方案（T-150）</h1>
+  <div class="sub">对应 <code>AgentTabPicker.vue</code> + <code>AgentTabList.vue</code>。左侧当前态，右侧改后态；下方四层改动与确切落点。</div>
+
+  <div class="grid">
+    <!-- 当前 -->
+    <div class="col cur">
+      <h2>当前 · 截图里的样子</h2>
+      <div class="chip" title="选择目标页">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' rx='3' fill='%235b8cff'/%3E%3C/svg%3E" />
+        <span class="tname">DMXAPI官网</span>
+        <span class="badge auto">自动</span>
+        <span class="caret">▾</span>
+      </div>
+      <div class="note">「自动」含义不明：普通用户不知它是 targetTab 解析模式（auto=运行时自动选 / pinned=手选固定）。整行只有一个 title「选择目标页」，不解释 auto。</div>
+
+      <div class="dd">
+        <div class="wh">窗口 1</div>
+        <div class="row cur"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' rx='3' fill='%235b8cff'/%3E%3C/svg%3E" width="14"/><span class="tname">DMXAPI官网</span><span class="u">dmxapi.cn</span><span class="check">✓</span></div>
+        <div class="row"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' rx='3' fill='%2333a'/%3E%3C/svg%3E" width="14"/><span class="tname">GitHub</span><span class="u">github.com</span></div>
+        <div class="note">点选即固定（targetPinned=true），<b>无退回「自动」的路径</b>。</div>
+      </div>
+    </div>
+
+    <!-- 改后 -->
+    <div class="col new">
+      <h2>改后 · 方案 A+B+C</h2>
+      <div class="chip" title="助手自动选当前页；点开可锁定某一页">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' rx='3' fill='%235b8cff'/%3E%3C/svg%3E" />
+        <span class="tname">DMXAPI官网</span>
+        <span class="badge auto">跟随当前页</span>
+        <span class="caret">▾</span>
+      </div>
+      <div class="note">auto 态：文案改成「跟随当前页」，hover 出 tooltip 解释。pinned 态见下——高亮区分。</div>
+
+      <div class="chip" style="margin-top:10px" title="你已锁定此页；点开可解除">
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' rx='3' fill='%235b8cff'/%3E%3C/svg%3E" />
+        <span class="tname">DMXAPI官网</span>
+        <span class="badge pinned">已固定</span>
+        <span class="caret">▾</span>
+      </div>
+      <div class="note">pinned 态：文案「已固定」+ accent 高亮，与 auto 灰徽标一眼可分。</div>
+
+      <div class="dd">
+        <div class="wh">窗口 1</div>
+        <div class="row cur"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' rx='3' fill='%235b8cff'/%3E%3C/svg%3E" width="14"/><span class="tname">DMXAPI官网</span><span class="u">dmxapi.cn</span><span class="check">✓</span></div>
+        <div class="row"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' rx='3' fill='%2333a'/%3E%3C/svg%3E" width="14"/><span class="tname">GitHub</span><span class="u">github.com</span></div>
+        <div class="sep"></div>
+        <div class="row unpin">↩ 解除固定 / 跟随当前页</div>
+        <div class="note">方案 D：下拉加「解除固定」项，退回 auto 解析（需评审）。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 方案 -->
+  <div class="plan">
+    <h2>改动方案与落点</h2>
+
+    <div class="tier safe">
+      <span class="tag">A 文案</span><b>零风险，必做</b>
+      <ul>
+        <li><code>src/locales/zh/newtab.json:775-776</code> 与 <code>en</code> 同步：<code>pickTab.auto</code>「自动」→「跟随当前页」；<code>pickTab.pinned</code>「固定」→「已固定」。</li>
+        <li>只动文案，不改逻辑；两宿主同时生效。</li>
+      </ul>
+    </div>
+
+    <div class="tier safe">
+      <span class="tag">B tooltip</span><b>零风险</b>
+      <ul>
+        <li><code>AgentTabPicker.vue:39-49</code> 徽标 span 加 <code>:title</code>：auto=「助手自动选当前页」/ pinned=「你已锁定此页，点开可解除」。</li>
+        <li>当前整行只有 <code>pickTab.title</code>（「选择目标页」）一个 title，不解释 auto 含义。</li>
+      </ul>
+    </div>
+
+    <div class="tier safe">
+      <span class="tag">C 样式</span><b>零风险</b>
+      <ul>
+        <li>auto 维持中性灰、pinned 改 accent 高亮（当前两态同色 <code>bg-gray-500/15</code>，看不出区别）。</li>
+        <li>让「已固定」这一用户主动意图更显眼。</li>
+      </ul>
+    </div>
+
+    <div class="tier review">
+      <span class="tag">D 解除固定</span><b>有逻辑，需评审</b>
+      <ul>
+        <li>根因：<code>AgentTabList.vue</code> 点选即 <code>onPickTab</code>→<code>targetPinned=true</code>，且<b>无退回 auto 的路径</b>——手选后永久 pinned（pin 跨轮持久化于会话 pins，见 <code>targetState.js</code> 的 initialPinsFromTab/upsertPin）。</li>
+        <li>改动：下拉加「解除固定 / 跟随当前页」项 → <code>host.unpin()</code> 置 <code>targetPinned=false</code>。安全由 CONTEXT「resolveTargetTab 永远解析出一个页」保证。</li>
+        <li>代价：新增 host 方法 + runtime 清 pins 接口，牵连会话持久化——<b>单独评审，不在本设计稿直接落地</b>。</li>
+      </ul>
+    </div>
+
+    <div class="order">
+      <b>建议落地顺序：</b>先做 A+B+C（纯 i18n + UI，零逻辑风险，一轮可落地并补测试）；
+      D 作为独立票评审。T-151（独立页 placeholder）已实测纠正——独立页也有 targetTab，原「误导」前提不成立，建议驳回或降级为可选软优化。
+    </div>
+  </div>
+</div>
+</body>
+</html>

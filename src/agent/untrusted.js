@@ -3,7 +3,8 @@
  * "看起来像闭合标签" 的字面量，避免内层内容提前闭合外层包装并注入指令。
  *
  * 移植自 pie-ai-agent/src/lib/agent/untrusted-wrappers.ts（去 TS 类型），
- * 按本方案裁剪：20 个标签 -> 本项目实际使用的 8 个（T-76 新增 compaction_summary）。
+ * 按本方案裁剪：20 个标签 -> 本项目实际使用的 9 个（T-76 新增 compaction_summary，
+ * T-143 新增 skill_index）。
  *
  * 攻击面覆盖（原实现的全部，改动会显著削弱防护）：
  *   1. 纯 ASCII 闭合     </untrusted_page_content>
@@ -35,6 +36,9 @@ export const UNTRUSTED_WRAPPER_TAGS = [
   // T-76：压缩摘要投影进 transcript 时的包装。摘要是从页面正文/工具返回/
   // 用户输入派生的内容，按红线 2 保持不可信标记。
   'untrusted_compaction_summary',
+  // T-143：技能索引（名称/描述）进 system prompt 时的包装。技能可能是
+  // 网上下载的第三方产物，其描述是提示注入面，按红线 2 保持不可信标记。
+  'untrusted_skill_index',
 ];
 
 // 零宽 / 不可见字符：U+200B..U+200F（零宽空格/ZWNJ/ZWJ/LRM/RLM）、U+2060（word joiner）、U+FEFF（BOM）

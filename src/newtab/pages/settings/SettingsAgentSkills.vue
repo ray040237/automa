@@ -68,6 +68,13 @@
       <li v-for="(line, i) in notice" :key="i">{{ line }}</li>
     </ul>
 
+    <p
+      v-if="indexWarn"
+      class="mb-3 rounded p-2 text-xs bg-red-500/10 text-red-600 dark:text-red-400"
+    >
+      {{ indexWarn }}
+    </p>
+
     <ul v-if="skills.length" class="flex flex-col gap-2">
       <li
         v-for="s in skills"
@@ -268,6 +275,7 @@ const form = reactive({
 });
 const notice = ref([]);
 const noticeKind = ref('info');
+const indexWarn = ref('');
 
 const fileMd = ref(null);
 const fileZip = ref(null);
@@ -319,13 +327,11 @@ function setNotice(lines, kind = 'info') {
 
 async function refresh() {
   skills.value = await loadSkills(configIO);
-
-  if (indexOver.value) {
-    setNotice(
-      [t('settings.agent.skills.warnIndex', { limit: SKILL_INDEX_SOFT_LIMIT })],
-      'error'
-    );
-  }
+  // 索引超限是「常驻状态」，与导入结果提示（一次性）分开存 —— 共用同一 ref
+  // 时两者会互相覆盖/清掉（T-149）
+  indexWarn.value = indexOver.value
+    ? t('settings.agent.skills.warnIndex', { limit: SKILL_INDEX_SOFT_LIMIT })
+    : '';
 }
 
 onMounted(refresh);
@@ -439,7 +445,9 @@ function download(bytes, filename) {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  // 同步 revoke 会在下载启动前撤掉 blob URL（Firefox 等对时序敏感），
+  // 延后一拍再撤（T-148）
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 async function exportOne(s) {

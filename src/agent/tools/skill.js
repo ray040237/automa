@@ -19,8 +19,9 @@
  */
 
 import { READ_SKILL_MAX_CHARS } from '../skills';
+import { defineTool } from './define';
 
-export const readSkillTool = {
+export const readSkillTool = defineTool({
   name: 'read_skill',
   class: 'read',
   group: 'context',
@@ -83,4 +84,4 @@ export const readSkillTool = {
       maxChars: READ_SKILL_MAX_CHARS,
     };
   },
-};
+});

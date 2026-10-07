@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
 
 import { API_ID, buildModel, createPiProvider, toPiContext } from './provider';
 
@@ -165,4 +166,38 @@ test('toPiContext 空输入不炸', () => {
   const ctx = toPiContext(undefined);
   assert.equal(ctx.systemPrompt, '');
   assert.deepEqual(ctx.messages, []);
+});
+
+test('T-64：provider 头注对 contextWindow 的说法必须与压缩代码一致', () => {
+  // 这条注释曾经写「本版不做上下文裁剪，我们侧没有任何代码读它做预算」——
+  // 而 loop.js 的 runCompaction 恰恰是拿它算阈值的。注释错了比没有更糟：
+  // 维护者会据此以为压缩是 pi 的责任，改配置时也不知道会影响什么。
+  const src = readFileSync(new URL('./provider.js', import.meta.url), 'utf8');
+  const loopSrc = readFileSync(new URL('./loop.js', import.meta.url), 'utf8');
+
+  const header = src.slice(0, src.indexOf('*/') + 2);
+
+  assert.ok(
+    !header.includes('没有任何代码读它做预算'),
+    '头注还在否认压缩预算，但 loop.js 的 runCompaction 就在用它'
+  );
+  assert.ok(
+    !header.includes('本版不做上下文裁剪'),
+    '头注还在说本版不做压缩 —— 压缩已落地（compaction.js + loop.js）'
+  );
+  // 反向钉住：注释提到的那些符号必须真的在 loop.js 里被调用
+  assert.ok(
+    /shouldCompact\(/.test(loopSrc) && /planCompaction\(/.test(loopSrc),
+    'loop.js 应当真的按 contextWindow 算压缩阈值与切点'
+  );
+  // 头注点名了压缩链路上的那两个文件，它们必须真实存在 —— 否则
+  // 「与代码一致」只是注释自己说了算。（头注里另有 wire.js / openai-compat.js
+  // 这类历史提及，那些文件确实早被票 08 删了，不在核对范围内。）
+  for (const name of ['compaction.js', 'loop.js']) {
+    assert.ok(header.includes(name), '头注应当点名 ' + name + '，便于按名核对');
+    assert.doesNotThrow(
+      () => readFileSync(new URL('./' + name, import.meta.url)),
+      '头注提到的 ' + name + ' 不存在 —— 这条注释已经不可核对'
+    );
+  }
 });

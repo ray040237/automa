@@ -7,6 +7,7 @@ import {
   estimateHistoryTokens,
   compactionThresholds,
   shouldCompact,
+  measuredContextTokens,
   planCompaction,
   serializeForSummary,
   buildSummaryUserPrompt,
@@ -387,4 +388,114 @@ test('projectAfterLastCompaction：无摘要原样返回，多条取最后一条
   const projected = projectAfterLastCompaction(multi);
   assert.equal(projected[0], c2);
   assert.equal(projected.length, multi.length - multi.indexOf(c2));
+
+  // ---------------- T-95：活轮次的实测上下文 ----------------
+
+  /** 造一条带 usage 的 pi assistant 消息（形状见 pi-ai 的 AssistantMessage）。 */
+  function piMsg(usage, extra = {}) {
+    return {
+      role: 'assistant',
+      content: [{ type: 'text', text: '答' }],
+      provider: 'test',
+      ...extra,
+      usage,
+    };
+  }
+
+  test('T-95：完整 prompt = input + cacheRead + cacheWrite（pi 已从 input 里扣掉缓存）', () => {
+    // 只读 input 的话，命中提示词缓存时会低估 8 成 —— 长会话正是最容易命中的场景。
+    const got = measuredContextTokens({
+      messages: [
+        piMsg({ input: 100, output: 50, cacheRead: 4000, cacheWrite: 0 }),
+      ],
+    });
+    assert.equal(got, 4100);
+  });
+
+  test('T-95：一个工具轮有多次请求时取**最后一条**，不是累加', () => {
+    const got = measuredContextTokens({
+      messages: [
+        piMsg({ input: 1000, output: 10 }),
+        piMsg({ input: 3000, output: 10 }),
+      ],
+    });
+    assert.equal(
+      got,
+      3000,
+      '最后一次请求的 prompt 已包含前面全部内容，累加是 2 倍高估'
+    );
+  });
+
+  test('T-95：重放消息一律不采信（即便它带着 usage）', () => {
+    assert.equal(
+      measuredContextTokens({
+        messages: [piMsg({ input: 0, output: 0 }, { provider: 'replay' })],
+      }),
+      null
+    );
+    // 刻意再给一条**非零** usage 的重放消息：重放历史现在是全 0，用全 0 写
+    // 断言的话，过的其实是「零值过滤」而不是「replay 过滤」—— 把 provider
+    // 判断删掉它照样绿。这条钉的是「重放出来的数字不是实测」。
+    assert.equal(
+      measuredContextTokens({
+        messages: [piMsg({ input: 500, output: 5 }, { provider: 'replay' })],
+      }),
+      null,
+      '重放历史即使带 usage 也不是实测，不能拿来判阈值'
+    );
+  });
+
+  test('T-95：没有 assistant / 没有 usage / 全零 usage 都返回 null（调用方退回估算）', () => {
+    assert.equal(measuredContextTokens({}), null);
+    assert.equal(measuredContextTokens({ messages: [] }), null);
+    assert.equal(
+      measuredContextTokens({ messages: [{ role: 'user', content: 'hi' }] }),
+      null
+    );
+    assert.equal(measuredContextTokens({ messages: [piMsg(null)] }), null);
+    assert.equal(
+      measuredContextTokens({ messages: [piMsg({ input: 0, output: 0 })] }),
+      null
+    );
+  });
+
+  test('T-95：实测只覆盖到上次请求那一刻，之后追加的内容要补上', () => {
+    const messages = [
+      piMsg({ input: 500, output: 10 }),
+      {
+        role: 'user',
+        content: [{ type: 'text', text: '工具之后又来的一轮' }],
+      },
+    ];
+    const got = measuredContextTokens({ messages, pendingText: '本轮指令' });
+    // 500（实测） + 那条 user 消息的估算 + pendingText 的估算
+    assert.ok(got > 500, '至少要把测量点之后的内容算进去');
+    assert.ok(
+      got < 700,
+      '补的只是测量点之后那一小段，不该把整段历史再估一遍，实际 ' + got
+    );
+    // 同理钉住「测量点之后那条消息」这一项：否则把 since 抹成 0 也照样绿。
+    assert.ok(
+      measuredContextTokens({ messages }) >
+        measuredContextTokens({ messages: messages.slice(0, 1) }),
+      '最后一条实测消息之后追加的内容（工具结果、后续 user 消息）必须计入'
+    );
+    // 差值钉住 pendingText 这一项：'abcd' 恰好 1 个 token（其余按 4 字符 1 token）。
+    // 上面两条区间断言对它是钝的（少算了也照样落在区间里），这里必须正好差 1。
+    assert.equal(
+      measuredContextTokens({ messages, pendingText: 'abcd' }) -
+        measuredContextTokens({ messages }),
+      1,
+      '本轮 user 消息尚未计入那次请求，必须按估算补进去'
+    );
+  });
+
+  test('T-95：坏数据不许变成 NaN 或 0 混进阈值判断', () => {
+    const got = measuredContextTokens({
+      messages: [
+        piMsg({ input: 'abc', cacheRead: null, cacheWrite: undefined }),
+      ],
+    });
+    assert.equal(got, null, 'usage 字段脏到算不出正数就该退回估算，而不是当 0');
+  });
 });

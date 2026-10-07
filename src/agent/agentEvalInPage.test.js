@@ -1,7 +1,13 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { agentEvalInPage, raceTimeout } from './agentEvalInPage';
+import {
+  agentEvalInPage,
+  cspBlockedMessage,
+  isCspBlockedResult,
+  isCspEvalBlock,
+  raceTimeout,
+} from './agentEvalInPage';
 
 /**
  * 这个函数会被 executeScript 序列化后注入页面 MAIN world ——
@@ -173,5 +179,66 @@ describe('raceTimeout —— 永不 settle 的 promise 的硬超时兜底（back
       globalThis.setTimeout = origSet;
       globalThis.clearTimeout = origClear;
     }
+  });
+});
+
+describe('CSP 拦截识别（backlog B6）', () => {
+  // 严格 CSP 页里 new Function 抛的就是这句（Chrome 原话）。
+  const CSP_EVAL_ERROR =
+    "Refused to evaluate a string as JavaScript because 'unsafe-eval' is " +
+    'not an allowed source of script in the following Content Security ' +
+    'Policy directive: "script-src \'self\'".';
+
+  test('EvalError / 字符串两种形态都能认出 unsafe-eval 拦截', () => {
+    assert.equal(isCspEvalBlock(new Error(CSP_EVAL_ERROR)), true);
+    assert.equal(isCspEvalBlock(CSP_EVAL_ERROR), true);
+  });
+
+  test('普通语法错 / 运行期错 / 空值绝不能被误判成 CSP', () => {
+    assert.equal(
+      isCspEvalBlock(new SyntaxError('Unexpected token const')),
+      false
+    );
+    assert.equal(isCspEvalBlock(new Error('x is not defined')), false);
+    assert.equal(isCspEvalBlock(null), false);
+    assert.equal(isCspEvalBlock(undefined), false);
+    assert.equal(isCspEvalBlock(''), false);
+  });
+
+  test('isCspBlockedResult 只认 ok:false 且命中 CSP 的结果', () => {
+    // 成功的返回值一律放行 —— 绝不能因为 value 里恰好有 CSP 字样就降级
+    assert.equal(isCspBlockedResult({ ok: true, value: 'unsafe-eval' }), false);
+    assert.equal(isCspBlockedResult(null), false);
+    assert.equal(isCspBlockedResult('boom'), false);
+
+    assert.equal(
+      isCspBlockedResult({
+        ok: false,
+        // 现实现把它误报成语法错，判定仍要能穿透这层包装认出来
+        error:
+          '代码执行出错：表达式与语句两种形式都无法解析：' + CSP_EVAL_ERROR,
+      }),
+      true
+    );
+    assert.equal(
+      isCspBlockedResult({
+        ok: false,
+        error: '代码执行出错：x is not defined',
+      }),
+      false
+    );
+  });
+
+  test('cspBlockedMessage 区分 Firefox，且都点明「不是语法问题」并给替代工具', () => {
+    const ff = cspBlockedMessage(true);
+    const chromium = cspBlockedMessage(false);
+
+    assert.match(ff, /Firefox/);
+    assert.doesNotMatch(chromium, /Firefox/);
+
+    [ff, chromium].forEach((msg) => {
+      assert.match(msg, /不是代码语法问题/);
+      assert.match(msg, /read_page/);
+    });
   });
 });

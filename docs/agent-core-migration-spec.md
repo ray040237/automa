@@ -2,7 +2,7 @@
 
 状态：ready-for-agent
 日期：2026-10-05
-相关：[ADR 0004](adr/0004-pi-agent-core-migration.md)、[B9](backlog.md)
+相关：[ADR 0004](adr/0004-pi-agent-core-migration.md)、[B9](backlog-done.md)
 
 ## Problem Statement
 

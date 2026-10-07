@@ -11,7 +11,7 @@
  * 用户消息以 agent:user-message 事件入史，翻轮边界就是它。
  */
 
-import { AGENT_EVENTS } from './events';
+import { AGENT_EVENTS, toolCallsOf } from './events';
 import { truncateTitle } from './title';
 
 export const SESSION_INDEX_KEY = 'agent_session_index';
@@ -79,6 +79,79 @@ export function cropToTurns(events, maxTurns = MAX_SESSION_TURNS) {
   );
   if (lastCompaction !== -1 && lastCompaction < cut) cut = lastCompaction;
   return list.slice(cut);
+}
+
+/**
+ * B7：重开会话时补的「上一轮被中断」提示文案。
+ *
+ * 与中止回执（宿主侧 i18n 的 workflow.agent.aborted）区分开：那条是用户**主动
+ * 点了停止**、loop 照常发了 DONE(aborted) 收尾；这条是页面被杀、loop 随闭包
+ * 一起消失、轮次停在半途，没有任何收尾信号 —— 两者触发源不同，不能互相顶替。
+ *
+ * 文案硬编码中文，与同层的 tabClosedNotice / RECOVERY_NOTICE 一致（模型侧
+ * 提示不接 i18n）。
+ */
+export const INTERRUPTED_TURN_NOTICE =
+  '系统提示：上一轮对话在收尾前被中断（页面可能被关闭或刷新）。这一轮未完成的步骤不会自动继续，如有需要请说明从哪里接着做。';
+
+/**
+ * 会话末尾是否停着一个**未收尾的轮次**（B7）。
+ *
+ * 场景：助手页/新标签页被关掉，页面里的 loop 随闭包一起消失，一轮可能在任何一步
+ * 之后被定格。事件是检查点增量落盘的（index.js 每步 TOOL_RESULT / USER_MESSAGE /
+ * DONE 后 debounce 一次 save），所以被杀页面留下的 tail **可能停在任何位置** ——
+ * 本判据只认最确定的一种形态：**悬空的工具调用**（有 TOOL_CALL、其后没有配对的
+ * TOOL_RESULT）。模型要了工具、结果没回来，这一轮显然没收尾。
+ *
+ * 判据范围只看**最后一条 DONE 之后**的 tail：
+ *  - 末尾是 DONE → 收尾了（含用户主动 abort，loop 也照发 DONE(aborted)），返回 false。
+ *  - tail 里已有本函数要补的提示（text 等于 INTERRUPTED_TURN_NOTICE）→ 已补过，
+ *    返回 false，保证反复重开不重复补发（幂等靠调用方把提示落盘实现）。
+ *
+ * 近似性（刻意接受）：停在「TOOL_RESULT 之后、下一次模型回复之前」的轮次不命中 ——
+ * 那时 tail 里没有悬空调用。本判据只覆盖 backlog B7 明写的那一种形态，不扩大范围。
+ *
+ * @param {Array<Object>} events 会话事件历史
+ * @returns {boolean}
+ */
+export function hasInterruptedTail(events) {
+  const list = Array.isArray(events) ? events : [];
+
+  let start = 0;
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i] && list[i].kind === AGENT_EVENTS.DONE) {
+      start = i + 1;
+      break;
+    }
+  }
+  const tail = list.slice(start);
+
+  // 已补过提示 → 幂等跳过
+  if (
+    tail.some(
+      (ev) =>
+        ev &&
+        ev.kind === AGENT_EVENTS.SYSTEM_NOTICE &&
+        ev.text === INTERRUPTED_TURN_NOTICE
+    )
+  ) {
+    return false;
+  }
+
+  // tail 里存在「其后没有配对 TOOL_RESULT 的 TOOL_CALL」即命中。
+  // toolCallsOf 兼容新旧两种 TOOL_CALL 形状（T-125）。
+  const pending = new Set();
+  for (const ev of tail) {
+    if (!ev) continue;
+    if (ev.kind === AGENT_EVENTS.TOOL_CALL) {
+      for (const c of toolCallsOf(ev)) {
+        if (c.toolCallId) pending.add(c.toolCallId);
+      }
+    } else if (ev.kind === AGENT_EVENTS.TOOL_RESULT) {
+      pending.delete(ev.toolCallId);
+    }
+  }
+  return pending.size > 0;
 }
 
 /**

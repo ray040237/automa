@@ -20,6 +20,21 @@
           {{ item.text }}
         </div>
 
+        <!-- T-09：轮次分隔线。刻意做得很轻（一条线 + 时间），长会话里每轮都
+             要有一条锚点，太重会盖过正文；「第 n 轮」那种更强的锚点等真需要
+             再说（已登记的取舍）。 -->
+        <div
+          v-else-if="item.type === 'turn'"
+          class="flex items-center gap-2 pt-1 text-[11px] text-gray-400 dark:text-gray-500"
+          data-test="turn-divider"
+        >
+          <span class="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+          <time v-if="item.at" :datetime="new Date(item.at).toISOString()">
+            {{ clockAt(item.at) }}
+          </time>
+          <span class="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+        </div>
+
         <agent-markdown v-else-if="item.type === 'text'" :raw="item.raw" />
 
         <!-- 思考过程默认折叠：它解释模型怎么想，但通常不该抢正文的位置 -->
@@ -158,17 +173,46 @@
         </div>
       </template>
 
-      <!-- 空态（T-109）：items 为空时正文区原本一片空白。
-           成因是 T-103 删说明段落时把 workflow.agent.empty 一起删掉了 ——
-           键还在 locale 里，全仓却零引用。
-           这里只补回最小的一句；示例问法与工具组徽标是 T-10 的独立范围，不在此做。
+      <!-- 空态（T-109 补回一句，T-10 加上示例与能力徽标）：items 为空时正文区
+           原本一片空白，成因是 T-103 删说明段落时把 workflow.agent.empty 一起
+           删掉了 —— 键还在 locale 里，全仓却零引用。
+           示例点击只填入草稿（pick-example），**不自动发送**：示例是猜的，
+           用户得能先改再决定发不发。
            放在滚动容器内：内容少时它就落在可视区中间，而不是贴在顶上。 -->
-      <p
+      <div
         v-if="items.length === 0"
-        class="py-8 text-center text-sm text-gray-500 dark:text-gray-400"
+        class="flex flex-col items-center gap-3 py-8 text-center"
       >
-        {{ t('workflow.agent.empty') }}
-      </p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          {{ t('workflow.agent.empty') }}
+        </p>
+
+        <ul v-if="examples.length" class="flex w-full flex-col gap-1.5">
+          <li v-for="ex in examples" :key="ex.id">
+            <button
+              type="button"
+              class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              @click="emit('pick-example', ex.text)"
+            >
+              {{ ex.text }}
+            </button>
+          </li>
+        </ul>
+
+        <ul
+          v-if="groups.length"
+          class="flex flex-wrap items-center justify-center gap-1"
+          data-test="capability-groups"
+        >
+          <li
+            v-for="g in groups"
+            :key="g.id"
+            class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+          >
+            {{ t('workflow.agent.group.' + g.id) }}
+          </li>
+        </ul>
+      </div>
 
       <!-- 工具跑完到下一个字之间是空窗期，不给点反馈用户只能去看输入框才知道还在跑 -->
       <div
@@ -196,53 +240,43 @@
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { AGENT_EVENTS, TOOL_STATUS } from '@/agent/events';
+import { AGENT_EVENTS } from '@/agent/events';
+import { clockAt } from '@/agent/usage';
+// T-53：折叠层（事件流 -> 渲染槽位）已抽成纯模块，本组件只负责摆位置与滚动
+import { createFolder } from '@/agent/fold';
 import AgentMarkdown from './AgentMarkdown.vue';
+// T-09：时刻格式化在纯模块里（有单测），组件只负责摆位置
 import AgentToolStep from './AgentToolStep.vue';
 
 const props = defineProps({
   events: { type: Array, default: () => [] },
   busy: { type: Boolean, default: false },
+  // T-10：空态用的工具组徽标与示例问法。都由宿主从 enabledGroups 推导后传进来 ——
+  // 组件自己不含任何「这个宿主有什么能力」的知识，否则两处会各说各话。
+  groups: { type: Array, default: () => [] },
+  examples: { type: Array, default: () => [] },
 });
 
 /** 「重试」按钮：把出错那一轮的原文交回宿主重发，本组件不碰 draft */
-const emit = defineEmits(['retry']);
+const emit = defineEmits(['retry', 'pick-example']);
 
 const { t } = useI18n();
 
 /**
- * 渲染槽位。
- *
- * 为什么不是 computed：text/thinking 的 raw 是逐字增长的，用 computed 每来一个
- * delta 就要把整段历史重新折一遍。这里改成增量追加 —— 只处理游标之后的新事件，
- * 会话切换时（宿主换了个新数组）才整表重放。
+ * 渲染槽位由 fold.js 折出来（T-53）。**items 必须传 reactive 数组** —— 折叠层要
+ * push 与就地并槽（delta 追加、工具卡合并），普通数组的改动 Vue 追踪不到。
+ * 为什么是增量式而不是 computed：text/thinking 的 raw 逐字增长，用 computed 每来
+ * 一个 delta 就要把整段历史重新折一遍（T-14 同型的 O(n²)）；fold 里保留游标语义，
+ * 同一数组只处理游标之后的新事件，换会话才整表重放。
  */
 const items = reactive([]);
 const scroller = ref(null);
 const stickToBottom = ref(true);
 
-let cursor = 0;
-let previousSource = null;
-let seed = 0;
+const folder = createFolder({ items, t });
 
 /** 离底部多近还算「贴着底」：太严格的话流式输出会误判成用户滚上去了 */
 const TAIL_THRESHOLD = 32;
-
-function push(item) {
-  seed += 1;
-  item.key = seed;
-  items.push(item);
-}
-
-/** 同类型的连续 delta 追加到同一个槽位，不另起一块 */
-function appendDelta(type, text) {
-  const last = items[items.length - 1];
-  if (last && last.type === type) {
-    last.raw += text;
-    return;
-  }
-  push({ type, raw: text, open: false });
-}
 
 // ---------------------------------------------------------------- T-04 错误卡
 
@@ -265,14 +299,6 @@ const ERROR_KIND_LABEL = {
 function kindLabel(kind) {
   const key = ERROR_KIND_LABEL[kind];
   return key ? t(`workflow.agent.errorKind.${key}`) : t('workflow.agent.error');
-}
-
-/** 「重试」用哪条问题：出错这一轮之前最近的一条用户消息。找不着就不给这个按钮。 */
-function lastUserText() {
-  for (let i = items.length - 1; i >= 0; i -= 1) {
-    if (items[i].type === 'user') return items[i].text || '';
-  }
-  return '';
 }
 
 /** 复制用的详情：归类 + HTTP 状态 + 时间 + 原文，供用户粘去反馈/工单 */
@@ -309,91 +335,15 @@ async function copyDetail(item) {
   }
 }
 
-function applyEvent(ev) {
-  if (!ev) return;
-
-  switch (ev.kind) {
-    case AGENT_EVENTS.TEXT_DELTA:
-      appendDelta('text', ev.text || '');
-      return;
-    case AGENT_EVENTS.THINKING:
-      appendDelta('thinking', ev.text || '');
-      return;
-    case AGENT_EVENTS.USER_MESSAGE:
-      push({ type: 'user', text: ev.text || '' });
-      return;
-    case AGENT_EVENTS.SYSTEM_NOTICE:
-      push({ type: 'notice', text: ev.text || '' });
-      return;
-    case AGENT_EVENTS.COMPACTION:
-      push({
-        type: 'compaction',
-        raw: ev.summary || '',
-        turns: ev.summarizedTurns || 0,
-        open: false,
-      });
-      return;
-    case AGENT_EVENTS.ERROR:
-      // T-04：单独一类 'error'，不再混进 notice 的琥珀通道
-      push({
-        type: 'error',
-        text: ev.message || t('workflow.agent.error'),
-        kind: ev.errorKind || '',
-        ...(ev.httpStatus !== undefined ? { httpStatus: ev.httpStatus } : {}),
-        retryText: lastUserText(),
-      });
-      return;
-    case AGENT_EVENTS.TOOL_CALL:
-    case AGENT_EVENTS.TOOL_RESULT: {
-      const step = {
-        name: ev.name,
-        step: ev.step,
-        toolCallId: ev.toolCallId,
-        args: ev.args,
-        status: ev.status || TOOL_STATUS.RUNNING,
-        observation: ev.observation,
-      };
-      // 同一次调用（按 toolCallId 配对）的 call 与 result 合并成一张卡。
-      // 旧键是 name+step：同名并行调用（一条消息里两次 read_page）会互相
-      // 覆盖参数与观察值；事件流已按调用拆开（T-74 方案 B），这里按 id
-      // 从后往前找归属卡 —— 并行时事件交错，归属卡不一定就是最后一张。
-      let target = null;
-      for (let i = items.length - 1; i >= 0; i -= 1) {
-        const it = items[i];
-        if (it.type === 'tool' && it.step.toolCallId === ev.toolCallId) {
-          target = it.step;
-          break;
-        }
-      }
-      if (target) {
-        Object.assign(target, {
-          status: step.status,
-          observation:
-            ev.observation !== undefined ? ev.observation : target.observation,
-          args: ev.args !== undefined ? ev.args : target.args,
-        });
-      } else {
-        push({ type: 'tool', step });
-      }
-      break;
-    }
-    default:
-      // start / done / target-tab 不产生对话内容
-      break;
-  }
-}
-
+/**
+ * 折叠规则都在 fold.js（T-53）。这里只留一个同名薄封装 —— watch 调它，模板不用改，
+ * 而「组件里仍留着一份折叠逻辑」这件事会被静态守卫一眼看出。
+ *
+ * 只剩 sync 一个：applyEvent 曾是 sync 的内部步骤，现在 sync 直接调 folder.apply，
+ * 再留一层只会让 eslint 报未使用。
+ */
 function sync(source) {
-  if (source !== previousSource) {
-    // 换了会话：宿主给的是另一个数组，整表重放
-    items.splice(0);
-    cursor = 0;
-    previousSource = source;
-  }
-
-  for (; cursor < source.length; cursor += 1) {
-    applyEvent(source[cursor]);
-  }
+  folder.sync(source);
 }
 
 async function followTail(kind) {

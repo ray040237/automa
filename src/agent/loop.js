@@ -25,12 +25,13 @@ import {
   ERROR_KIND,
   TOOL_STATUS,
   errorEvent,
+  toolCallsOf,
   toolError,
   wrapObservation,
 } from './events';
 import { toAgentTools } from './tools/adapter';
 import { findTool, requiresConfirmation } from './tools';
-// fromPiEvent 是无 deps 的纯导出函数，pi 自产结果的补包装（T-70）只能走模块级
+// fromPiEvent 是无 deps 的纯导出函数，pi 自产结果的补包装（T-132）只能走模块级
 // import；createAgent 里那份是注入的 deps.wrapUntrusted，两者是同一个实现但
 // 生命周期不同，别名以免遮蔽。
 import { wrapUntrusted as wrapUntrustedTag } from './untrusted';
@@ -44,6 +45,7 @@ import {
   buildSummaryUserPrompt,
   dropTrailingPartialAssistant,
   estimateHistoryTokens,
+  measuredContextTokens,
   isContextOverflowMessage,
   planCompaction,
   projectAfterLastCompaction,
@@ -182,10 +184,7 @@ export function historyToPiMessages(events) {
         // 新格式（T-74 方案 B）：一条事件一个调用，走顶层字段。
         // 旧持久化记录：一条事件装全部并行调用（calls[]），按数组展开 ——
         // 曾经只取第一个，其余调用在跨会话上下文里整个丢失（探针实测）。
-        const callList =
-          Array.isArray(ev.calls) && ev.calls.length
-            ? ev.calls
-            : [{ name: ev.name, args: ev.args, toolCallId: ev.toolCallId }];
+        const callList = toolCallsOf(ev);
         for (const c of callList) {
           toolCalls.push({
             type: 'toolCall',
@@ -206,7 +205,7 @@ export function historyToPiMessages(events) {
           content: [
             {
               type: 'text',
-              // observation 在 fromPiEvent 里已包装好（T-70）。「|| details」
+              // observation 在 fromPiEvent 里已包装好（T-132）。「|| details」
               // 只为兼容修复前的旧持久化记录（那时 end 事件的 observation 是
               // 空占位）—— 新事件不会走到。
               text:
@@ -305,6 +304,34 @@ export function classifyPiErrorMessage(message) {
  * @param {{type: string}} event pi 的 AgentEvent
  * @returns {{kind: string}|{emitsNothing: true}|null}
  */
+/**
+ * 打点里的参数/结果摘要（T-59）。
+ *
+ * 为什么要截断：工具参数里可能有整页正文，一行几百 KB 的日志会把 ring 缓冲
+ * 冲垮，也让 DevTools 里那条记录没法读。只截长度，不做脱敏 —— 同一份参数本来
+ * 就已经原样进了 `tool.confirm.ask` 与 transcript，脱敏只在这里做等于自欺。
+ *
+ * @param {*} value
+ * @param {number} [limit]
+ * @returns {string}
+ */
+function excerpt(value, limit = 400) {
+  if (value === undefined || value === null) return '';
+
+  let s;
+  try {
+    s = typeof value === 'string' ? value : JSON.stringify(value);
+  } catch {
+    // 循环引用 / BigInt 之类 stringify 不了的，落成类型名而不是抛
+    s = Object.prototype.toString.call(value);
+  }
+
+  if (typeof s !== 'string') s = String(s);
+
+  return s.length > limit
+    ? s.slice(0, limit) + '…（已截断，原长 ' + s.length + '）'
+    : s;
+}
 export function fromPiEvent(event) {
   switch (event.type) {
     case 'message_start':
@@ -393,7 +420,7 @@ export function fromPiEvent(event) {
       };
 
     case 'tool_execution_end': {
-      // 观察值从结果里提取（T-70，替代曾经的空占位）：adapter 产出的结果
+      // 观察值从结果里提取（T-132，替代曾经的空占位）：adapter 产出的结果
       // 已在 toToolResult 里包装好（单 text 块，首部即 <untrusted_*> 标签），
       // 原样透传；pi 自产的结果（未知工具短路、输出截断、参数校验失败）没
       // 经过 adapter，必须在这里补包装 —— 红线第 2 条：工具返回一律 untrusted。
@@ -531,6 +558,17 @@ export function createAgent(deps) {
    */
   const rejectedBy = new Map();
 
+  /**
+   * T-60：缺 toolCallId 的工具调用计数（每轮由 send 清零）。
+   *
+   * 背景：迁移前 wire.js 会跳过没有 toolCallId 的空转块，pi 不跳 —— 它把
+   * id: undefined 一路传下去。夹具层无害（assistant 块与 toolResult 两边都是
+   * undefined，仍然配对、工具照常执行），但真发到严格端点很可能被 400 或导致
+   * tool_call 配不上。**我们不知道真端点的态度**，所以至少让它在轮次收尾处
+   * 看得见，而不是散在日志里等人翻；不改 pi 的行为。
+   */
+  let missingToolCallIds = 0;
+
   /** 本轮的事件回调。pi 的 subscribe 在Agent 构造时绑定，所以用闭包变量传。 */
   let currentEmit = null;
 
@@ -612,7 +650,11 @@ export function createAgent(deps) {
    * 或 null（不该压）。history 是闭包状态——调用前必须已填好（send 在重置
    * history 之后调用）。force=true（溢出恢复）跳过阈值判断，只看切点。
    */
-  const runCompaction = async ({ systemPrompt, force = false }) => {
+  const runCompaction = async ({
+    systemPrompt,
+    force = false,
+    pendingText = '',
+  }) => {
     if (!contextWindow) return null;
 
     const estimated = estimateHistoryTokens({
@@ -620,7 +662,26 @@ export function createAgent(deps) {
       systemPrompt,
       tools,
     });
-    if (!force && !shouldCompact(estimated, contextWindow)) return null;
+
+    // T-95：活轮次里 pi transcript 带着上一次请求的**实测** prompt 大小，
+    // 有实测就用实测判阈值，别用估算。注意实测只覆盖到上次请求那一刻，
+    // 那之后追加的内容（上一轮 assistant 输出 + 本轮 user 消息）由
+    // measuredContextTokens 按 pendingText 补齐。取不到（首轮 / 全是重放历史 /
+    // 端点没回 usage）就照旧用估算，两条路径的差别记进日志便于事后核对。
+    const measured = measuredContextTokens({
+      messages: piAgent ? piAgent.state.messages : [],
+      pendingText,
+    });
+    const contextTokens = measured === null ? estimated : measured;
+    if (!force) {
+      log('budget.context', {
+        source: measured === null ? 'estimate' : 'measured',
+        contextTokens,
+        estimated,
+      });
+    }
+
+    if (!force && !shouldCompact(contextTokens, contextWindow)) return null;
 
     const plan = planCompaction(history, contextWindow);
     if (!plan) return null;
@@ -686,6 +747,32 @@ export function createAgent(deps) {
           message: reason || '用户拒绝了此次操作',
         }),
       };
+    }
+
+    // T-59：工具调用与结果打点。这一段此前完全没有现场 ——「模型为什么调了这个
+    // 工具、为什么回了这个结果」只能复现。打在 pi 事件上而不是发射点上：
+    // pi 的 start 带 args（README 记的就是 { toolCallId, toolName, args }），
+    // 那是模型真实传的参数；end 打在拒绝重映射**之后**，status 才反映最终真相
+    // （用户拒的显示 REJECTED，而不是 pi 眼里的失败）。
+    if (event.type === 'tool_execution_start') {
+      // T-60：id 缺失在这里最便宜地看得见 —— 到映射层时 toolCallId 已经定型，
+      // 而 execute 侧与 toolResult 侧都是 undefined，配对仍靠「两边都缺」。
+      if (event.toolCallId === undefined || event.toolCallId === null) {
+        missingToolCallIds += 1;
+        log.warn('tool.call.missingId', { name: event.toolName });
+      }
+      log('tool.call', {
+        name: event.toolName,
+        toolCallId: event.toolCallId,
+        args: excerpt(event.args),
+      });
+    } else if (event.type === 'tool_execution_end') {
+      log('tool.result', {
+        name: event.toolName,
+        toolCallId: event.toolCallId,
+        status: mapped.status,
+        observation: excerpt(mapped.observation),
+      });
     }
 
     // T-74 方案 B：TOOL_CALL 按调用拆开发射 —— 一条 TOOL_CALL 事件配一条
@@ -803,7 +890,7 @@ export function createAgent(deps) {
         let approved = false;
         try {
           // tool 随载荷带给宿主 → confirm.js 的 buildConfirmation 调工具
-          // 自带的 confirmDetail 取「用户在放行什么」（T-83）。
+          // 自带的 confirmDetail 取「用户在放行什么」（T-134）。
           const answer = await requestConfirmation({
             name: toolCall.name,
             args,
@@ -853,6 +940,7 @@ export function createAgent(deps) {
       const { userText, targetTab, workflowContext, onEvent } = params;
       currentEmit = onEvent || null;
       controller = new AbortController();
+      missingToolCallIds = 0; // T-60：计数是「本轮」的，跨轮累计会看不出是哪一轮出的问题
 
       // 事实表构建失败不能杀掉整轮 —— 降级成空事实继续对话。
       // 这条现状行为不能因换内核而丢。
@@ -869,7 +957,9 @@ export function createAgent(deps) {
       }
 
       const system =
-        params.system || systemPromptOverride || buildSystemPrompt(facts);
+        params.system ||
+        systemPromptOverride ||
+        buildSystemPrompt(facts, wrapUntrusted);
 
       // 跨轮续接：历史重置为调用方给的上轮历史
       history = [...(params.initialHistory || [])];
@@ -878,12 +968,23 @@ export function createAgent(deps) {
       // 本轮的成功误判成失败、不发 DONE。
       const turnHistoryStart = history.length;
 
+      // 本轮要发给模型的 user 消息。T-95 需要它在预压缩那一刻就已存在：
+      // 活轮次的实测上下文 = 上次请求的实测 prompt + 这条尚未计入的 user 消息。
+      // buildUserMessage 是纯函数，提前构造不改变任何行为。
+      const livePromptText = buildUserMessage(
+        { userText, targetTab, workflowContext, wrapUserText: false },
+        wrapUntrusted
+      );
+
       // T-76 预压缩：提交前估算，越过阈值先把保留窗外的老轮次压成摘要。
       // 摘要事件插在切点处（上面的归摘要、下面的保留窗原样进 transcript）。
       // 压缩失败不杀轮——摘要只是优化，真撞上限还有溢出恢复兜底（不静默：
       // log.warn 如实记）。
       try {
-        const compaction = await runCompaction({ systemPrompt: system });
+        const compaction = await runCompaction({
+          systemPrompt: system,
+          pendingText: livePromptText,
+        });
         if (compaction) emitAndRecordAt(compaction.ev, compaction.insertAt);
       } catch (err) {
         log.warn('compaction.skip', {
@@ -893,7 +994,12 @@ export function createAgent(deps) {
       // transcript 重建用这份快照：含刚插入的压缩事件、不含本轮的 START/USER
       const carryOverEvents = history.slice();
 
-      const startEv = { kind: AGENT_EVENTS.START };
+      // T-09：START 带 `at`（毫秒时间戳）。面板要用它画轮次分隔线（`:966`
+      // 那里是 START/DONE 一律被丢弃的地方），而分隔线上的时间必须是**真实
+      // 发生时刻** —— 用渲染时刻的话，回看历史会话会显示「打开的时间」。
+      // 注意这是给事件**加字段**，不是加事件种类：AGENTS.md 的 seam 约束说的是
+      // 不新增 kind，事件流契约（index.js 顶部）仍然完整。
+      const startEv = { kind: AGENT_EVENTS.START, at: Date.now() };
       emitAndRecord(startEv);
 
       const userEv = {
@@ -937,16 +1043,9 @@ export function createAgent(deps) {
        *  由映射层转成 ERROR 事件并记在这里 —— 出错收尾不发 DONE（现状契约）。 */
       let errorEv = null;
 
-      // T-63: 活轮次发「元数据段 + 用户原文」, 不是原文, 也不是整条包装版。
-      // 元数据 (目标页 url/title、工作流上下文) 是第三方信息, 两种形态都包;
-      // 用户原文是**当轮指令**, 包进 untrusted 就等于按安全声明告诉模型
-      // 「这是数据别当指令」 —— 详见 prompt.js buildUserMessage 的说明。
+      // T-63 的活轮次 prompt（livePromptText）已在上方预压缩之前构造好
+      // （T-95 的实测上下文要用到它）；语义见那里的注释。
       // 入史的 promptText 仍是全包装版 (重放时那句已是历史, 适用红线第 2 条)。
-
-      const livePromptText = buildUserMessage(
-        { userText, targetTab, workflowContext, wrapUserText: false },
-        wrapUntrusted
-      );
 
       try {
         await agent.prompt(livePromptText);
@@ -1047,8 +1146,20 @@ export function createAgent(deps) {
         stopped,
         aborted: controller.signal.aborted,
         usage,
+        // T-60：本轮缺 toolCallId 的次数。恒为数字（含 0），消费方不用判空；
+        // 非 0 意味着「这一轮里有工具调用的 id 靠凑巧配对」，值得追查。
+        missingToolCallIds,
       };
-      log('turn.end', { stopped, aborted: controller.signal.aborted, usage });
+      log('turn.end', {
+        stopped,
+        aborted: controller.signal.aborted,
+        usage,
+        ...(missingToolCallIds
+          ? {
+              note: `本轮有 ${missingToolCallIds} 次工具调用缺 toolCallId（已按 undefined 配对执行）`,
+            }
+          : {}),
+      });
       if (currentEmit) currentEmit(doneEv);
       return doneEv;
     },

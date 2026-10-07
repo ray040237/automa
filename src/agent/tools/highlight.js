@@ -34,6 +34,7 @@ export async function highlightSelector(ctx, params) {
       selector: params.selector,
       limit: params.limit || 10,
       durationMs: params.durationMs || 4000,
+      ...(params.frame ? { frame: params.frame } : {}),
     });
 
     if (!res || !res.ok) {

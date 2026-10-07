@@ -23,7 +23,9 @@ const {
   readPageFromTab,
   agentLog,
 } = await import('./index');
-const { createSessionStore } = await import('./sessions');
+const { createSessionStore, INTERRUPTED_TURN_NOTICE } = await import(
+  './sessions'
+);
 const { AGENT_EVENTS } = await import('./events');
 const { tasks } = await import('../utils/shared');
 
@@ -76,7 +78,11 @@ describe('collectPromptFacts —— 装配层这一段的回归', () => {
     const f = collectPromptFacts(TOOLS);
 
     assert.equal(typeof f.blockCount, 'number');
-    assert.ok(f.blockCount > 50, `块数应远大于 0，实际 ${f.blockCount}`);
+    // > 50 单独一条太松：T-01 算出的 715 也过。真实块目录是 61 个块。
+    assert.ok(
+      f.blockCount > 50 && f.blockCount < 200,
+      `块数应是 61 附近，实际 ${f.blockCount}`
+    );
   });
 
   test('剔掉运行时没注入的 automaExecWorkflow', () => {
@@ -96,6 +102,58 @@ describe('collectPromptFacts —— 装配层这一段的回归', () => {
 });
 
 describe('createAgentRuntime', () => {
+  test('T-66：接口地址非 http(s) 时 send 要停下，且错误能说出用户填的值', async () => {
+    // 让它走到 pi 的结果只有一句指不到真因的 provider 报错（T-40 的方向相反）。
+    for (const [bad, shown] of [
+      ['ftp://api.example.com/v1', 'ftp://api.example.com/v1'],
+      ['', '空'],
+    ]) {
+      const rt = createAgentRuntime(
+        deps({
+          getConfig: async () => ({
+            model: 'm',
+            apiKey: 'sk-test',
+            baseUrl: bad,
+          }),
+        })
+      );
+
+      await assert.rejects(
+        () => rt.send({ userText: 'hi', onEvent: () => {} }),
+        (err) => {
+          assert.equal(err.kind, 'config', '必须走配置错误通道');
+          assert.equal(err.specific, true, 'specific 标记让宿主用这句文案');
+          assert.ok(
+            err.message.includes(shown),
+            '错误文案要带上用户填的值，实际：' + err.message
+          );
+          return true;
+        }
+      );
+    }
+  });
+
+  test('T-66：坏地址必须在 apiKey 检查之后、buildModel 之前拦住', async () => {
+    const src = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+    const start = src.indexOf('const send = async ({');
+    const body = src.slice(start, src.indexOf('\n  const ', start + 10));
+
+    const keyAt = body.indexOf("err.kind = 'config'");
+    const urlAt = body.indexOf('if (!isHttpUrl(config.baseUrl))');
+    // buildModel 是 provider.js 内部的，index.js 这边真正的关口是 createPiProvider
+    const modelAt = src.indexOf('createPiProvider(', start);
+
+    assert.ok(urlAt > 0, 'send 里必须有 isHttpUrl 这道关口');
+    assert.ok(
+      modelAt > urlAt,
+      '关口必须排在 createPiProvider（内部才 buildModel）之前 —— 排在之后就等于没有'
+    );
+    assert.ok(
+      keyAt > 0 && keyAt < urlAt,
+      'apiKey 检查在前（未配置的主路径文案不变）'
+    );
+  });
+
   test('T-50: 缺 getVariables 直接抛, 不给「变量为空」的兜底', () => {
     // 旧兜底是 `async () => ({})`, 任何漏注入的宿主都拿到「（空）」——
     // 模型据此写模板引用必然引用到不存在的变量名, 且没有任何报错。
@@ -125,7 +183,7 @@ describe('createAgentRuntime', () => {
     );
   });
 
-  test('setTargetTab 改闭包变量，toolCtx.targetTab 是 getter 自动跟随（T-71）', () => {
+  test('setTargetTab 改闭包变量，toolCtx.targetTab 是 getter 自动跟随（T-133）', () => {
     const rt = createAgentRuntime(deps());
     const next = { id: 9, url: 'https://other.example.com' };
 
@@ -256,6 +314,125 @@ describe('会话切换与删除', () => {
     assert.deepEqual(
       again.events.map((e) => e.text),
       ['B1', 'B2']
+    );
+  });
+});
+
+/**
+ * B7 —— 页面被杀后冷重开会话，补一条「上一轮被中断」的 system-notice。
+ *
+ * 触发源与中止回执不同：那条是用户主动点停止、loop 发了 DONE(aborted) 收尾；
+ * 这条是页面整个没了、loop 随闭包消失、一轮停在半途（留下悬空 TOOL_CALL）。
+ * 这里用内存版会话仓库验「补 → 落盘 → 幂等」全链路。
+ */
+describe('B7 —— 重开会话补「上一轮被中断」提示', () => {
+  const user = (text) => ({
+    kind: AGENT_EVENTS.USER_MESSAGE,
+    text,
+    wire: text,
+  });
+
+  function memoryIO() {
+    const data = new Map();
+    return {
+      data,
+      get: async (k) => data.get(k),
+      set: async (k, v) => data.set(k, v),
+      remove: async (k) => data.delete(k),
+    };
+  }
+
+  const danglingTurn = () => [
+    user('帮我抓这个列表'),
+    {
+      kind: AGENT_EVENTS.TOOL_CALL,
+      name: 'read_page',
+      args: {},
+      toolCallId: 't1',
+    },
+  ];
+
+  test('悬空工具调用的会话：打开时补提示并落盘', async () => {
+    const store = createSessionStore(memoryIO());
+    await store.save({
+      id: 's-x',
+      workflowId: null,
+      status: 'active',
+      createdAt: 1,
+      lastAccessedAt: 1,
+      events: danglingTurn(),
+    });
+
+    const rt = createAgentRuntime(
+      deps({ sessionStore: store, targetTab: null })
+    );
+    const opened = await rt.openSession('s-x');
+
+    const last = opened.events[opened.events.length - 1];
+    assert.equal(last.kind, AGENT_EVENTS.SYSTEM_NOTICE);
+    assert.equal(last.text, INTERRUPTED_TURN_NOTICE);
+    assert.ok(
+      typeof last.promptText === 'string' &&
+        last.promptText.includes('untrusted_system_notice'),
+      'SYSTEM_NOTICE 必须带 untrusted 包装文本，否则续接下一轮时 historyToPiMessages 抛错'
+    );
+
+    const rec = await store.load('s-x');
+    assert.equal(
+      rec.events[rec.events.length - 1].text,
+      INTERRUPTED_TURN_NOTICE,
+      '提示必须落盘，幂等才有依据'
+    );
+  });
+
+  test('幂等：反复重开同一个会话只补一次', async () => {
+    const store = createSessionStore(memoryIO());
+    await store.save({
+      id: 's-x',
+      workflowId: null,
+      status: 'active',
+      createdAt: 1,
+      lastAccessedAt: 1,
+      events: danglingTurn(),
+    });
+
+    const rt = createAgentRuntime(
+      deps({ sessionStore: store, targetTab: null })
+    );
+    const count = (evs) =>
+      evs.filter((e) => e.text === INTERRUPTED_TURN_NOTICE).length;
+
+    const first = await rt.openSession('s-x');
+    const second = await rt.openSession('s-x');
+
+    assert.equal(count(first.events), 1);
+    assert.equal(count(second.events), 1, '第二次打开不能重复补');
+  });
+
+  test('正常收尾的会话不补提示', async () => {
+    const store = createSessionStore(memoryIO());
+    await store.save({
+      id: 's-y',
+      workflowId: null,
+      status: 'active',
+      createdAt: 1,
+      lastAccessedAt: 1,
+      events: [
+        user('你好'),
+        { kind: AGENT_EVENTS.TEXT_DELTA, text: '好' },
+        { kind: AGENT_EVENTS.DONE, aborted: false },
+      ],
+    });
+
+    const rt = createAgentRuntime(
+      deps({ sessionStore: store, targetTab: null })
+    );
+    const opened = await rt.openSession('s-y');
+
+    assert.equal(opened.events.length, 3);
+    assert.equal(
+      opened.events.filter((e) => e.kind === AGENT_EVENTS.SYSTEM_NOTICE).length,
+      0
     );
   });
 });
@@ -568,6 +745,95 @@ describe('readPageFromTab —— tabs 通道超时兜底（T-33）', () => {
   });
 });
 
+describe('readPageFromTab —— frame 支持（T-115）', () => {
+  test('默认 all：top + iframe 合并进同一观察值，fingerprint 取顶层', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    stub.state.frames = [{ frameId: 0 }, { frameId: 3 }];
+    stub.state.sendMessageByFrame = async (tabId, msg, frameId) => {
+      if (frameId === 0)
+        return {
+          text: '<page url="https://a.com/list" title="列表" detail="addresses" fingerprint="fp-top">\n## 列表\n  容器 div.row\n</page>',
+          fingerprint: 'fp-top',
+        };
+      return {
+        text: '<page url="https://b.com/detail" title="详情" detail="addresses" fingerprint="fp-iframe">\n## 列表\n  容器 div.detail\n</page>',
+        fingerprint: 'fp-iframe',
+      };
+    };
+
+    try {
+      const out = await readPageFromTab({ id: 7 }, { detail: 'addresses' });
+
+      assert.equal(out.fingerprint, 'fp-top', '指纹必须取顶层 frame');
+      assert.match(out.text, /## 列表\n {2}容器 div\.row/, '顶层地址段保留');
+      assert.match(out.text, /## iframe（frameId=3）/, 'iframe 段带标记');
+      assert.match(out.text, /容器 div\.detail/, 'iframe 的地址段出现');
+      assert.match(out.text, /<\/page>$/, '整段要以 </page> 收尾');
+    } finally {
+      stub.state.frames = null;
+      stub.state.sendMessageByFrame = null;
+    }
+  });
+
+  test("probe + all：带每个 frame 的一句话摘要（C'）", async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    stub.state.frames = [{ frameId: 0 }, { frameId: 5 }];
+    stub.state.sendMessageByFrame = async (tabId, msg, frameId) => {
+      if (frameId === 0)
+        return {
+          text: '<page url="https://a.com/list" title="列表" detail="probe" fingerprint="fp0">\n## 概览\n  可见文本 100 字\n  可操作元素 40 个\n</page>',
+          fingerprint: 'fp0',
+        };
+      return {
+        text: '<page url="https://b.com/embed" title="详情" detail="probe" fingerprint="fp5">\n## 概览\n  可见文本 800 字\n  可操作元素 2500 个\n</page>',
+        fingerprint: 'fp5',
+      };
+    };
+
+    try {
+      const out = await readPageFromTab({ id: 7 }, { detail: 'probe' });
+
+      assert.match(out.text, /## frames（top \+ iframe）/);
+      assert.match(
+        out.text,
+        /top: https:\/\/a\.com\/list title="列表" 可操作元素 40 个/
+      );
+      assert.match(
+        out.text,
+        /iframe\[frameId=5\]: https:\/\/b\.com\/embed title="详情" 可操作元素 2500 个/
+      );
+      assert.equal(out.fingerprint, 'fp0');
+    } finally {
+      stub.state.frames = null;
+      stub.state.sendMessageByFrame = null;
+    }
+  });
+
+  test('frame:top 时只读顶层，不扫 iframe', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    const called = [];
+    stub.state.sendMessageByFrame = async (tabId, msg, frameId) => {
+      called.push(frameId);
+      return {
+        text: '<page url="https://a.com" title="t" detail="addresses">x</page>',
+        fingerprint: 'fp',
+      };
+    };
+
+    try {
+      const out = await readPageFromTab(
+        { id: 7 },
+        { detail: 'addresses', frame: 'top' }
+      );
+
+      assert.deepEqual(called, [0]);
+      assert.equal(out.fingerprint, 'fp');
+    } finally {
+      stub.state.sendMessageByFrame = null;
+    }
+  });
+});
+
 describe('agentLog —— 关键事件打点（接线回归）', () => {
   test('toBackground 每次调用都留下 channel.send / channel.reply', async () => {
     const stub = await import('./__stubs__/webextension-polyfill');
@@ -779,9 +1045,9 @@ test('T-35/B1 接线守卫：标题回写在发起时捕获 id，且只 patch ti
   );
 });
 
-test('T-69/T-84 接线守卫：enabledGroups 支持函数求值，宿主装配必填校验在', () => {
+test('T-135/T-84 接线守卫：enabledGroups 支持函数求值，宿主装配必填校验在', () => {
   const indexSrc = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
-  // runtime 侧：enabledGroups 的函数形式在每次 send 求值（T-69）
+  // runtime 侧：enabledGroups 的函数形式在每次 send 求值（T-135）
   assert.ok(
     indexSrc.includes("typeof enabledGroups === 'function'"),
     'index.js 必须支持 enabledGroups 传函数（每次 send 求值，权限变化下一轮生效）'
@@ -802,7 +1068,7 @@ test('T-69/T-84 接线守卫：enabledGroups 支持函数求值，宿主装配�
     'agentHost 必须校验 getWorkflowId 缺失（否则会话归属静默变全局）'
   );
 
-  // 编辑器宿主必须传 getter 而不是 setup 期快照（T-69 本体）
+  // 编辑器宿主必须传 getter 而不是 setup 期快照（T-135 本体）
   const pageSrc = readFileSync(
     join(ROOT, 'src/newtab/pages/workflows/[id].vue'),
 
@@ -815,70 +1081,79 @@ test('T-69/T-84 接线守卫：enabledGroups 支持函数求值，宿主装配�
   );
 });
 
+// T-50：变量数据源与工作流上下文的宿主接线。这一段曾经整条缺失 ——
+// runtime 有个 `async () => ({})` 兜底，于是所有宿主拿到的都是「（空）」。
+test('T-50：两个宿主都必须注入 getVariables，独立页显式说未绑定', () => {
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const hostSrc = readFileSync(
+    join(ROOT, 'src/composable/agentHost.js'),
+    'utf8'
+  );
+  const pageSrc = readFileSync(
+    join(ROOT, 'src/newtab/pages/workflows/[id].vue'),
+    'utf8'
+  );
+  const standaloneSrc = readFileSync(
+    join(ROOT, 'src/newtab/pages/Agent.vue'),
+    'utf8'
+  );
 
-  // T-50：变量数据源与工作流上下文的宿主接线。这一段曾经整条缺失 ——
-  // runtime 有个 `async () => ({})` 兜底，于是所有宿主拿到的都是「（空）」。
-  test('T-50：两个宿主都必须注入 getVariables，独立页显式说未绑定', () => {
-    const pageSrc = readFileSync(
-      join(ROOT, 'src/newtab/pages/workflows/[id].vue'),
-      'utf8'
-    );
-    const standaloneSrc = readFileSync(
-      join(ROOT, 'src/newtab/pages/Agent.vue'),
-      'utf8'
-    );
+  assert.match(
+    hostSrc,
+    /deps\.getVariables 必填/,
+    'agentHost 必须校验 getVariables 缺失（否则又是「（空）」）'
+  );
+  assert.match(
+    hostSrc,
+    /getVariables:\s*deps\.getVariables/,
+    'agentHost 必须把 getVariables 原样透给 runtime，否则注入停在半路'
+  );
+  assert.match(
+    pageSrc,
+    /getVariables:\s*async\s*\(\s*\)\s*=>/,
+    '编辑器宿主必须注入变量数据源（§7.3 的 globalData + 全局变量表）'
+  );
+  assert.match(
+    pageSrc,
+    /bound:\s*true/,
+    '编辑器宿主持有工作流，返回值必须是 bound:true'
+  );
+  assert.match(
+    standaloneSrc,
+    /getVariables:\s*async\s*\(\s*\)\s*=>\s*\(\s*\{\s*bound:\s*false\s*\}\s*\)/,
+    '独立助手页没有工作流，必须显式 bound:false，不能靠空对象蒙混'
+  );
+});
 
-    assert.match(
-      hostSrc,
-      /deps\.getVariables 必填/,
-      'agentHost 必须校验 getVariables 缺失（否则又是「（空）」）'
-    );
-    assert.match(
-      hostSrc,
-      /getVariables:\s*deps\.getVariables/,
-      'agentHost 必须把 getVariables 原样透给 runtime，否则注入停在半路'
-    );
-    assert.match(
-      pageSrc,
-      /getVariables:\s*async\s*\(\s*\)\s*=>/,
-      '编辑器宿主必须注入变量数据源（§7.3 的 globalData + 全局变量表）'
-    );
-    assert.match(
-      pageSrc,
-      /bound:\s*true/,
-      '编辑器宿主持有工作流，返回值必须是 bound:true'
-    );
-    assert.match(
-      standaloneSrc,
-      /getVariables:\s*async\s*\(\s*\)\s*=>\s*\(\s*\{\s*bound:\s*false\s*\}\s*\)/,
-      '独立助手页没有工作流，必须显式 bound:false，不能靠空对象蒙混'
-    );
-  });
+test('T-50：工作流上下文每轮现取，空的不传（不许传空串）', () => {
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const hostSrc = readFileSync(
+    join(ROOT, 'src/composable/agentHost.js'),
+    'utf8'
+  );
+  assert.match(
+    hostSrc,
+    /deps\.getWorkflowContext/,
+    'agentHost 必须接受 getWorkflowContext（可省，但传了就得用）'
+  );
+  assert.match(
+    hostSrc,
+    /workflowContext\s*\?\s*\{\s*workflowContext\s*\}\s*:\s*\{\}/,
+    '空上下文不许传空串（buildUserMessage 会包出一个空的 untrusted 段）'
+  );
 
-  test('T-50：工作流上下文每轮现取，空的不传（不许传空串）', () => {
-    assert.match(
-      hostSrc,
-      /deps\.getWorkflowContext/,
-      'agentHost 必须接受 getWorkflowContext（可省，但传了就得用）'
-    );
-    assert.match(
-      hostSrc,
-      /workflowContext\s*\?\s*\{\s*workflowContext\s*\}\s*:\s*\{\}/,
-      '空上下文不许传空串（buildUserMessage 会包出一个空的 untrusted 段）'
-    );
-
-    // 独立页可以不给，但编辑器页必须有 —— 否则 untrusted_workflow_context
-    // 这个已登记标签永远不会被生产代码触发（那就是 T-50 登记时点名的病灶）
-    const pageSrc = readFileSync(
-      join(ROOT, 'src/newtab/pages/workflows/[id].vue'),
-      'utf8'
-    );
-    assert.match(
-      pageSrc,
-      /getWorkflowContext:\s*\(\s*\)\s*=>/,
-      '编辑器宿主必须提供工作流上下文摘要'
-    );
-  });
+  // 独立页可以不给，但编辑器页必须有 —— 否则 untrusted_workflow_context
+  // 这个已登记标签永远不会被生产代码触发（那就是 T-50 登记时点名的病灶）
+  const pageSrc = readFileSync(
+    join(ROOT, 'src/newtab/pages/workflows/[id].vue'),
+    'utf8'
+  );
+  assert.match(
+    pageSrc,
+    /getWorkflowContext:\s*\(\s*\)\s*=>/,
+    '编辑器宿主必须提供工作流上下文摘要'
+  );
+});
 test('T-90 接线守卫：面板收 :host 单绑定，两宿主不再逐字重复', () => {
   const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
   const panelSrc = readFileSync(
@@ -994,4 +1269,14 @@ test('T-81b 接线守卫：技能索引进 prompt、read_skill 工具有查找�
   const toolSrc = readFileSync(join(ROOT, 'src/agent/tools/skill.js'), 'utf8');
   assert.match(toolSrc, /class: 'read'/);
   assert.match(toolSrc, /group: 'context'/);
+});
+
+test('T-143 接线守卫：loop 必须把 wrapUntrusted 注入 buildSystemPrompt（技能索引进 system prompt 前包装）', () => {
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const loopSrc = readFileSync(join(ROOT, 'src/agent/loop.js'), 'utf8');
+
+  assert.ok(
+    /buildSystemPrompt\(facts, wrapUntrusted\)/.test(loopSrc),
+    'system prompt 构建必须注入 wrapUntrusted —— 否则技能索引裸进 system prompt（T-143）'
+  );
 });

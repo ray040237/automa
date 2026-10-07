@@ -337,7 +337,7 @@ test('tools 参数不是数组时抛错，不回落全量TOOLS', () => {
   assert.throws(() => toAgentTools(null), /tools|数组|必填/);
 });
 
-test('声明的 ctx 键在 toolCtx 里不存在时装配期抛错，点名工具与键（T-71）', () => {
+test('声明的 ctx 键在 toolCtx 里不存在时装配期抛错，点名工具与键（T-133）', () => {
   assert.throws(
     () =>
       registry([{ ...sampleTools()[0], ctx: ['targetTab', 'sendMessage'] }]),
@@ -354,8 +354,8 @@ test('声明的 ctx 键在 toolCtx 里不存在时装配期抛错，点名工具
   );
 });
 
-test('T-70 回归：生产形状（JS getter + adapter spread）下 focus_tab 必须工作', async () => {
-  // T-70 实锤：tabs.js 曾要求 pins 是函数，而 index.js 的 toolCtx 提供的是
+test('T-132 回归：生产形状（JS getter + adapter spread）下 focus_tab 必须工作', async () => {
+  // T-132 实锤：tabs.js 曾要求 pins 是函数，而 index.js 的 toolCtx 提供的是
   // JS getter，adapter spread 求值后是数组 —— focus_tab 在生产里 100% 失败，
   // 而 tabs.test.js 的夹具按函数形态传所以全绿。这条测试复刻生产链路：
   // getter 形状的 toolCtx 经 toAgentTools 的 spread，再执行真 focus_tab。
@@ -386,4 +386,82 @@ test('T-70 回归：生产形状（JS getter + adapter spread）下 focus_tab �
 
   assert.equal(r.isError, false, r.content[0].text);
   assert.ok(r.content[0].text.includes('已把操作焦点切到'), r.content[0].text);
+});
+
+/* ───────── T-123：工具级硬超时兜底 ───────── */
+
+test('T-123：execute 挂死时 adapter 返回 error 观察值，而不是把 loop 卡死', async () => {
+  // 直接复现「通道不返回」的极端情况：execute 是一个永不 settle 的 Promise。
+  // 没有 toolTimeoutMs 这一层时，这个 Promise 会一直 pending，loop 跟着一直
+  // await —— 那一轮不收尾也不落盘。
+  const hang = {
+    name: 'hang',
+    class: 'read',
+    group: 'context',
+    ctx: [],
+    description: '永不返回的工具',
+    parameters: { type: 'object', properties: {} },
+    execute: () => new Promise(() => {}),
+  };
+  const list = toAgentTools([hang], { toolCtx: {}, toolTimeoutMs: 25 });
+  const start = Date.now();
+
+  // 关键：没有 try/await 的话测试会等 60s 默认值。这里传 25ms 来钉行为。
+  const r = await find(list, 'hang').execute('c1', {});
+  const elapsed = Date.now() - start;
+
+  assert.equal(r.isError, true, '超时必须产出 error 观察值而不是 hang');
+  assert.ok(
+    r.content[0].text.includes('<untrusted_tool_result>'),
+    'error 观察值也要走不可信包装：' + r.content[0].text
+  );
+  assert.ok(
+    r.content[0].text.includes('工具执行超过'),
+    '正文必须告诉模型超时：' + r.content[0].text
+  );
+  assert.ok(elapsed < 1000, `超时必须快速返回，实际 ${elapsed}ms`);
+});
+
+test('T-123：deps.toolTimeoutMs 作为参数透传，不硬编码在工具里', async () => {
+  // 小工具的 execute 人为等个 60ms，用 toolTimeoutMs: 25 应该走超时；
+  // 换成 toolTimeoutMs: 200 应该等它正常返回。这两条合起来才证明"工具自己
+  // 的时间被 deps 的超时压住了"，而不是假的调用了 raceTimeout。
+  const slow = {
+    name: 'slow',
+    class: 'read',
+    group: 'context',
+    ctx: [],
+    description: '人为慢一点的工具',
+    parameters: { type: 'object', properties: {} },
+    execute: () =>
+      new Promise((resolve) => {
+        setTimeout(() => resolve({ payload: 'slow ok' }), 60);
+      }),
+  };
+
+  const shortList = toAgentTools([slow], { toolCtx: {}, toolTimeoutMs: 25 });
+  const rShort = await find(shortList, 'slow').execute('c1', {});
+  assert.equal(rShort.isError, true, '25ms < 60ms 必须超时');
+
+  const longList = toAgentTools([slow], { toolCtx: {}, toolTimeoutMs: 200 });
+  const rLong = await find(longList, 'slow').execute('c1', {});
+  assert.equal(rLong.isError, false, '200ms > 60ms 必须正常返回');
+  assert.ok(rLong.content[0].text.includes('slow ok'), rLong.content[0].text);
+});
+
+test('T-123：工具自己 reject 时走 catch，不走超时兜底', async () => {
+  // 工具抛错是「拿不到结果」的错误路径（catch → 错误观察值）；
+  // 超时是「等不到它」的兜底。两者不能混：
+  // 抛错的工具不能因为 error 观察值而「超时未返回」。
+  const list = toAgentTools(sampleTools(), {
+    toolCtx: { sendMessage: () => {} },
+    toolTimeoutMs: 25,
+  });
+  const r = await find(list, 'boom').execute('c1', {});
+
+  assert.equal(r.isError, true);
+  assert.ok(
+    r.content[0].text.includes('tool exploded'),
+    '必须是工具自身的错误，不是超时：' + r.content[0].text
+  );
 });

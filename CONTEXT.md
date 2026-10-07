@@ -60,7 +60,7 @@ _Avoid_: 把它叫「用户消息」(那是每轮的 untrusted_user_message);与
 _Avoid_: 把它叫 prompt/命令——「块命令」另有所指;与「自定义指令」混用(指令常驻,模板按需触发)。
 
 **技能(skill)**:
-用户导入的知识单元(T-81b),存 `automaAgentSkills`,形状 `{name, description, body, files, enabled}`。**两级注入**:system prompt 只放一行摘要(`# 可用技能` 索引区),正文由 `read_skill` 工具(class: read,group: context)按需取——正文经 `untrusted_tool_result` 包装,因为导入的技能可能是第三方产物,红线不豁免;「按技能办事」由索引区的说明交代,与安全声明冲突时以安全声明为准。`read_skill` 的观察值预算放宽到 32K(envelope 的 `maxChars` 覆盖,超限截断模型可见,不静默)。附带文件只收文本,二进制导入时拒收并上报。zip 往返与 pi / Claude Code 的 skill 文件夹形状互通。
+用户导入的知识单元(T-81b),存 `automaAgentSkills`,形状 `{name, description, body, files, enabled}`。**两级注入**:system prompt 只放一行摘要(`# 可用技能` 索引区,索引本身经 `untrusted_skill_index` 包装,T-143),正文由 `read_skill` 工具(class: read,group: context)按需取——正文经 `untrusted_tool_result` 包装,因为导入的技能可能是第三方产物,红线不豁免;「按技能办事」由索引区的说明交代,与安全声明冲突时以安全声明为准。`read_skill` 的观察值预算放宽到 32K(envelope 的 `maxChars` 覆盖,超限截断模型可见,不静默)。附带文件只收文本,二进制导入时拒收并上报。zip 往返与 pi / Claude Code 的 skill 文件夹形状互通。
 _Avoid_: 把技能正文当可信指令(它走 untrusted 通道);把技能与模板混用(模板是输入片段,技能是按需知识)。
 
 **会话(Session)**:
@@ -121,7 +121,7 @@ _Avoid_: 「用到什么自己知道,不用声明」;缺省静默兜底。
 
 **活值(ctx 里的动态值)**:
 toolCtx 里「工具要读到这一刻的值」(targetTab / pins / editor)一律用 **JS getter** 提供。adapter 每次 execute `{...toolCtx}` spread 会**求值 getter**,工具拿到的就是本步执行时刻的快照 —— 这是唯一的活值习语。
-_Avoid_: 函数式取新(`ctx.pins()`)。T-70 的根因:「getter」一词在两侧各说各话(tabs.js 要函数、index.js 给 JS getter),focus_tab 生产全挂而夹具按函数传所以全绿 —— 同一个词出现两种理解时,必须有一条跨 seam 的回归测试钉住真实链路。
+_Avoid_: 函数式取新(`ctx.pins()`)。T-132 的根因:「getter」一词在两侧各说各话(tabs.js 要函数、index.js 给 JS getter),focus_tab 生产全挂而夹具按函数传所以全绿 —— 同一个词出现两种理解时,必须有一条跨 seam 的回归测试钉住真实链路。
 
 **确认门(requestConfirmation)**:
 write 工具执行前的用户裁决,以 pending promise 挂在宿主。闸的判定收在 `requiresConfirmation`(tools/index.js,ADR 0002 点名的执行者);展示载荷由 confirm.js 组装,各写类工具用 `confirmDetail(args)` 自带「用户在放行什么」的事实(kind/detail,`validateTools` 强制 write ⇒ confirmDetail),name/targetTitle/canRemember 由 confirm.js 钉死不许工具覆盖。**只要卡片变得不可达就必须先 `resolve(false)`** —— 三个入口:切会话(`guardAgentSwitch`)、宿主卸载(`agentHost` 的 `onBeforeUnmount`)、**卡片所在的 `AgentPanel.vue` 自身被卸载**(切走助手面板/打开块编辑卡/收起侧栏都是 `v-if` 真卸载)。缺任何一个,loop 都会永远 await,那一轮不收尾也不落盘,表现与「助手卡死」无异(T-02)。
@@ -137,7 +137,7 @@ _Avoid_: result(与 tool_call_id 配对的 wire tool 消息易混)。
 ## 安全
 
 **untrusted 包装**:
-一切第三方数据(页面正文、工具返回、用户输入回显)进 prompt 前必须包 `<untrusted_*>` 标签并做逃逸清洗(escapeUntrustedWrappers)。新增标签必须登记进 `UNTRUSTED_WRAPPER_TAGS`(当前 8 个,由测试钉死;`untrusted_compaction_summary` 是 T-76 的压缩摘要投影用)。
+一切第三方数据(页面正文、工具返回、用户输入回显)进 prompt 前必须包 `<untrusted_*>` 标签并做逃逸清洗(escapeUntrustedWrappers)。新增标签必须登记进 `UNTRUSTED_WRAPPER_TAGS`(当前 9 个,由测试钉死;`untrusted_compaction_summary` 是 T-76 的压缩摘要投影用,`untrusted_skill_index` 是 T-143 的技能索引用)。
 
 **G5 红线**:
 **agent 永远不能保存工作流**。只许改内存画布(且仅限有画布的宿主),由用户看过后自己保存。任何 `saveWorkflow` / `workflowStore.update` 出现在 agent 可达路径上都是违反。

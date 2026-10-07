@@ -138,9 +138,28 @@ test('wrapUntrusted 拒绝未知标签（防止打错标签后内容裸奔）', 
   );
 });
 
-test('标签清单就是文档约定的 8 个（含 system_notice 与 compaction_summary）', () => {
-  assert.equal(UNTRUSTED_WRAPPER_TAGS.length, 8);
+// T-57：原来这里只钉 `length === 8`，于是「删一个标签再补一个别的」测试照样全绿 ——
+// 长度没变。而这份清单是「模型能识别的边界」的唯一声明处，误删一个（比如
+// untrusted_tool_result）会让那类内容对模型失去结构化边界，且没有任何断言会响。
+// 改成钉住全部标签名与顺序：AGENTS.md 红线 2 写的「被测试钉死」从这天起才成立。
+// 代价是刻意的摩擦 —— 新增标签必须同步改这里（那是提醒，不是障碍）。
+const EXPECTED_WRAPPER_TAGS = [
+  'untrusted_page_content',
+  'untrusted_tab_metadata',
+  'untrusted_workflow_context',
+  'untrusted_user_message',
+  'untrusted_tool_result',
+  'untrusted_compacted_steps',
+  'untrusted_system_notice',
+  'untrusted_compaction_summary',
+  // T-143：技能索引进 system prompt 的专用标签
+  'untrusted_skill_index',
+];
+
+test('T-57：清单就是红线 2 约定的 9 个标签名与顺序（不是「长度为 9」）', () => {
+  assert.deepEqual(UNTRUSTED_WRAPPER_TAGS, EXPECTED_WRAPPER_TAGS);
 });
+
 test('T-07：展示层反包装剥掉外层标签，正文原样留下', () => {
   const wrapped = wrapUntrusted(
     'untrusted_page_content',

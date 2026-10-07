@@ -22,12 +22,18 @@ import {
   readBlockTool,
 } from './canvas';
 import { listTabsTool, focusTabTool, openUrlTool } from './tabs';
+import { TOOL_CLASSES, defineTool } from './define';
 
-/** 所有允许的工具分类。新增分类必须同时想清楚「需不需要用户确认」。 */
-export const TOOL_CLASSES = ['read', 'write'];
+/**
+ * 所有允许的工具分类。新增分类必须同时想清楚「需不需要用户确认」。
+ *
+ * 搬去 `define.js` 了（T-127）：`defineTool` 也要用这份清单，而工具文件
+ * 反过来 import `defineTool` 会与本文件成环。
+ */
+export { TOOL_CLASSES, defineTool } from './define';
 
 /** highlightSelector 只是纯函数，这里补上工具外壳。 */
-export const highlightSelectorTool = {
+export const highlightSelectorTool = defineTool({
   name: 'highlight_selector',
   class: 'write',
   group: 'page',
@@ -47,13 +53,18 @@ export const highlightSelectorTool = {
       selector: { type: 'string', description: '要高亮的 CSS selector。' },
       limit: { type: 'number', description: '最多高亮几个，默认 10。' },
       durationMs: { type: 'number', description: '保持多久毫秒，默认 4000。' },
+      frame: {
+        type: 'string',
+        description:
+          '在哪个 frame 里高亮。默认 top=只主 frame；all=所有 frame（计数跨 frame 合并）；传 frameId 数字=指定 frame。',
+      },
     },
     required: ['selector'],
   },
   async execute(args, ctx) {
     return highlightSelector(ctx, args || {});
   },
-};
+});
 
 export const TOOLS = [
   readPage,
@@ -139,7 +150,7 @@ export function validateTools(tools) {
         '工具 ' +
           tool.name +
           ' 缺少 ctx 声明。ctx 列出 execute 需要的 toolCtx 键，' +
-          '是工具与装配层的 interface 契约 —— 缺声明等于放弃装配期校验（T-71）。'
+          '是工具与装配层的 interface 契约 —— 缺声明等于放弃装配期校验（T-133）。'
       );
     }
 
@@ -149,7 +160,7 @@ export function validateTools(tools) {
       );
     }
 
-    // T-83：写类工具必须自带「用户在放行什么」的事实。缺了确认卡会静默
+    // T-134：写类工具必须自带「用户在放行什么」的事实。缺了确认卡会静默
     // 落进 generic 摊开（不报错但文案丢失），所以在加载期就拦 —— 与
     // 「缺 class 即 throw」同一哲学。read 工具不过闸，无此要求。
     if (tool.class === 'write' && typeof tool.confirmDetail !== 'function') {

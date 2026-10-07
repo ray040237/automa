@@ -1,6 +1,6 @@
 # 迁移票据总览
 
-Spec：[agent-core-migration-spec.md](../agent-core-migration-spec.md) ｜ 决策：[ADR 0004](../adr/0004-pi-agent-core-migration.md) ｜ 代价与欠账：[B9](../backlog.md)
+Spec：[agent-core-migration-spec.md](../agent-core-migration-spec.md) ｜ 决策：[ADR 0004](../adr/0004-pi-agent-core-migration.md) ｜ 代价与欠账：[B9](../backlog-done.md)
 
 **目标**：用 pi-agent-core 替换自研 agent 内核与 provider 层，保留全部产品契约。
 

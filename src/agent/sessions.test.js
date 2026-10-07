@@ -5,7 +5,9 @@ import {
   createSessionId,
   createSessionStore,
   cropToTurns,
+  hasInterruptedTail,
   indexEntryFromSession,
+  INTERRUPTED_TURN_NOTICE,
   sessionOptionLabel,
   sessionStorageKey,
   titleFromEvents,
@@ -87,6 +89,87 @@ test('cropToTurns：切口永不越过最后一条 compaction 锚点（T-76）',
   assert.equal(
     croppedPlain.filter((e) => e.kind === AGENT_EVENTS.USER_MESSAGE).length,
     20
+  );
+});
+
+/* ---------------- B7：重开会话时的「上一轮被中断」判据 ---------------- */
+
+const doneEv = () => ({ kind: AGENT_EVENTS.DONE, aborted: false });
+const toolCall = (id) => ({
+  kind: AGENT_EVENTS.TOOL_CALL,
+  name: 'read_page',
+  args: {},
+  toolCallId: id,
+});
+const toolResult = (id) => ({
+  kind: AGENT_EVENTS.TOOL_RESULT,
+  name: 'read_page',
+  toolCallId: id,
+  observation: 'x',
+});
+
+test('B7：正常收尾（末尾 DONE / 工具调用有配对结果）不算中断', () => {
+  assert.equal(hasInterruptedTail([]), false);
+  assert.equal(
+    hasInterruptedTail([userMsg('问'), delta('答'), doneEv()]),
+    false
+  );
+  assert.equal(
+    hasInterruptedTail([
+      userMsg('问'),
+      toolCall('t1'),
+      toolResult('t1'),
+      delta('答'),
+      doneEv(),
+    ]),
+    false
+  );
+});
+
+test('B7：悬空 TOOL_CALL（无配对结果）判为中断', () => {
+  assert.equal(hasInterruptedTail([userMsg('问'), toolCall('t1')]), true);
+  // 多个调用里只要有一个悬空即命中
+  assert.equal(
+    hasInterruptedTail([
+      userMsg('问'),
+      toolCall('t1'),
+      toolCall('t2'),
+      toolResult('t1'),
+    ]),
+    true
+  );
+});
+
+test('B7：判据只看最后一条 DONE 之后的 tail', () => {
+  // 上一轮虽有过悬空调用，但随后 DONE 收尾 → 末尾是收尾态，不提示
+  assert.equal(
+    hasInterruptedTail([userMsg('问'), toolCall('t1'), doneEv()]),
+    false
+  );
+  // 已收尾的一轮之后又起了新的一轮、且新轮悬空 → 命中
+  assert.equal(
+    hasInterruptedTail([userMsg('a'), doneEv(), userMsg('b'), toolCall('t9')]),
+    true
+  );
+});
+
+test('B7：tail 里已有本提示 → 幂等不重复补', () => {
+  const notice = {
+    kind: AGENT_EVENTS.SYSTEM_NOTICE,
+    text: INTERRUPTED_TURN_NOTICE,
+  };
+  assert.equal(
+    hasInterruptedTail([userMsg('问'), toolCall('t1'), notice]),
+    false
+  );
+  // 别的 system-notice 不能冒充本提示，仍应命中
+  assert.equal(
+    hasInterruptedTail([
+      userMsg('问'),
+      toolCall('t1'),
+      { kind: AGENT_EVENTS.SYSTEM_NOTICE, text: '目标页已关闭' },
+    ]),
+    true
   );
 });
 

@@ -380,6 +380,20 @@
         "unknownShape": "The endpoint replied, but the body is not a model list this page understands. Type the model name below instead.",
         "network": "Could not reach the endpoint: {msg}"
       },
+      "test": {
+        "button": "Test connection",
+        "testing": "Testing…",
+        "ok": "Connected: {model} responded normally.",
+        "needModel": "This connection has no model yet — add one below, then test.",
+        "badUrl": "Fill in an http:// or https:// endpoint first.",
+        "keyRejected": "The endpoint rejected the key (HTTP {status}). Check the key and try again.",
+        "rateLimited": "The endpoint is rate-limiting (HTTP 429) — the connection works, try again later.",
+        "notFound": "The endpoint has no /chat/completions (HTTP {status}). Check that the endpoint address is complete.",
+        "httpError": "The endpoint answered with HTTP {status}.",
+        "unknownShape": "The endpoint replied, but the body is not a chat result this page understands.",
+        "network": "Could not reach the endpoint: {msg}",
+        "timeout": "No response within 15 seconds. Check the endpoint address and your network."
+      },
       "picker": {
         "title": "Available models",
         "empty": "The endpoint returned an empty list.",
@@ -757,8 +771,7 @@
         "title": "Pick a page",
         "loading": "Reading tabs…",
         "empty": "Open a normal webpage first",
-        "mainWindow": "Main window",
-        "window": "Window {n}",
+          "window": "Window {n}",
         "pinned": "pinned",
         "auto": "auto",
         "staleClosed": "Target page closed",
@@ -768,6 +781,10 @@
       },
       "copy": "Copy",
       "copied": "Copied",
+      "copyAll": "Copy all",
+      "contextShort": "Context {pct}%",
+      "contextHint":
+        "About {pct}% of the context window used ({win}). The window size is the suggested value from settings — BYOK providers do not expose the real limit, so this is an estimate.",
       "notConfigured": "Configure your API key first",
       "error": "Something went wrong",
       "tool": {
@@ -810,6 +827,14 @@
       "interject": "Add",
       "stop": "Stop generating",
       "queued": "Queued",
+      "queuedPending": "{n} interjection(s) queued — delivered before the next step",
+      "group": {
+        "page": "Read page",
+        "context": "Vars & blocks",
+        "tab": "Tabs",
+        "canvas": "Canvas"
+      },
+      "initializing": "The assistant is still starting up — try again in a moment.",
       "usage": "Session token usage: {in} in / {out} out",
       "session": {
         "new": "New chat",

@@ -52,7 +52,10 @@ async function aiWorkflow(block, { refData }) {
     }
 
     if (assignVariable) {
-      this.setVariable(variableName, runResponse.data.result);
+      // T-03：必须 await。setVariable 是 async（$$ 全局变量还要落 IndexedDB），
+      // 不等它就返回，后面的块会读到旧值；它自己 reject 时更糟 —— 那是一条
+      // unhandled rejection，本块照样报成功。
+      await this.setVariable(variableName, runResponse.data.result);
     }
 
     if (saveData) {
@@ -68,7 +71,14 @@ async function aiWorkflow(block, { refData }) {
     };
   } catch (error) {
     console.error('AI workflow execution failed:', error);
-    throw new Error(error.message);
+    // T-03：原字段必须留着。WorkflowWorker 的错误日志
+    // （`...(error.data || {})`、`...(error.ctxData || {})`）正是靠它们拼上下文，
+    // `new Error(error.message)` 只搬了 message，日志里就只剩一句干巴巴的话。
+    // 全仓确实有人在 error 上挂 ctxData（handlerWebhook.js:51）。
+    // 非 Error 的抛出物（字符串、对象）仍然包一层，message 才读得出来。
+    if (error instanceof Error) throw error;
+
+    throw Object.assign(new Error(String(error)), error);
   }
 }
 

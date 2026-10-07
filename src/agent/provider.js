@@ -12,8 +12,10 @@
  *    也没有用户 shell。凭据 resolve 失败会让 Models 拿不到 key，
  *    而失败是**静默**的（请求带空 Bearer，401 从 provider 侧才可见）。
  * 2. **contextWindow 来自用户配置，不是模型目录。** BYOK 场景枚举不到模型元数据，
- *    用户在设置页手填。它作为模型元数据喂给 pi；本版不做上下文裁剪
- *    （B9 第 1 项），我们侧没有任何代码读它做预算。
+ *    用户在设置页手填。它作为模型元数据喂给 pi，同时**由我们侧读它做压缩预算**：
+ *    `loop.js` 的 runCompaction 拿它算阈值与切点（`compaction.js` 的
+ *    `shouldCompact` / `planCompaction`），`index.js` 在 send 时把它透给 loop。
+ *    0 或缺省 = 压缩关闭；改这个值会直接改变什么时候开始压历史。
  * 3. **temperature 由我们注入。** 实测 pi 的 Agent **不转发 temperature** ——
  *    `createLoopConfig()` 里没有这个字段，`streamFn` 收到的 options 也不带。
  *    不在这里注入，用户在设置页调的温度就是静默失效的。
@@ -59,7 +61,9 @@ async function loadPi() {
  * 纯函数（不 import pi），所以能直接被 node --test 覆盖 ——
  * 「模型对象字段填错」这类问题最容易在真发请求时才暴露，而那时只能看到 400。
  *
- * @param {Object} config config.js 的配置（已过validateConfig）
+ * @param {Object} config config.js 的配置。**没有**「已过 validateConfig」这回事：
+ *   `loadConfig` 只合并默认值 + 解密，唯一带 protocol 兜底的关口是
+ *   `resolveActiveConfig` 里的 `isHttpUrl`（T-66）。调用方要自己保证别的字段。
  * @returns {Object} pi 的 Model
  */
 export function buildModel(config) {

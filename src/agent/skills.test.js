@@ -5,6 +5,8 @@ import {
   SKILLS_KEY,
   SKILL_BODY_SOFT_LIMIT,
   SKILL_DESCRIPTION_MAX,
+  MAX_IMPORT_ENTRIES,
+  MAX_IMPORT_CHARS,
   findSkill,
   getSkillIndexFrom,
   importBackupZip,
@@ -362,4 +364,144 @@ test('软限常量是给 UI 用的正数且 read_skill 预算覆盖大于全局 
   assert.ok(READ_SKILL_MAX_CHARS > 8000);
   assert.ok(SKILL_TOTAL_SOFT_LIMIT >= SKILL_BODY_SOFT_LIMIT);
   assert.ok(SKILL_INDEX_SOFT_LIMIT > 0);
+});
+
+// —— T-81b review 修复（T-141 ~ T-147）——
+
+test('T-141：全量备份保真 —— 停用状态与 id 原样往返', async () => {
+  const s = normalizeSkill({
+    name: 'disabled',
+    description: '停用技能',
+    body: '正文',
+    enabled: false,
+  });
+  const bytes = await exportBackupZip({
+    skills: [s],
+    commands: [],
+    instructions: null,
+  });
+  const out = await importBackupZip(bytes);
+
+  assert.equal(out.skills.length, 1);
+  assert.equal(out.skills[0].enabled, false, '恢复后停用技能不得复活');
+  assert.equal(out.skills[0].id, s.id, '恢复后 id 应稳定，不该重生');
+  assert.equal(out.skills[0].body, '正文');
+});
+
+test('T-142：mergeSkills 保留原有的 enabled/id；incoming 显式声明才覆盖', () => {
+  const existing = [normalizeSkill({ name: 'a', body: 'old', enabled: false })];
+  const keptId = existing[0].id;
+
+  const { merged } = mergeSkills(existing, [{ name: 'a', body: 'new' }]);
+  const m = merged.find((s) => s.name === 'a');
+
+  assert.equal(m.body, 'new', '正文按合并语义更新');
+  assert.equal(m.enabled, false, 'incoming 没带 enabled 不得复活停用技能');
+  assert.equal(m.id, keptId, 'incoming 没带 id 不得换掉稳定 id');
+
+  const explicit = mergeSkills(existing, [
+    { name: 'a', body: 'x', enabled: true },
+  ]).merged.find((s) => s.name === 'a');
+  assert.equal(explicit.enabled, true, 'incoming 显式 enabled 应当生效');
+});
+
+test('T-144：根 SKILL.md 不吞子目录技能 —— 各技能的子树互不越界', async () => {
+  const zip = new JSZip();
+
+  zip.file('SKILL.md', '---\nname: root\n---\n根');
+  zip.file('reference/api.md', '根参考');
+  zip.folder('sub').file('SKILL.md', '---\nname: sub\n---\n子');
+  zip.folder('sub').file('ref.md', '子参考');
+
+  const { skills: imported } = await importSkillsZip(
+    await zip.generateAsync({ type: 'uint8array' })
+  );
+
+  const root = imported.find((s) => s.name === 'root');
+  const sub = imported.find((s) => s.name === 'sub');
+
+  assert.ok(root && sub, '根技能与子技能都该各成一条');
+  assert.deepEqual(
+    root.files,
+    { 'reference/api.md': '根参考' },
+    '根技能不得收走子技能的 SKILL.md 与文件'
+  );
+  assert.deepEqual(sub.files, { 'ref.md': '子参考' });
+});
+
+test('T-145：frontmatter 值压成单行；成对引号才剥、值内引号保留', async () => {
+  // 直测解析侧：单侧引号是正文的一部分，不得剥掉
+  assert.equal(parseFrontmatter('---\nname: a"b\n---\nx').attrs.name, 'a"b');
+  assert.equal(
+    parseFrontmatter('---\ndescription: "审查"\n---\nx').attrs.description,
+    '审查'
+  );
+
+  // 往返：含换行与成对引号的描述
+  const bytes = await exportSkillZip({
+    name: 's',
+    description: '第一行\n第二行',
+    body: 'b',
+  });
+  const { skills: one } = await importSkillsZip(bytes);
+
+  assert.equal(one[0].description, '第一行 第二行', '换行被压成单行');
+
+  const bytes2 = await exportSkillZip({
+    name: 's2',
+    description: '"带引号"',
+    body: 'b',
+  });
+  const { skills: two } = await importSkillsZip(bytes2);
+
+  assert.equal(two[0].description, '"带引号"', '成对引号不得被误剥');
+});
+
+test('T-146：导入包超过条目数/总字符上限直接抛错，不静默裁', async () => {
+  const many = new JSZip();
+
+  for (let i = 0; i <= MAX_IMPORT_ENTRIES; i += 1) {
+    many.file(`f${i}.md`, 'x');
+  }
+
+  const manyBytes = await many.generateAsync({ type: 'uint8array' });
+
+  await assert.rejects(() => importSkillsZip(manyBytes), /条目过多/);
+
+  const huge = new JSZip();
+
+  huge.file('SKILL.md', '---\nname: big\n---\n正文');
+  huge.file('huge.md', 'x'.repeat(MAX_IMPORT_CHARS + 1));
+
+  const hugeBytes = await huge.generateAsync({ type: 'uint8array' });
+
+  await assert.rejects(() => importSkillsZip(hugeBytes), /内容过大/);
+});
+
+test('T-147a：导出时 files 里的 SKILL.md 不覆盖技能入口', async () => {
+  const bytes = await exportSkillZip({
+    name: 's',
+    body: '真正文',
+    files: { 'SKILL.md': '假入口', 'note.md': '备注' },
+  });
+  const { skills: imported } = await importSkillsZip(bytes);
+
+  assert.equal(imported.length, 1);
+  assert.equal(imported[0].body, '真正文');
+  assert.deepEqual(imported[0].files, { 'note.md': '备注' });
+});
+
+test('T-147b：全量备份目录名去重 —— 清洗后同名的技能都留得住', async () => {
+  const bytes = await exportBackupZip({
+    skills: [
+      normalizeSkill({ name: 'A/B', body: 'x' }),
+      normalizeSkill({ name: 'A\\B', body: 'y' }),
+    ],
+    commands: [],
+    instructions: null,
+  });
+  const out = await importBackupZip(bytes);
+
+  assert.equal(out.skills.length, 2, '清洗后同名的技能不得互相覆盖');
+  assert.deepEqual(out.skills.map((s) => s.name).sort(), ['A/B', 'A\\B']);
 });

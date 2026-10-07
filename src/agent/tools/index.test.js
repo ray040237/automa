@@ -7,6 +7,7 @@ import {
   findTool,
   requiresConfirmation,
 } from './index';
+import { defineTool } from './define';
 import {
   readPage,
   findText,
@@ -77,7 +78,7 @@ test('工具名重复抛错', () => {
   assert.throws(() => validateTools([ok(), ok()]), /工具名重复/);
 });
 
-test('缺 ctx 声明必须抛错 —— ctx 是工具与装配层的 interface 契约（T-71）', () => {
+test('缺 ctx 声明必须抛错 —— ctx 是工具与装配层的 interface 契约（T-133）', () => {
   const bad = ok();
   delete bad.ctx;
   assert.throws(() => validateTools([bad]), /缺少 ctx 声明/);
@@ -90,7 +91,7 @@ test('ctx 声明必须是字符串数组（允许空数组 = 零依赖）', () =
   assert.doesNotThrow(() => validateTools([ok({ ctx: [] })]));
 });
 
-test('每个真实工具的 ctx 声明与其实现用的键一一对应（T-71）', () => {
+test('每个真实工具的 ctx 声明与其实现用的键一一对应（T-133）', () => {
   // 改任何工具的 ctx 依赖（或新增工具）都必须有意识地更新这张表 ——
   // 它就是「工具声明什么、装配层给什么」这份契约的测试面。
   const expected = {
@@ -113,17 +114,77 @@ test('每个真实工具的 ctx 声明与其实现用的键一一对应（T-71�
   TOOLS.forEach((t) => assert.deepEqual(t.ctx, expected[t.name], t.name));
 });
 
+/* ---------------- T-127：defineTool 构造器 ---------------- */
+
+test('T-127：15 个生产工具全部经 defineTool 产出，且都带 label', () => {
+  // 这条是本条的核心断言：生产工具的形状由构造器统一归一，不再靠
+  // `adapter.js` 的 `tool.label || tool.name` 在运行时兜底。
+  TOOLS.forEach((t) => {
+    assert.equal(
+      t.label,
+      t.name,
+      t.name + ' 的 label 必须是 name（构造器补的）'
+    );
+  });
+  assert.equal(TOOLS.length, 15);
+});
+
+test('T-127：缺 label 时构造器补 name，显式给了就保留', () => {
+  const bare = defineTool(ok());
+  assert.equal(bare.label, 'x', '缺省填 name');
+
+  const named = defineTool(ok({ label: '自定义' }));
+  assert.equal(named.label, '自定义', '显式 label 不被覆盖');
+});
+
+test('T-127：缺必填字段在定义时就抛，不等装配期', () => {
+  ['name', 'class', 'group', 'description', 'parameters', 'execute'].forEach(
+    (key) => {
+      const bad = ok();
+      delete bad[key];
+      assert.throws(() => defineTool(bad), new RegExp(key), '缺 ' + key);
+    }
+  );
+});
+
+test('T-127：class 不给默认值（ADR 0002 fail-closed）', () => {
+  // 关键红线：绝不能 `class = spec.class || 'read'`。
+  // 那会让漏写 class 的写工具静默变成免确认。
+  const bad = ok();
+  delete bad.class;
+  assert.throws(() => defineTool(bad), /class/);
+});
+
+test('T-127：write 类缺 confirmDetail 在定义时就抛（T-134）', () => {
+  assert.throws(() => defineTool(ok({ class: 'write' })), /confirmDetail/);
+});
+
+test('T-127：ctx 必须是字符串数组，零依赖也要显式写 ctx: []', () => {
+  assert.throws(() => defineTool(ok({ ctx: 'targetTab' })), /ctx/);
+  assert.throws(() => defineTool(ok({ ctx: [1] })), /ctx/);
+  assert.throws(() => defineTool(ok({ ctx: [''] })), /ctx/);
+  const noCtx = ok();
+  delete noCtx.ctx;
+  assert.throws(() => defineTool(noCtx), /ctx/);
+  assert.doesNotThrow(() => defineTool(ok({ ctx: [] })));
+});
+
+test('T-127：构造器不吞未知键，参数对象原样透出', () => {
+  const t = defineTool(ok({ group: 'canvas' }));
+  assert.equal(t.group, 'canvas', '不能因为走构造器就把字段吃掉');
+});
+
 test('TOOL_CLASSES 只有 read / write —— 新增分类必须显式讨论', () => {
   assert.deepEqual(TOOL_CLASSES, ['read', 'write']);
 });
 
-test('未知工具一律要确认（fail-closed）—— loop 的闸现在真的调它（T-83）', () => {
+test('未知工具一律要确认（fail-closed）—— loop 的闸现在真的调它（T-134）', () => {
   assert.equal(requiresConfirmation('read_page', TOOLS), false);
   assert.equal(requiresConfirmation('totally_unknown', TOOLS), true);
   assert.equal(requiresConfirmation(undefined, TOOLS), true);
 });
 
-test('write 类工具必须自带 confirmDetail，缺了加载期就抛（T-83）', () => {
+test('write 类工具必须自带 confirmDetail，缺了加载期就抛（T-134）', () => {
   const bad = ok({ class: 'write' });
   delete bad.confirmDetail;
   assert.throws(() => validateTools([bad]), /confirmDetail/);
@@ -273,10 +334,7 @@ test('T-50：未绑定工作流时说的是「没有工作流可读」，不是�
   );
 
   assert.ok(out.includes('未绑定工作流'), out);
-  assert.ok(
-    !out.includes('（空）'),
-    '未绑定绝不能渲染成「（空）」：' + out
-  );
+  assert.ok(!out.includes('（空）'), '未绑定绝不能渲染成「（空）」：' + out);
   assert.ok(!out.includes('工作流变量:'), '未绑定时不列变量段：' + out);
 });
 
@@ -286,6 +344,33 @@ test('T-50：getVariables 返回 undefined 也不炸，且按未绑定处理', a
     { getVariables: async () => undefined }
   );
   assert.ok(out.includes('未绑定工作流'), out);
+});
+test('T-113：每行变量都带类型标注（string/number/array/null/…）', async () => {
+  // description 承诺「含值与类型」，实现曾经只打印值。Automa 模板里字符串要引号、
+  // 数字不要 —— 类型恰恰是模型最容易写错的一处，缺了它就没有纠偏依据。
+  const out = await getVariables.execute(
+    {},
+    {
+      getVariables: async () => ({
+        bound: true,
+        workflowId: 'wf-1',
+        variables: {
+          username: 'alice',
+          retries: 3,
+          tags: ['a'],
+          nothing: null,
+        },
+        globals: { site: 'e.com' },
+      }),
+    }
+  );
+
+  assert.ok(out.includes('- username = "alice"（string）'), out);
+  assert.ok(out.includes('- retries = 3（number）'), out);
+  // typeof 对数组/null 都只说 object，标注必须把它们分开
+  assert.ok(out.includes('- tags = ["a"]（array）'), out);
+  assert.ok(out.includes('- nothing = null（null）'), out);
+  assert.ok(out.includes('- site = "e.com"（string）'), out);
 });
 test('get_variables 空值不炸，且明确标出是空的', async () => {
   const out = await getVariables.execute(

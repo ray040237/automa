@@ -9,6 +9,7 @@
  */
 
 import { countLines } from '../confirm';
+import { defineTool } from './define';
 
 /**
  * 试跑一段 JS。只在目标页的 MAIN world 里跑，跑完即弃。
@@ -32,6 +33,7 @@ export async function testJs(ctx, params) {
       type: 'agent:run-js',
       tabId: targetTab.id,
       code: params.code,
+      ...(params.frame ? { frame: params.frame } : {}),
     });
 
     if (!res || !res.ok) {
@@ -80,6 +82,7 @@ export async function queryElements(ctx, params) {
       tabId: targetTab.id,
       selector: params.selector,
       limit: params.limit || 5,
+      ...(params.frame ? { frame: params.frame } : {}),
     });
 
     if (!res || !res.ok) {
@@ -99,7 +102,9 @@ export async function queryElements(ctx, params) {
       [
         i +
           1 +
-          '. <' +
+          '. ' +
+          (el.frame !== undefined ? '[frame ' + el.frame + '] ' : '') +
+          '<' +
           el.tag +
           (el.id ? ' #' + el.id : '') +
           (el.class ? '.' + el.class : '') +
@@ -111,7 +116,12 @@ export async function queryElements(ctx, params) {
       ].join('')
     );
 
-    const head = '命中 ' + res.count + ' 个：' + params.selector;
+    const head =
+      '命中 ' +
+      res.count +
+      ' 个：' +
+      params.selector +
+      (res.frames !== undefined ? '（跨 ' + res.frames + ' 个 frame）' : '');
 
     return {
       status: 'ok',
@@ -130,7 +140,7 @@ export async function queryElements(ctx, params) {
  * 工具定义。execute 只做参数校验和转发，真正的执行在上面的纯函数里 ——
  * 这样单测不必构造任何浏览器环境。
  */
-export const testJsTool = {
+export const testJsTool = defineTool({
   name: 'test_js',
   class: 'write',
   group: 'page',
@@ -154,15 +164,20 @@ export const testJsTool = {
           '支持顶层 await）。要用页面 DOM 就直接写 document.xxx。' +
           '返回可 JSON 序列化的值最稳妥。',
       },
+      frame: {
+        type: 'string',
+        description:
+          '在哪个 frame 里跑。默认 top=只主 frame；传 frameId 数字=指定 frame；all 取第一个有结果的 frame。',
+      },
     },
     required: ['code'],
   },
   async execute(args, ctx) {
     return testJs(ctx, args || {});
   },
-};
+});
 
-export const queryElementsTool = {
+export const queryElementsTool = defineTool({
   name: 'query_elements',
   class: 'read',
   group: 'page',
@@ -178,10 +193,15 @@ export const queryElementsTool = {
         type: 'number',
         description: '最多回传几个样本，默认 5，最多 20。',
       },
+      frame: {
+        type: 'string',
+        description:
+          '在哪个 frame 里查。默认 top=只主 frame；all=所有 frame（命中数跨 frame 合并，样本带 frame 来源）；传 frameId 数字=指定 frame。',
+      },
     },
     required: ['selector'],
   },
   async execute(args, ctx) {
     return queryElements(ctx, args || {});
   },
-};
+});

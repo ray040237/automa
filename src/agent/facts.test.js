@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildFacts, countBlocks } from './facts';
+import { buildSystemPrompt } from './prompt';
 // shared.js 是纯数据、零 import —— 所以能直接拿真的块目录来跑，
 // 而不是喂一份我自己造的假数据。
 // 但它用了 webpack DefinePlugin 注入的全局 IS_OFFLINE（Node 里不存在），
@@ -30,7 +31,7 @@ describe('countBlocks', () => {
   });
 
   test('值是 null 的条目也不能炸', () => {
-    assert.equal(countBlocks({ a: null, b: { name: 'x' } }), 1);
+    assert.equal(countBlocks({ a: null, b: { name: 'x' } }), 2);
   });
 });
 
@@ -94,7 +95,11 @@ describe('拿真实块目录跑一遍（用户的崩溃就是从这里发出的�
     });
 
     assert.equal(typeof f.blockCount, 'number');
-    assert.ok(f.blockCount > 50, `真实块数应远大于 0，实际 ${f.blockCount}`);
+    assert.equal(
+      f.blockCount,
+      61,
+      `真实块目录是 61 个块，实际 ${f.blockCount}`
+    );
   });
 
   test('回归：对 tasks 直接 .reduce 正是用户看到的那个崩溃', () => {
@@ -107,15 +112,18 @@ describe('拿真实块目录跑一遍（用户的崩溃就是从这里发出的�
     );
   });
 
-  test('countBlocks 对真实目录不抛，且数得出来', () => {
+  test('countBlocks 对真实目录数出来的就是块数本身，不是字段数之和（T-01）', () => {
     assert.doesNotThrow(() => countBlocks(tasks));
 
-    const expected = Object.values(tasks).reduce(
-      (n, t) => n + Object.keys(t || {}).length,
-      0
+    // 刻意**不**把实现公式在这里重打一遍：那种断言恒真 —— 公式改错了它也绿，
+    // T-01 就是这么漏到今天的。期望值写死成「目录键数」，而键数与字段数之和
+    // 恰好差着一个数量级（61 vs 715），所以这条断言对公式错误是灵敏的。
+    assert.equal(countBlocks(tasks), Object.keys(tasks).length);
+    assert.equal(
+      countBlocks(tasks),
+      61,
+      '真实块目录是 61 个块；曾经算出 715（字段数之和），差 11.7 倍'
     );
-
-    assert.equal(countBlocks(tasks), expected);
   });
 });
 
@@ -163,4 +171,26 @@ describe('instructions（T-81a）', () => {
     assert.equal(buildFacts({ ...BASE, instructions: null }).instructions, '');
     assert.equal(buildFacts({ ...BASE, instructions: 42 }).instructions, '42');
   });
+});
+
+test('T-01：块数这一路必须一路等于块目录键数，不许在别处再算一遍', () => {
+  // 端到端钉一次：从真实 tasks 到系统提示里那一行，中间不许有第二份公式。
+  const n = countBlocks(tasks);
+  const prompt = buildSystemPrompt({
+    automaFuncs: ['automaGetTab'],
+    templatingFns: ['now'],
+    blockCount: n,
+    tools: [],
+  });
+
+  assert.equal(n, 61, '真实块目录是 61 个块');
+  assert.ok(
+    String(prompt).includes('本版共有 61 个块'),
+    [
+      '系统提示里的块数应与块目录一致，实际那一行：',
+      ...String(prompt)
+        .split('\n')
+        .filter((l) => l.includes('本版共有')),
+    ].join('\n')
+  );
 });

@@ -17,7 +17,7 @@
  *
  * 本文件是纯函数，不 import 浏览器 API，也不 import 任何 i18n ——
  * 文案由卡片按 kind 取。「危险面」的事实（kind/detail）由工具自带的
- * confirmDetail 提供（T-83），本模块负责载荷形状、归属与兜底。
+ * confirmDetail 提供（T-134），本模块负责载荷形状、归属与兜底。
  */
 
 /** 只有这一类工具允许「本会话不再问」。workflow 写操作永远不在其列。 */
@@ -50,7 +50,7 @@ export function countLines(code) {
 /**
  * 参数序列化。画布写工具的 data 可能带循环引用（块数据由用户在编辑器里配），
  * 抛出去会让整张确认卡渲染崩掉，所以兜底成 String()。
- * 导出给各写类工具的 confirmDetail 复用（T-83）——格式化助手只此一份。
+ * 导出给各写类工具的 confirmDetail 复用（T-134）——格式化助手只此一份。
  *
  * @param {*} value
  * @returns {string}
@@ -64,7 +64,7 @@ export function safeJson(value) {
   }
 }
 
-/** 过滤假值后按行拼装 detail。导出理由同 safeJson（T-83）。 */
+/** 过滤假值后按行拼装 detail。导出理由同 safeJson（T-134）。 */
 export function joinLines(...parts) {
   return parts.filter(Boolean).join('\n');
 }
@@ -82,7 +82,7 @@ export function canRememberSession(name) {
 /**
  * 本次确认的展示载荷。
  *
- * 「用户到底在放行什么」的事实由**工具自带**（T-83）：写类工具定义里的
+ * 「用户到底在放行什么」的事实由**工具自带**（T-134）：写类工具定义里的
  * `confirmDetail(args)` 返回工具特有部分（kind / action / lines / blockId /
  * nodeId / detail），本模块只补基础形状并钉死归属 —— name、targetTitle、
  * canRemember 永远以这里为准，工具的 confirmDetail 不得覆盖。工具没带

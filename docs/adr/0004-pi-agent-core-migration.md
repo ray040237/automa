@@ -25,7 +25,7 @@
 | `sessions.js`、`config.js`、`index.js` 装配层 | 并行工具执行、truncation 保护、steering 队列 |
 | `window.js` 以外的 `untrusted.js`、`prompt.js` 全部 | |
 
-**不做**：token 预算裁剪、步数上限、`ERROR_KIND` 六种分类、429 配额区分。这四项的代价与理由记在 `docs/backlog.md` 的 **B9**。
+**不做**：token 预算裁剪、步数上限、`ERROR_KIND` 六种分类、429 配额区分。这四项的代价与理由记在 `docs/backlog-done.md` 的 **B9**（决策记录，已随 2026-10-07 归档移入）。
 
 ## 为什么
 

@@ -16,12 +16,16 @@
  * @returns {number}
  */
 export function countBlocks(catalog) {
-  // 注意这里是对象不是数组。上游若改成数组，这里会静默少数 ——
-  // 所以两边都用 Object.values 归一，数组和对象都吃得下。
-  return Object.values(catalog || {}).reduce(
-    (n, t) => n + Object.keys(t || {}).length,
-    0
-  );
+  // 数的是**块本身**，不是块定义里的字段个数。
+  //
+  // 原实现累加 `Object.keys(块定义).length`，实测把 61 个块算成 715（T-01）——
+  // 每块有十几个字段（name/component/inputs/outputs/…），这个数被写进
+  // 「本版共有 N 个块」喂给模型，模型据此判断「有哪些块可用」。
+  //
+  // Object.keys 对数组和对象都吃得下（数组给下标），所以「上游若改成数组
+  // 这里会静默少数」那个坑仍然被覆盖着 —— facts.test.js 里有一条守卫盯着
+  // tasks 保持对象字面量。
+  return Object.keys(catalog || {}).length;
 }
 
 /**

@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Automa Backlog 逐条讲解 · docs/backlog.md（2026-10-07 更新）</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --panel-2:#fbfcfd; --ink:#14171c; --ink-2:#4a5260; --ink-3:#79818f;
+    --line:#e3e7ed; --line-2:#eef1f5;
+    --accent:#2f6fed; --accent-soft:#eaf1ff;
+    --bug:#d64545; --bug-soft:#fdeeee;
+    --imp:#c2760c; --imp-soft:#fdf3e3;
+    --feat:#7a48d6; --feat-soft:#f2ecfe;
+    --ok:#1f8a52; --ok-soft:#e8f6ee;
+    --done:#5b6472; --done-soft:#eef0f3;
+    --warnbg:#fff8e6; --warnline:#e0b95a;
+    --shadow:0 1px 2px rgba(16,24,40,.05),0 6px 20px rgba(16,24,40,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0e1116; --panel:#161a21; --panel-2:#1b2029; --ink:#e8ecf2; --ink-2:#b3bcc9; --ink-3:#7d8794;
+      --line:#262d38; --line-2:#20262f;
+      --accent:#6f9bff; --accent-soft:#182338;
+      --bug:#ff7b72; --bug-soft:#2b1a1c;
+      --imp:#e0a94a; --imp-soft:#2b2317;
+      --feat:#b79bf5; --feat-soft:#241d38;
+      --ok:#5fd39b; --ok-soft:#152a20;
+      --done:#98a2b3; --done-soft:#1e242d;
+      --warnbg:#241d10; --warnline:#8a6d2a;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.72 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  code,.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace}
+  code{background:var(--line-2);padding:.1em .38em;border-radius:4px;font-size:.87em;word-break:break-word}
+
+  .wrap{display:grid;grid-template-columns:266px minmax(0,1fr);gap:0;max-width:1580px;margin:0 auto}
+  @media (max-width:1000px){ .wrap{grid-template-columns:1fr} .side{position:static!important;height:auto!important} }
+
+  .side{position:sticky; top:0; height:100vh; overflow-y:auto; border-right:1px solid var(--line); background:var(--panel); padding:22px 16px 40px}
+  .brand{font-weight:700;font-size:15px;letter-spacing:-.01em;margin:0 0 2px}
+  .brand small{display:block;font-weight:400;color:var(--ink-3);font-size:11.5px;margin-top:4px}
+  .nav-h{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);margin:22px 0 8px;font-weight:600}
+  .nav a{display:flex;gap:8px;align-items:baseline;justify-content:space-between;padding:6px 9px;border-radius:7px;color:var(--ink-2);text-decoration:none;font-size:13.2px}
+  .nav a:hover{background:var(--line-2);color:var(--ink)}
+  .nav a.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .nav a .c{font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+  .nav a.on .c{color:var(--accent)}
+
+  main{padding:34px 40px 90px;min-width:0}
+  @media (max-width:700px){ main{padding:22px 16px 60px} }
+
+  header.doc{margin-bottom:26px}
+  header.doc h1{margin:0 0 8px;font-size:27px;letter-spacing:-.02em}
+  header.doc p.lede{margin:0;color:var(--ink-2);max-width:74ch}
+  .stats{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0 8px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:11px 15px;min-width:104px;box-shadow:var(--shadow)}
+  .stat b{display:block;font-size:22px;line-height:1.25;font-variant-numeric:tabular-nums}
+  .stat span{font-size:11.5px;color:var(--ink-3)}
+  .meta-note{margin:16px 0 0;font-size:12.5px;color:var(--ink-3);border-left:3px solid var(--line);padding-left:11px;max-width:84ch}
+
+  .btn{font:inherit;font-size:12.5px;font-weight:500;color:var(--ink-2);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 13px;cursor:pointer;transition:.15s}
+  .btn:hover{background:var(--panel-2);color:var(--ink);border-color:var(--ink-3)}
+  .btn+.btn{margin-left:8px}
+
+  section.group{margin:0 0 40px;scroll-margin-top:20px}
+  .group-h{display:flex;align-items:center;gap:11px;margin:0 0 4px;padding-bottom:11px;border-bottom:2px solid var(--line)}
+  .group-h h2{margin:0;font-size:19px;letter-spacing:-.01em}
+  .group-h .pill{font-size:11.5px;font-weight:600;padding:2.5px 9px;border-radius:999px;border:1px solid transparent}
+  .group-desc{margin:11px 0 18px;color:var(--ink-2);font-size:13.4px;max-width:84ch}
+
+  .p-bug{background:var(--bug-soft);color:var(--bug);border-color:color-mix(in srgb,var(--bug) 25%,transparent)}
+  .p-imp{background:var(--imp-soft);color:var(--imp);border-color:color-mix(in srgb,var(--imp) 25%,transparent)}
+  .p-feat{background:var(--feat-soft);color:var(--feat);border-color:color-mix(in srgb,var(--feat) 25%,transparent)}
+  .p-done{background:var(--done-soft);color:var(--done);border-color:var(--line)}
+  .p-ok{background:var(--ok-soft);color:var(--ok);border-color:color-mix(in srgb,var(--ok) 25%,transparent)}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:13px;margin:0 0 14px;box-shadow:var(--shadow);overflow:hidden}
+  .card > summary{list-style:none;cursor:pointer;padding:15px 18px;display:flex;gap:12px;align-items:flex-start;transition:background .15s}
+  .card > summary::-webkit-details-marker{display:none}
+  .card > summary:hover{background:var(--panel-2)}
+  .card[open] > summary{border-bottom:1px solid var(--line-2)}
+  .id{flex:0 0 auto;font:600 12px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:-.02em;padding:6px 8px;border-radius:7px;background:var(--accent-soft);color:var(--accent);white-space:nowrap;margin-top:1px}
+  .id.b{background:var(--feat-soft);color:var(--feat)}
+  .id.dim{background:var(--done-soft);color:var(--done)}
+  .ttl{flex:1;min-width:0}
+  .ttl h3{margin:0;font-size:15.4px;line-height:1.5;font-weight:650;letter-spacing:-.005em}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .tag{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--ink-3);background:var(--panel-2);white-space:nowrap}
+  .tag.st{font-weight:600}
+  .tag.st-review{color:var(--imp);border-color:color-mix(in srgb,var(--imp) 30%,transparent);background:var(--imp-soft)}
+  .tag.st-wip{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 30%,transparent);background:var(--accent-soft)}
+  .tag.st-plan{color:var(--ink-2)}
+  .tag.st-dec{color:var(--feat);border-color:color-mix(in srgb,var(--feat) 30%,transparent);background:var(--feat-soft)}
+  .tag.v-ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 30%,transparent);background:var(--ok-soft)}
+  .tag.v-part{color:var(--imp);border-color:color-mix(in srgb,var(--imp) 30%,transparent);background:var(--imp-soft)}
+  .tag.v-no{color:var(--bug);border-color:color-mix(in srgb,var(--bug) 30%,transparent);background:var(--bug-soft)}
+  .caret{flex:0 0 auto;color:var(--ink-3);transition:transform .18s;margin-top:3px}
+  .card[open] .caret{transform:rotate(90deg)}
+
+  .body{padding:4px 18px 18px}
+  .body > p:first-child{margin-top:14px}
+  h4.lb{margin:18px 0 7px;font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);font-weight:700}
+  h4.lb:first-child{margin-top:14px}
+  .body p{margin:0 0 9px;max-width:82ch}
+  .body ul{margin:0 0 9px;padding-left:20px;max-width:80ch}
+  .body li{margin:3px 0}
+  .body li::marker{color:var(--ink-3)}
+
+  .explain{background:var(--accent-soft);border-left:3px solid var(--accent);padding:12px 15px;border-radius:0 9px 9px 0;margin:14px 0 4px}
+  .explain p{margin:0 0 8px}
+  .explain p:last-child{margin:0}
+  .explain .lb{color:var(--accent);margin-top:0}
+
+  .verify{border:1px solid var(--line);border-radius:10px;padding:12px 15px;margin-top:16px;background:var(--panel-2)}
+  .verify .lb{margin-top:0}
+  .verify ul{margin-bottom:0}
+  .verdict{font-size:12.6px;font-weight:600;margin-top:10px;padding-top:9px;border-top:1px dashed var(--line)}
+  .v-ok-t{color:var(--ok)} .v-part-t{color:var(--imp)} .v-no-t{color:var(--bug)}
+
+  .callout{border:1px solid var(--warnline);background:var(--warnbg);border-radius:10px;padding:12px 15px;margin:14px 0}
+  .callout .lb{color:var(--imp);margin-top:0}
+  .callout p:last-child{margin-bottom:0}
+
+  .quote{font-size:12.6px;color:var(--ink-2);background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin:0 0 9px}
+  .empty{border:1px dashed var(--line);border-radius:12px;padding:22px 24px;color:var(--ink-3);background:var(--panel)}
+  footer.doc{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--ink-3);font-size:12.4px}
+
+  table.mini{border-collapse:collapse;width:100%;max-width:760px;margin:6px 0 12px;font-size:13px}
+  table.mini th,table.mini td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+  table.mini th{background:var(--panel-2);font-weight:600;font-size:12px;color:var(--ink-3)}
+  table.mini td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<aside class="side">
+  <div class="brand">Automa · Backlog 讲解
+    <small>数据源 <code>docs/backlog.md</code> 未完成区 · 核对 2026-10-07（第二版）</small>
+  </div>
+  <nav class="nav" id="nav">
+    <div class="nav-h">概览</div>
+    <a href="#delta"><span>本次更新摘要</span><span class="c">Δ</span></a>
+    <div class="nav-h">待审核 · bug</div>
+    <a href="#g-bug"><span>缺陷（先审）</span><span class="c">0</span></a>
+    <div class="nav-h">待审核 · 改进</div>
+    <a href="#g-imp"><span>UI / 架构 / 契约</span><span class="c">9</span></a>
+    <div class="nav-h">待审核 · 新功能</div>
+    <a href="#g-feat"><span>功能与架构决策</span><span class="c">3</span></a>
+    <div class="nav-h">已批准</div>
+    <a href="#g-appr"><span>进行中</span><span class="c">1</span></a>
+    <div class="nav-h">B 编号 · 助手欠账</div>
+    <a href="#g-b"><span>功能增量与决策记录</span><span class="c">6</span></a>
+    <div class="nav-h">附</div>
+    <a href="#g-archived"><span>本次已归档</span><span class="c">5</span></a>
+    <a href="#g-find"><span>核对中新发现</span><span class="c">2</span></a>
+  </nav>
+</aside>
+
+<main>
+<header class="doc">
+  <h1>Backlog 逐条讲解</h1>
+  <p class="lede">
+    把 <code>docs/backlog.md</code> 的未完成区按分类拆开，逐条讲清「它到底指出了什么问题、为什么这是个问题、不修会怎样」。
+    每条都附核对结论 —— 登记时写的行号会随重构腐烂，讲解里明确标出哪些还成立、哪些已经变了。
+    <strong>本版为第二版</strong>：距第一版之间完成了一批落地并新增 6 条登记，内容已整体重写。
+  </p>
+  <div class="stats">
+    <div class="stat"><b>19</b><span>未完成条目</span></div>
+    <div class="stat"><b>0</b><span>待审 bug</span></div>
+    <div class="stat"><b>9</b><span>改进</span></div>
+    <div class="stat"><b>3</b><span>新功能</span></div>
+    <div class="stat"><b>6</b><span>B 编号欠账</span></div>
+    <div class="stat"><b>576</b><span>npm test 项数</span></div>
+  </div>
+  <p style="margin:14px 0 0">
+    <button id="expandAll" type="button" class="btn">展开全部</button>
+    <button id="collapseAll" type="button" class="btn">全部收起</button>
+  </p>
+  <p class="meta-note">
+    核对方式：<code>Select-String</code> / <code>grep</code> 读源码，<code>git show/log</code> 查落地历史，
+    <code>[System.IO.File]::ReadAllLines</code> 数行数，<code>npm test</code> 实跑，
+    并对 T-128 做了一次<strong>真变异测试</strong>（改源码跑真测试再还原，已校验 SHA256 一致）。
+    <br><strong>没做的事</strong>：没起浏览器复现 UI 观感、没装扩展实测模型链路、没跑 <code>npm run build</code>。凡属推断的结论都标了「未实测」。
+  </p>
+</header>
+
+<!-- ============ 本次更新摘要 ============ -->
+<section class="group" id="delta">
+  <div class="group-h">
+    <h2>〇、本次更新摘要（相对第一版）</h2>
+    <span class="pill p-ok">已重写</span>
+  </div>
+  <p class="group-desc">
+    第一版之后仓库有一批落地，<code>docs/backlog.md</code> 随之变化：<strong>5 条移入归档、新增 6 条登记</strong>。
+    未完成总数仍是 19 条，但构成变了 —— 「改进」从 8 增至 9，「新功能」从 4 减到 3。
+  </p>
+
+  <table class="mini">
+    <tr><th>变化</th><th>条目</th><th>落地物</th></tr>
+    <tr><td>已归档（移出待审核）</td><td>T-60 / T-12 / T-16 / T-10 / T-09</td><td><code>loop.js</code> 打点、<code>UiTextarea.vue</code> autoresize 修复、<code>AgentMarkdown.vue</code> 全文复制、新增 <code>examples.js</code>、新增 <code>usage.js</code></td></tr>
+    <tr><td>新增登记</td><td>T-123 / T-125 / T-126 / T-127 / T-128</td><td>2026-10-07 架构评审同批产出</td></tr>
+    <tr><td>归档总数</td><td>119 → 126</td><td>另含 B8、T-124 等</td></tr>
+    <tr><td>测试规模</td><td>534 → 576</td><td>本轮实跑 <code>npm test</code>：<strong>576 项 / 575 pass / 0 fail / 1 skipped</strong></td></tr>
+  </table>
+
+  <div class="callout">
+    <h4 class="lb">先说一个自我更正</h4>
+    <p>
+      第一版有<strong>两个行数是错的</strong>，因为当时用了 PowerShell 的 <code>Measure-Object -Line</code> ——
+      它在本仓这些混合换行的文件上会少算。本版已全部改用 <code>[System.IO.File]::ReadAllLines</code> 重测：
+    </p>
+    <table class="mini">
+      <tr><th>文件</th><th class="num">第一版（错）</th><th class="num">实测（对）</th></tr>
+      <tr><td><code>src/workflowEngine/WorkflowWorker.js</code></td><td class="num">466</td><td class="num">562</td></tr>
+      <tr><td><code>AgentTranscript.vue</code></td><td class="num">398</td><td class="num">518（且期间因 T-09/T-10 又长了一截）</td></tr>
+      <tr><td>测试文件数</td><td class="num">30</td><td class="num">34</td></tr>
+      <tr><td>归档条目数</td><td class="num">119</td><td class="num">126</td></tr>
+    </table>
+    <p>行号本身用的是 <code>Select-String</code>，那部分没受影响。</p>
+  </div>
+</section>
+
+<!-- ============ bug ============ -->
+<section class="group" id="g-bug">
+  <div class="group-h">
+    <h2>一、待审核 · bug</h2>
+    <span class="pill p-bug">0 条</span>
+  </div>
+  <p class="group-desc">
+    仍是空的。这不是「都修完了」—— 是 2026-10-06 按类型分区重构时清空，之后登记的 T-123～T-128 里，
+    <strong>T-126 / T-127 性质上属于缺陷但被放进了「改进」</strong>（见下文各条）。空区块本身是个信号：
+    bug 类缺陷容易随重构失效而不被察觉（T-114 已归档记过同一件事）。
+  </p>
+  <div class="empty">
+    <strong>暂无条目。</strong>
+    按 <code>AGENTS.md</code>「发现即登记」，读代码 / 跑测试 / 调试时撞到的实际缺陷应先落这里。
+    本轮核对撞到的 2 条已列在最后一节，<strong>但我没有改任何 backlog 文件</strong>。
+  </div>
+</section>
+
+<!-- ============ 改进 ============ -->
+<section class="group" id="g-imp">
+  <div class="group-h">
+    <h2>二、待审核 · 改进</h2>
+    <span class="pill p-imp">9 条</span>
+  </div>
+  <p class="group-desc">
+    这 9 条分三层，读的时候别混：
+    <br>· <strong>用户能感知的</strong>：T-14（长回答卡顿）—— 只剩这一条纯 UI 性能。
+    <br>· <strong>「我们验不了自己」的</strong>：T-116（引擎层零测试）、T-53（折叠层写死在 SFC）、T-128（守卫只认源码长相）。
+    <br>· <strong>「同一份契约抄了多遍」的</strong>：T-125（事件形状判定 4 份）、T-126（god module + 死导出）、T-127（夹具与生产不同形）。
+    <br>后两类共同指向同一件事：<strong>缺陷的发现成本正在系统性地往人身上转移</strong>。T-128 还给出了一个反直觉的结论 ——
+    有了组件渲染测试后，T-53 那笔「抽 90 行 reducer」的结构性代价<strong>可能不必付</strong>，所以它建议 T-128 排在 T-53 之前。
+  </p>
+
+  <!-- T-116 -->
+  <details class="card">
+    <summary>
+      <span class="id">T-116</span>
+      <div class="ttl">
+        <h3>workflowEngine 的 20+ 个块处理器零测试覆盖，缺陷只能靠人工 grep 发现</h3>
+        <div class="tags"><span class="tag st st-review">待审核</span><span class="tag">2026-10-06</span><span class="tag">工程基建</span><span class="tag v-ok">核对：成立</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>
+          工作流靠一个个「块处理器」跑 —— 点击、填表、请求、存变量，各是一个文件。这层是<strong>用户真正付费的那部分</strong>，
+          而它今天<strong>一行测试都没有</strong>。<code>npm test</code> 只扫 <code>src/agent/**/*.test.js</code>，
+          于是工作流引擎目录下 0 个测试文件。
+        </p>
+        <p>
+          后果不是覆盖率不好看，而是<strong>缺陷的发现时机被推给用户</strong>。
+          比如 <code>handlerAiWorkflow.js</code> 调 <code>setVariable</code> 漏 <code>await</code>（T-03，已修）——
+          编译不报、运行不一定炸，变量就是没落盘、日志还少几个字段，用户只会觉得「这工作流时好时坏」。
+          发现它的方式是人工 grep 逐个数 <code>await</code>，那个 grep 是为修 T-03 现写的。
+        </p>
+        <p>
+          半成品已存在：<code>src/agent/engineHandlers.test.js</code> 是<strong>源码文本守卫</strong>，
+          能挡住修复被改回去，但验不了行为 —— 跑一次处理器看它到底写没写变量，它做不到。
+        </p>
+      </div>
+      <h4 class="lb">建议（原文）</h4>
+      <ul>
+        <li>① 用注入式依赖把 <code>setVariable</code> / <code>addDataToColumn</code> / 处理器调用链测起来（处理器已是 <code>async function (block, { refData })</code> 形状，宿主 <code>this</code> 可造假）。</li>
+        <li>② 给 <code>npm test</code> 加第二个 glob（如 <code>src/workflowEngine/**/*.test.js</code>）。</li>
+        <li>代价：估计半天，要先解决 <code>IS_OFFLINE</code> 这类 webpack 注入全局在 Node 下的初始化。</li>
+      </ul>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li><code>Get-ChildItem src/workflowEngine -Recurse -Filter *.test.js</code> → <strong>0</strong>。✅</li>
+          <li><code>blocksHandler</code> 下 <code>*.js</code> → <strong>53</strong> 个；<code>WorkflowWorker.js</code> → <strong>562</strong> 行。✅</li>
+          <li><code>package.json:26</code> → <code>node --test "src/agent/**/*.test.js"</code>，单 glob。✅</li>
+          <li>全仓测试文件 <strong>34</strong> 个，<strong>全部</strong>在 <code>src/agent/</code> 下。✅</li>
+          <li><code>engineHandlers.test.js</code> 仍是 <strong>git 未跟踪新文件</strong> —— 建议①的半成品尚未提交。</li>
+        </ul>
+        <p class="verdict v-ok-t">结论：全部成立。进展 = 建议②未做、建议①只落地了源码文本守卫这一半。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- T-14 -->
+  <details class="card">
+    <summary>
+      <span class="id">T-14</span>
+      <div class="ttl">
+        <h3>流式输出时对整段文本逐 delta 重解析，长回答可能卡顿</h3>
+        <div class="tags"><span class="tag st st-review">待审核</span><span class="tag">2026-10-04</span><span class="tag">性能</span><span class="tag v-part">结构成立，性能未实测</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>
+          典型 O(n²) 结构：<code>AgentMarkdown.vue:115</code> 是 <code>computed(() =&gt; markdownToBlocks(props.raw))</code>，
+          而 <code>raw</code> 每来一个 <code>text-delta</code> 就长一点（<code>appendDelta</code> 就地改 <code>last.raw</code>）。
+          也就是说<strong>模型吐第 n 个字，前 n 个字就被完整重新解析一遍</strong>；一条 2000 字回答 = 2000 次全量解析。
+        </p>
+        <p><strong>关键限定：条目明写「未实测前不改」。</strong>本项目没有这条路径的性能数据，8K 字以下可能根本看不出来，建议先造桩测再决定方案。</p>
+        <p>
+          <b>与 T-53 的关联值得注意</b>：T-53 讨论抽 fold 模块时特意警告过，别抽成纯函数 <code>foldEvents(events)</code>，
+          因为那会复现同型问题 —— 可见这个 O(n²) 已经被当成一条真实的架构约束在防了。
+        </p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li>computed 现在在 <code>AgentMarkdown.vue:115</code>（登记写 <code>:97</code>，因 T-16 加了全文复制按钮而下移），结构一致。✅</li>
+          <li><code>appendDelta</code> 现在在 <code>AgentTranscript.vue:288</code>。✅</li>
+          <li><strong>性能本身仍未实测</strong> —— 本轮没造桩、没跑 performance，掉帧阈值依旧未知。</li>
+        </ul>
+        <p class="verdict v-part-t">结论：代码结构判断成立；「会卡顿」仍停留在推断，条目的「先测再改」要求依然有效。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- T-53 -->
+  <details class="card" id="t53">
+    <summary>
+      <span class="id">T-53</span>
+      <div class="ttl">
+        <h3>事件流 → 渲染槽位的折叠层是全仓分支最多的 UI 逻辑，却写死在 .vue 里测不到</h3>
+        <div class="tags"><span class="tag st st-review">待审核</span><span class="tag">2026-10-05</span><span class="tag">可测性 · 架构</span><span class="tag v-part">核对：成立，但优先级被 T-128 挑战</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>
+          项目<strong>自己立的规矩</strong>：凡是「SFC 里的分支一条都测不到」的逻辑都被抽成纯模块放进 <code>src/agent/</code> ——
+          <code>confirm.js</code>（确认卡载荷）、<code>sessions.js</code>（选项文案），文件头注都写明了理由。
+          最近又多了三个：<code>examples.js</code>（T-10）、<code>usage.js</code>（T-09）、以及 T-128 的渲染 harness。
+        </p>
+        <p>
+          <strong>唯独折叠层没抽。</strong><code>AgentTranscript.vue</code> 的 <code>applyEvent</code>（:362）/
+          <code>sync</code>（:443）/<code>appendDelta</code>（:288）连同文件共 <strong>518 行</strong>，
+          <code>applyEvent</code> 现有 <strong>9 个 case</strong>（含 T-09 新加的 START），
+          含工具卡合并、换会话整表重放、流式 delta 归并 —— 全在一个 <code>&lt;script setup&gt;</code> 里，<strong>零测试触及</strong>。
+        </p>
+        <p>未覆盖的具体分支，条目点了四个：① 连续 delta 并入同一槽位；② 工具 call/result 合并成一张卡的判据；③ 换会话整表重放；④ 被 <code>pruneEphemeralEvents</code> / <code>cropToTurns</code> 裁剪过的历史重放回来是什么样。</p>
+        <p>
+          <strong>这不是理论问题 —— T-52 就是它的直接产物。</strong>「工具事件不带 <code>args</code>，所以工具卡永远显示不出调用参数」
+          本该由一条断言拦住，<strong>但断言写不了</strong>，只能靠人读代码发现。T-04 / T-07 / T-09 三条 UI 欠账也全部落在这同一段逻辑上。
+        </p>
+        <p>条目给的两条约束仍有效：<strong>命名红线</strong>（<code>CONTEXT.md</code> 已废弃 <code>transcript</code> 一词）；<strong>不能抽纯函数</strong>（会复现 T-14 的 O(n²)），要保持游标语义 <code>{ items, apply(ev), reset() }</code>。</p>
+      </div>
+      <div class="callout">
+        <h4 class="lb">本版重点：这条的必要性正在被 T-128 重新定价</h4>
+        <p>
+          T-128 建议里有一句直接指向本条：<strong>「顺序建议排在 T-53 之前 —— T-53 正在为『测不到』付结构性代价（抽 90 行 reducer），若先有①，这笔代价可能不必付。」</strong>
+          也就是说本条的核心主张（测不到 → 只能抽纯模块）可能被 T-128 的渲染测试部分<b>绕过</b>。
+          <strong>审这条之前应先定 T-128 做到哪一档</strong>，否则可能白抽一次 reducer。
+        </p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li>全仓测试文件 <strong>34</strong> 个，<strong>全部</strong>在 <code>src/agent/</code> 下；<code>.vue</code> 组件挂载测试在 T-128 落地前为 <strong>0</strong>。✅</li>
+          <li><code>AgentTranscript.vue</code> 现 <strong>518 行</strong>；<code>appendDelta</code> :288、<code>applyEvent</code> :362、<code>sync</code> :443。<strong>没有 <code>fold.js</code> 或等价模块</strong> —— 折叠层仍未抽离。✅ 主张成立</li>
+          <li><code>applyEvent</code> 的 case：<code>START / TEXT_DELTA / THINKING / USER_MESSAGE / SYSTEM_NOTICE / COMPACTION / ERROR / TOOL_CALL+TOOL_RESULT</code> = 9 个。登记时的「7 个分支」已因 T-09 增到 9。✅</li>
+          <li><code>panelUi.test.js</code> :4 头注仍写「本仓没有组件测试基建（backlog T-26/T-53 已登记）」—— <b>该注释现已过期</b>，见 T-128。</li>
+        </ul>
+        <p class="verdict v-part-t">结论：主张成立、行号已漂（<code>:113-206</code> → 现 <code>:288-518</code>）。<b>但排期应让位于 T-128</b>。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- T-128 -->
+  <details class="card" id="t128">
+    <summary>
+      <span class="id">T-128</span>
+      <div class="ttl">
+        <h3>面板 UI 全靠静态源码守卫，缺一个能挂 Vue 组件的测试基建</h3>
+        <div class="tags"><span class="tag st st-review">待审核</span><span class="tag">2026-10-07</span><span class="tag">测试基建</span><span class="tag v-no">档①已落地，条目未更新</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>
+          本仓面板的验证手段是<strong>读源文本</strong>（<code>readFileSync</code> + 正则 / <code>includes</code>）——
+          <code>.vue</code> 一条都挂不上测试。于是守卫有一个<strong>结构性盲区：运行期条件对它隐形</strong>。
+        </p>
+        <p>
+          条目举的证据是 T-16 的变异测试：8 条变异有 1 条测不出来 ——
+          <strong>把复制按钮包进 <code>v-if="false"</code>（按钮永不渲染），守卫全绿</strong>，因为源码文本一个字没少。
+        </p>
+        <p>
+          条目还诚实地划了一条边界：这<strong>不是</strong>「再补一条断言就能糊过去」的漏洞
+          （按钮带 v-if 本身也可能是合法需求，比如 raw 为空时不显示），而是缺 DOM 测试基建的必然结果。
+        </p>
+        <p><strong>建议分三档</strong>，并明确反对一步跳到完整组件测试：</p>
+        <ul>
+          <li><strong>① 最轻</strong> —— <code>@vue/compiler-sfc</code> 的 <code>parse</code> + <code>compileTemplate</code> 把模板编成渲染函数，用 <code>vue/server-renderer</code> 渲成字符串断言（不用浏览器）。能盖住「按钮在不在 DOM 里、v-if 生不生效、class 有没有」，盖不住交互（点复制写剪贴板）。约半天。</li>
+          <li><strong>② 中</strong> —— ①之上加 <code>@vue/test-utils</code> + jsdom，能测点击与 props 响应式；剪贴板注入桩。</li>
+          <li><strong>③ 全</strong> —— playwright 挂真实扩展页面，能测布局/滚动/hover（仓里已有 playwright 依赖）。</li>
+        </ul>
+      </div>
+      <div class="callout">
+        <h4 class="lb">本轮实测：档①已经落地了，条目还写着「待审核 + 三档建议」</h4>
+        <p>
+          <code>utils/sfc-render.mjs</code>（<strong>184 行，未跟踪新文件</strong>）+ <code>src/agent/panelRender.test.js</code>（<strong>5 个真实渲染测试</strong>）
+          就是建议①的形态，头注里逐条对照着本条写的三个能力与两个不覆盖项。
+          <strong>我做了一次真变异测试验证它确实堵住了那个盲区</strong>（改真源码、跑真测试、SHA256 校验还原）：
+        </p>
+        <table class="mini">
+          <tr><th>守卫</th><th>基线</th><th>把复制按钮包进 <code>v-if="false"</code></th><th>结论</th></tr>
+          <tr><td><code>panelUi.test.js</code>（静态文本）</td><td class="num">42 pass / 0 fail</td><td class="num">42 pass / <strong>0 fail</strong></td><td>盲区，完全测不出</td></tr>
+          <tr><td><code>panelRender.test.js</code>（真渲染）</td><td class="num">5 pass / 0 fail</td><td class="num"><strong>fail 1</strong></td><td><strong>抓到了</strong></td></tr>
+        </table>
+        <p>
+          这组对照同时证实了两件事：<strong>本条的诊断准确</strong>（静态守卫确实瞎），<strong>档①确实有效</strong>（渲染守卫能抓）。
+        </p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li><code>utils/sfc-render.mjs</code> 存在，<strong>184 行</strong>；头注明写用 <code>parse</code> + <code>compileScript({ inlineTemplate: true })</code> + <code>vue/server-renderer</code> 的 <code>renderToString</code>。✅ = 建议①</li>
+          <li><code>src/agent/panelRender.test.js</code> <code>import { renderSfc } from '../../utils/sfc-render.mjs'</code>，5 个测试全绿。✅</li>
+          <li><strong>变异测试实测</strong>：<code>v-if="false"</code> 下 <code>panelRender</code> fail=1、<code>panelUi</code> fail=0。✅ 盲区已闭</li>
+          <li>头注自陈两个不覆盖项：<strong>watcher 与响应式状态</strong>（SSR 不跑 watcher，所以 <code>AgentTranscript</code> 的位置滚动块测不到）、<strong>事件与交互</strong>（hover 显形要档②）。</li>
+          <li><code>npm test</code> 全量实跑：<strong>576 项 / 575 pass / 0 fail / 1 skipped</strong>，新基建没有打破任何现有守卫。✅</li>
+        </ul>
+        <p class="verdict v-no-t">结论：建议①已 100% 落地并经我独立变异验证。<b>本条应改写为「档①已完成，档②/③ 待决策」并更新状态</b>；同时 T-53 的排期依赖这个结论。已登记为本轮新发现。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- T-95 -->
+  <details class="card" id="t95">
+    <summary>
+      <span class="id">T-95</span>
+      <div class="ttl">
+        <h3>活轮次可用真实 usage 校准 token 估算，摆脱对「用户填 contextWindow」的依赖</h3>
+        <div class="tags"><span class="tag st st-review">待审核</span><span class="tag">2026-10-06</span><span class="tag">上下文工程</span><span class="tag v-part">成立，但周边已变</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>
+          <strong>token 预算的地基是「估算」，误差被用户的两个手填参数放大。</strong>
+          判断要不要压缩靠 <code>estimateTokens</code> 估历史长度，再和 <code>contextWindow</code> 比 ——
+          估算按字符猜，<code>contextWindow</code> 用户手填（填错没人知道）。
+        </p>
+        <p>
+          而真实数据是有的：活轮次里 <code>piAgent.state.messages</code> 的 assistant 消息<strong>自带 provider 返回的真实 usage</strong>，
+          <code>harvestUsage</code> 就在读它。既然已经在读，<strong>为什么不用它校准估算</strong>？
+        </p>
+        <p>
+          条目把关键约束写清楚了，这是本条最有价值的部分：<strong>跨轮续接时历史由 <code>historyToPiMessages</code> 重放、usage 一律记 0</strong> ——
+          所以<strong>只有活轮次能用，跨轮首轮必须退回估算</strong>。这正是当初「不用 usage 记账」注释成立的真正原因。
+        </p>
+        <p>因此建议不是替换估算，而是<strong>只用来校准系数</strong>（真实/估算比值滑动平均），风险可控得多。</p>
+      </div>
+      <div class="callout">
+        <h4 class="lb">别被 <code>usage.js</code> 误导</h4>
+        <p>
+          T-09 落地新增了 <code>src/agent/usage.js</code>，名字很像、干的却是另一件事：
+          它算的是 <strong>UI 水位百分比</strong>（<code>contextPercent</code> / <code>fmtTokens</code> / <code>clockAt</code>），
+          <strong>不做任何估算校准</strong>。本条要的东西仍然完全没有实现。
+        </p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li><code>loop.js</code> 的 <code>harvestUsage</code> 仍读 <code>m.usage.input</code> / <code>output</code>，并用 <code>countedUsage</code> Set 跨轮去重（T-76 引入）。✅</li>
+          <li>压缩判断链路：<code>:655</code> <code>if (!contextWindow) return null;</code> → <code>:662</code> <code>shouldCompact(estimated, contextWindow)</code> → <code>planCompaction</code>。<strong>仍是纯估算，没有接 usage</strong>。✅ 缺口还在</li>
+          <li><code>historyToPiMessages</code> 重放记 0 的约束本轮未逐行复核（登记时的行号已随 T-76 漂移），<strong>开工前建议重新确认</strong>。</li>
+        </ul>
+        <p class="verdict v-part-t">结论：核心判断成立。周边代码已变，登记时的行号与隐含前提都需重写。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- T-123 -->
+  <details class="card">
+    <summary>
+      <span class="id">T-123</span>
+      <div class="ttl">
+        <h3>超时兜底只挂在两条 IO 通道上，画布 / 建标签页 / pin 路径的写工具没有任何超时</h3>
+        <div class="tags"><span class="tag st st-review">待审核</span><span class="tag">2026-10-07</span><span class="tag">健壮性</span><span class="tag v-ok">核对：成立</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>
+          <code>CONTEXT.md</code>「通道超时兜底」那条写的是：<strong>每条跨进程通道的发送侧都有硬超时……任何一层失灵都不能再把整轮 agent 挂死</strong>。
+          这是一条<strong>被写进领域文档的不变式</strong>，而实际只有两条通道兑现了。
+        </p>
+        <p>实测下来是这样：</p>
+        <ul>
+          <li><code>toBackground</code>（走 background）→ <code>BACKGROUND_CHANNEL_TIMEOUT_MS = 20000</code>，有 <code>raceTimeout</code>。✅</li>
+          <li><code>readPageFromTab</code>（走 <code>tabs.sendMessage</code>）→ <code>TAB_CHANNEL_TIMEOUT_MS = 15000</code>，有 <code>raceTimeout</code>。✅</li>
+          <li><code>add_block</code> / <code>update_block</code>（画布）、<code>open_url</code>（<code>browser.tabs.create</code>）、<code>focus_tab</code> 里的 <code>addPin</code> → <strong>裸 await，无任何超时</strong>。❌</li>
+          <li><code>adapter.js</code> 的 <code>execute()</code> —— 那是所有工具的统一入口 —— <strong>全文没有 timeout 逻辑</strong>，只把 <code>signal</code> 透传下去，而 signal 只在用户点中止时触发。❌</li>
+        </ul>
+        <p>
+          后果：这些路径一旦不回，loop 一直 await，<strong>那一轮不收尾也不落盘</strong>。
+          表现与 T-02 那种「助手卡死」同型，但更隐蔽 —— T-02 至少把三个入口的 <code>resolve(false)</code> 补齐了，这条路径<strong>连 reject 都没有</strong>。
+        </p>
+        <p>
+          建议很克制：<strong>在 adapter 的 execute 外层统一加一道工具级超时</strong>（比内层通道超时更大，维持「外层大于内层」的既定顺序），
+          而不是逐个工具去补。
+        </p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li><code>index.js</code> 的超时相关符号实测：<code>:209</code> <code>BACKGROUND_CHANNEL_TIMEOUT_MS = 20000</code>、<code>:229/:234</code> 用于 <code>toBackground</code>；<code>:302</code> <code>TAB_CHANNEL_TIMEOUT_MS = 15000</code>、<code>:310/:360</code> 用于 <code>readPageFromTab</code>。<strong>两个常量各只服务一处</strong>。✅</li>
+          <li><code>src/agent/tools/adapter.js</code>（172 行）搜 <code>timeout|TIMEOUT</code> → <strong>0 命中</strong>。✅ 统一入口确实没有兜底</li>
+          <li><code>tools/canvas.js</code>、<code>tools/tabs.js</code> 搜 <code>raceTimeout|timeout</code> → <strong>0 命中</strong>；<code>tabs.js:100/:166</code> 的 <code>await ctx.addPin(...)</code>、<code>ctx.createTab</code> 均为裸 await。✅</li>
+        </ul>
+        <p class="verdict v-ok-t">结论：全部成立，且「文档承诺 vs 实际兑现」的落差可用上面三条 grep 直接复现。这是本轮新增条目里<strong>性价比最高</strong>的一条 —— 一处改动覆盖三个缺口。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- T-125 -->
+  <details class="card">
+    <summary>
+      <span class="id">T-125</span>
+      <div class="ttl">
+        <h3>「一条事件是单调用还是多调用」的形状判定全仓抄了 4 份</h3>
+        <div class="tags"><span class="tag st st-review">待审核</span><span class="tag">2026-10-07</span><span class="tag">契约重复</span><span class="tag v-ok">核对：成立</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>
+          同一段判定 —— <code>Array.isArray(ev.calls) &amp;&amp; ev.calls.length ? ev.calls : [{name,args,toolCallId}]</code> ——
+          <strong>在 4 个地方各抄了一份</strong>。抄的原因是一次历史演进：并行工具调用进来后，
+          一条 TOOL_CALL 事件可能装 1 个也可能装 N 个调用，于是每个消费点都得自己判断「要不要展开」。
+        </p>
+        <p>
+          更麻烦的是<strong>同一张事件 union 还被至少 4 份独立 switch/filter 消费</strong>：
+          transcript 重建、token 估算、摘要序列化、UI 渲染。
+          而 <code>eventContract.test.js</code> 只保证「每个常量至少有一个非测试引用点」，
+          <strong>不保证新增 kind 时所有消费点都更新</strong>。
+        </p>
+        <p>
+          影响的关键在<strong>失败形态是静默的</strong>：漏改一个消费点不会报错，表现是「某个视图少一段内容」
+          或「token 估算偏低导致压缩时机漂移」。加一个事件 kind、或改一次工具调用的事件形状，要人肉记住 4 个点。
+        </p>
+        <p>
+          条目还注意到一个信号：解释「为什么必须在这里拆开并行调用」的注释<strong>写在实现处（<code>loop.js:756-759</code>）而不是契约处</strong> ——
+          知识跟实现绑定了，下一个抄这段的人看不到。
+        </p>
+        <p>建议：把遍历原语（工具调用展开、文本投影）收进 <code>events.js</code>，让 <code>events.js</code> 从常量表变成真正的事件 module。</p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li>搜 <code>Array.isArray(…calls…)</code>，<strong>精确 4 处命中</strong>：<code>loop.js:186</code>、<code>loop.js:762</code>、<code>compaction.js:81</code>、<code>compaction.js:267</code>。✅ 与登记一致（UI 那份已随 T-09 改动换过写法，但消费点仍是 4 个）</li>
+        </ul>
+        <p class="verdict v-ok-t">结论：成立，4 处逐一对上。这是「契约只写一份」那一类里最容易收口的一条 —— 纯搬迁，无行为变更风险。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- T-126 -->
+  <details class="card">
+    <summary>
+      <span class="id">T-126</span>
+      <div class="ttl">
+        <h3>src/agent/index.js 是 1136 行 god module，且是全仓唯一没有专属测试文件的生产模块</h3>
+        <div class="tags"><span class="tag st st-review">待审核</span><span class="tag">2026-10-07</span><span class="tag">架构 · god module</span><span class="tag v-ok">核对：成立（本条自带证据修正）</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>
+          <code>index.js</code> 是唯一被允许碰浏览器 API 的模块 —— 于是通道、读页、帧合并、标题生成、落盘调度、
+          <code>toolCtx</code> 工厂、锁、预检全部堆在它里面，<strong>16 个职责、16 个导出、1136 行</strong>。
+          它还是全仓<strong>唯一没有 <code>index.test.js</code> 的生产模块</strong>。
+        </p>
+        <p>仓库为它建了<strong>三套补偿机制</strong>，这本身就是问题的成本证明：</p>
+        <ul>
+          <li>自定义 ESM 解析钩子 <code>utils/test-resolver.mjs</code>（<strong>122 行</strong>）；</li>
+          <li><code>src/agent/__stubs__/</code> 5 个桩；</li>
+          <li><code>assembly.test.js</code> 里成片的 <code>readFileSync('./index.js')</code> 源码正则断言。</li>
+        </ul>
+        <p><code>facts.js:3-7</code> 的头注直接写着「上一个 bug 就住在那里」。</p>
+        <p>
+          <strong>本条最有价值的部分是它自己的「证据修正」节</strong> —— 它推翻了登记时的两处实测错误，
+          而且<strong>推翻的方向让结论变得更硬</strong>：原文说「8 个导出是为让测试能 import 而导出」，
+          实测是<strong>没有任何测试 import 过 <code>index.js</code></strong>（那些 <code>readFileSync</code> 是把文件当文本读）；
+          真实情况是<strong>16 个导出里 10 个在生产侧 0 引用</strong>。所以诊断不是「interface 宽度追平 implementation 宽度」，
+          而是「<strong>有一半的 interface 根本没人接</strong>」。
+        </p>
+        <p>
+          条目还自带一条施工障碍（原文没提）：那 6 个无 prod 消费却<strong>被测试的源码正则按名字匹配</strong>的导出，
+          删 <code>export</code> 关键字会让测试变红 —— 所以死导出清理<strong>不是删一行的事</strong>，必须与正则改造一起做。
+        </p>
+        <p>建议：抽「浏览器 adapter」（通道+读页+帧合并，约 200 行）与「tool context module」，<code>index.js</code> 剩会话编排、导出收到 5 个。<b>三个超时常量必须跟着走</b> —— 「10s → 15s → 20s 外层大于内层」这个关系只有同一个模块持有才守得住（与 T-123 直接相关）。</p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li><code>index.js</code> = <strong>1136 行</strong>（<code>ReadAllLines</code> 实测）。✅ 与登记一致</li>
+          <li>导出清点 = <strong>16 个具名导出</strong>（<code>export { loadConfig, saveConfig }</code> 一行算 2 个名字）。✅</li>
+          <li><code>utils/test-resolver.mjs</code> = <strong>122 行</strong>（条目写 123，差 1，无关紧要）。</li>
+          <li><code>assembly.test.js</code> 1151 行、<code>panelUi.test.js</code> 1200 行。条目称「合计 2032 行纯文本扫描」—— 与文件行数对不上，<strong>这个数字建议澄清</strong>（可能指 readFileSync 扫描到的行数而非文件行数）。</li>
+          <li><strong>未逐个复核</strong>「10 个导出 prod 侧 0 引用」这个消费分析（需逐符号跨仓 grep），沿用条目结论。</li>
+        </ul>
+        <p class="verdict v-ok-t">结论：核心数字（1136 行 / 16 导出 / 三套补偿机制）全部对上。<b>唯一要纠的是「2032 行」那个数</b>。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- T-127 -->
+  <details class="card">
+    <summary>
+      <span class="id">T-127</span>
+      <div class="ttl">
+        <h3>主循环的默认回归路径验的不是生产形状：夹具工具带 label 而生产工具一个都没有</h3>
+        <div class="tags"><span class="tag st st-review">待审核</span><span class="tag">2026-10-07</span><span class="tag">测试有效性</span><span class="tag v-ok">核对：成立</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>
+          这条讲的是<strong>测试本身在骗自己</strong>。<code>loop.test.js</code> 是主循环的默认回归路径，
+          2172 行、跑得最勤。而它用的 <code>echoTool</code> / <code>writeTool</code> 夹具<strong>都带 <code>label</code> 字段</strong>，
+          <strong>生产工具一个都没有</strong>。
+        </p>
+        <p>于是 <code>adapter.js:142</code> 的 <code>tool.label || tool.name</code> 走的是<strong>兜底分支</strong>，
+          而 <code>adapter.test.js</code> 那条「每个工具都补上了 label」实际在验 fallback、<strong>不是验真实形状</strong>。
+          测试全绿，生产跑的是另一条分支。
+        </p>
+        <p>同一文件里 <code>buildUserMessage</code> 默认也是桩，注释自承「要验真实形态用 <code>opts.buildUserMessage</code> 换成真的」。
+          另有一处：<code>tools/index.test.js</code> 把每个工具的 <code>ctx</code> 声明<strong>手抄了一遍</strong>，
+          注释承认「改任何工具的 ctx 依赖都必须有意识��更新这张表」—— 第二份真相，且靠人的自觉维护。</p>
+        <p>
+          影响面很具体：T-70 那种「同一个词在 seam 两侧各说各话，<strong>夹具全绿而生产全挂</strong>」的缺陷形态，有现成的温床 ——
+          夹具与生产不同形时，跨 seam 的断言钉不住真实链路。
+        </p>
+        <p>建议：用<strong>同一个 <code>defineTool</code> 构造器</strong>产出生产工具与测试夹具，形状不可能漂移；<code>ctx</code> 契约表的第二份拷贝随之消失。</p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li>生产侧：<code>tools/*.js</code> 搜 <code>^\s*label:</code> → <strong>0 个工具定义带 label</strong>（只有 <code>adapter.js:142</code> 的 <code>tool.label || tool.name</code> 兜底，与 <code>canvas.js:99</code> 一个无关的块字段）。✅</li>
+          <li>夹具侧：<code>loop.test.js</code> 的 <code>label:</code> 命中 <code>:118</code>、<code>:129</code>、<code>:605</code>、<code>:980</code> 等多处。✅ 对比成立</li>
+          <li><code>adapter.test.js:213</code> 测试名「每个工具都补上了 label」实测在 <code>list.forEach</code> 上跑 —— 确认它验的是 <code>registry(sampleTools())</code> 这条<strong>夹具路径</strong>。✅</li>
+          <li>「15 个生产工具」这个数量我未逐个核准（粗略统计在 19 上下且含非工具项），<strong>核心对比已确认，数字待澄清</strong>。</li>
+        </ul>
+        <p class="verdict v-ok-t">结论：核心对比（夹具带 label / 生产不带）实测成立。<b>「15 个」这个数字与「adapter.test.js 验的是夹具路径」这两点建议在条目里补明确。</b></p>
+      </div>
+    </div>
+  </details>
+</section>
+
+<!-- ============ 新功能 ============ -->
+<section class="group" id="g-feat">
+  <div class="group-h">
+    <h2>三、待审核 · 新功能</h2>
+    <span class="pill p-feat">2 条</span>
+  </div>
+  <p class="group-desc">
+    T-10 归档后只剩 3 条（现 2 条，T-111 已按方案①修完移档）。体量差一个数量级：<strong>T-111 是文档工程债（已修）</strong>，
+    <strong>T-49 与 T-51 是一对</strong>，且两条花了很大篇幅互相引用、反复警告「别把两半捆在一起评估」——
+    这本身就是它们难审的证据。
+  </p>
+
+  <!-- T-111 -->
+  <details class="card" id="t111">
+    <summary>
+      <span class="id">T-111</span>
+      <div class="ttl">
+        <h3>backlog-done.md 里有重复编号，按编号回溯会取到错条目</h3>
+        <div class="tags"><span class="tag st st-wip">已清（2026-10-07）</span><span class="tag">2026-10-06</span><span class="tag">文档工程债</span><span class="tag">方案①已执行</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>
+          <code>backlog-done.md</code> 的价值就一句话：<strong>追溯某个坑当初是怎么被实测出来的</strong>。
+          而追溯的入口就是 T 编号 —— spec、ADR、代码注释里大量写着「见 T-24」「联系 T-04」。
+        </p>
+        <p>现在同一个编号对应<strong>两条以上互不相干</strong>的条目。成因是历史上多次改号与并档<strong>没有回头核重</strong>，
+          而且撞号是<strong>静默</strong>的 —— 归档时不查重没人拦，撞了也没人发现。</p>
+        <p>
+          这条登记过程本身有信息量：8 组 → 7 组两次复核，中间还查出「<strong>同一条被归档两次，且第一份的结论被误挂了另一条 T-61 的结论</strong>」——
+          比撞号更糟，那会让 T-61 以「状态：待审核」收尾。2026-10-07 已查清修好。
+        </p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li>归档现有 <strong>126</strong> 条编号条目（第一版时 119）。</li>
+          <li><strong>重复仍是 7 组，行号与上次完全一致</strong>（说明期间新增的归档没有再撞号）：
+            <code>T-61</code>(:423/:596)、<code>T-62</code>(:434/:628)、<code>T-69</code>(:511/:812)、<code>T-70</code>(:522/:647)、
+            <code>T-71</code>(:533/:659)、<code>T-83</code>(:693/:733)、<code>T-89</code>(:795/:930)。</li>
+          <li><strong>条目自身仍有一处自相矛盾</strong>：<code>backlog.md:161</code> 是修完后的清单（T-62×2），紧接 <code>:162</code> 又是修复前的旧清单（T-62×3）—— 两行并列，旧稿没删。</li>
+        </ul>
+        <p class="verdict v-ok-t">结论：<b>2026-10-07 已按方案①修完</b>——7 组重复的后出现者顺延为 T-130~T-136，逐条补「改号说明」，代码注释与 CONTEXT.md 的交叉引用已同步，档案内不再有重复编号。条目已移入 backlog-done.md。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- T-49 -->
+  <details class="card" id="t49">
+    <summary>
+      <span class="id">T-49</span>
+      <div class="ttl">
+        <h3>把助手对话界面搬到浏览器原生侧边栏（Chrome sidePanel / Firefox sidebar_action）</h3>
+        <div class="tags"><span class="tag st st-review">待审核</span><span class="tag">2026-10-05</span><span class="tag">架构 · 宿主形态</span><span class="tag v-part">成立，前提待复核</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>
+          <strong>核心问题只有一个：助手和它要操作的页面不在同一块屏幕上。</strong>
+          现有两个宿主都住在 dashboard（newtab 页）里 —— 独立助手页 <code>/workflows/agent</code>、编辑器右侧可拖拽侧栏。
+          用户问「这个页面的列表怎么写 selector」时，助手在 dashboard 标签/弹窗里，被问的页在另一个窗口。
+        </p>
+        <p>
+          这个错位<strong>已经付出可见的复杂度代价</strong>，条目用代码证明了：
+          <code>src/agent/tab.js</code> <strong>整个文件的头注都在解释「为什么不能直接用 <code>getActiveTab()</code>」</strong> ——
+          dashboard 是普通标签页 → <code>activeTab</code> 返回 dashboard 自己（<code>chrome-extension://…</code>）→ content script 没注入 →
+          之后每次工具调用报 <code>Could not establish connection</code>。
+          换句话说：<strong><code>tab.js</code> 存在的原因就是「助手与页面不同屏」。</strong>
+        </p>
+        <p>派生的连锁复杂度：<code>resolveTargetTab</code> 因此是<strong>四级优先级</strong>（pinned → lastAccessed → 当前窗口 → 其他窗口），
+          本质是「<strong>猜</strong>用户在看哪个页」；dashboard 标签不存在时开 715×715 popup 窗口，助手与目标页必然不同窗；
+          「loop 跑在 newtab 页」当初相对 pie 是优势（不占用户页面），反过来也是约束（动了 dashboard 标签，正在跑的一轮就会死）。</p>
+        <p><strong>好处有代码依据且很实</strong>：侧边栏与目标页并排后，「用户正在看的页」从四级优先级的猜测<strong>变成定义</strong>，
+          <code>tab.js</code> 的启发式与 T-08 的失效态困惑同时缓解；面板跨导航/切标签不消失。</p>
+        <p><strong>坏处同样具体，四条：</strong></p>
+        <ul>
+          <li>① <strong>替不掉编辑器侧栏</strong> —— canvas 组的唯一来源是 vue-flow 句柄。最坏三个宿主而不是两个。</li>
+          <li>② <strong>Firefox 没有 <code>chrome.sidePanel</code></strong>，只有 legacy <code>sidebar_action</code>（按窗口而非按标签，<code>sidebarAction.open()</code> 需 FF 121+，本项目 <code>strict_min_version: 91.1</code>）→ 两套实现，两个 manifest 各加一个键。<strong>最大代价。</strong></li>
+          <li>③ 面板宽约 320px → T-12 / T-15 / T-16 三条宽度痛点<strong>原样继承</strong>（其中 T-12、T-16 已于本轮归档，但痛点本身不会消失）。</li>
+          <li>④ 多一个常驻页面 ⇒ <code>tabLocks</code> 与 session 写链各持一份 → B1 的 lost-update 窗口从「理论」变「日常」。</li>
+        </ul>
+        <p><strong>推荐口径（值得单独拎出来）</strong>：本条<strong>不是「换掉现在的实现」</strong>，而是「用侧边栏替掉宿主①，宿主②必须保留」——
+          保留的理由是画布句柄，不是偏好。这样 ADR 0001 的原始动机与 <code>tab.js</code> 的四级优先级一起被消解，且不新增第三个能力重叠的宿主。</p>
+        <p>
+          <strong>不可顺手带过的技术前置</strong>：<code>tabLocks</code>（模块级 Map）与 session 写串行化<strong>必须先提到 background 或 storage</strong>，
+          否则两个常驻页面各持一份锁与写链，本条的安全前提当场破。顺带能修掉一个存量缺口：用户手动开两个 dashboard 标签页时，跨会话 tab 锁<strong>今天就已失效</strong>。
+        </p>
+        <p><strong>低成本先验</strong>：若只想验证「同屏」这一条收益而暂不换宿主，可在独立助手页补一个「把当前目标页 pin 住」的动作（复用现有 TabPicker + pin 体系），成本远低于换宿主，且顺带把 T-08 一起做掉。</p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li><code>tab.js:1-16</code> 头注<strong>仍在</strong>，内容与登记一致（为何不能用 <code>getActiveTab()</code>、dashboard 与 popup 两种错位）。✅</li>
+          <li><code>tab.js:77</code> <code>resolveTargetTab</code> 位置一致。✅</li>
+          <li>manifest 核对：<code>manifest.chrome.json</code> MV3 + <code>minimum_chrome_version: 116</code>，<strong>无 <code>side_panel</code> 键、无 <code>sidePanel</code> 权限</strong>；<code>manifest.firefox.json</code> MV2，<strong>无 <code>sidebar_action</code></strong>。✅ 建项成本未变</li>
+          <li><strong>一条前提需重核</strong>：条目把「侧边栏拿不到画布」当坏处①，依赖 <code>deps.canvas</code> 只在 <code>[id].vue</code> 注入；而 <code>[id].vue</code> 与 <code>agentHost.js</code> 本轮均为未提交改动状态。<strong>画布组与 context 组的接线现状应重新核对后再定口径</strong>。</li>
+        </ul>
+        <p class="verdict v-part-t">结论：核心问题与证据未变。<b>可行性依赖 T-51 的接线现状，而该处代码有未提交改动</b> —— 建议先核实 T-51，再回来定本条排期。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- T-51 -->
+  <details class="card" id="t51">
+    <summary>
+      <span class="id">T-51</span>
+      <div class="ttl">
+        <h3>画布组锁死在 dashboard 的 [id].vue 进程内，跨宿主要「代理」而非「接线」</h3>
+        <div class="tags"><span class="tag st st-review">待审核 · 架构决策</span><span class="tag">2026-10-05</span><span class="tag">架构 · 跨进程</span><span class="tag v-part">成立，但分步方案已滞后</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>这是 T-49 <strong>被捆住的那一半</strong>，也是整个侧边栏设想真正的天花板。</p>
+        <p>
+          「侧边栏里 pin 住 tab + 工作流」里，<strong>pin tab 成立，pin 工作流有明确的技术天花板</strong>。
+          canvas 组的工具全部只依赖 <code>ctx.editor</code>（vue-flow 实例）与 <code>ctx.blocks</code>，
+          而 editor 实例由 <code>[id].vue</code> 的 <code>getEditor: () =&gt; editor.value</code> 提供 ——
+          <strong>物理上活在 dashboard 页的 JS realm 里</strong>。侧边栏即使知道 workflowId 也没有画布句柄，
+          <code>add_block</code> 直接返回「画布还没准备好。」
+        </p>
+        <p><strong>好消息</strong>：不接线 canvas 组在语义上<strong>自洽</strong> ——
+          <code>enabledGroups</code> 会连 prompt 事实表一起裁剪，<strong>模型不会知道有画布工具存在</strong>。
+          侧边栏 pin 工作流后能做到 <code>context</code> 组那三样，代价是<strong>一条消息链</strong>而不是画布代理。</p>
+        <p><strong>坏处 / 想做「在侧边栏对着页面直接把块搭到画布上」</strong>（这才是助手最像助手的场景），只有一条路：
+          侧边栏 → background → <code>tabs.sendMessage</code> → dashboard 页的 editor 实例执行。
+          <code>BackgroundUtils.sendMessageToDashboard</code> 是先例，但那是「找一个 dashboard 标签发消息」的<strong>粗粒度</strong>通道，
+          不是「持有某个 workflowId 的 editor 并在它上面做<strong>只进内存</strong>的画布操作」的细粒度代理。</p>
+        <p>这条路引出三个<strong>必须先答</strong>的问题：</p>
+        <ul>
+          <li>① dashboard 页没打开时怎么办（拒绝？还是自动开一个？<strong>自动开就撞 ADR 0001 被拒的「助手页绑定某个工作流」</strong>）；</li>
+          <li>② 两侧同时持有同一 workflowId 的 editor（用户在编辑器里手动拖块的同时侧边栏 agent 也在改）—— tech-design R-5 记的正是这类竞态；</li>
+          <li>③ <strong>G5 边界</strong>：<code>onCanvasChanged</code> 只标脏这条不变式跨进程后是否还成立。
+            改动只要进了<strong>同一个 editor 实例</strong>就成立；<strong>但如果代理是「读出来改完再写回去」就会踩线</strong> —— 那已经不是纯内存操作。</li>
+        </ul>
+        <p><strong>两步走（重点是别一次做）</strong>：① 只 pin tab + pin 工作流<strong>归属</strong>，canvas 组不注册，把 <code>context</code> 组接线做通 ——
+          已覆盖 ADR 0001 撤掉编辑器 tab 的原始动机，零跨进程风险；② 真要做画布代理，先答上面三问、<strong>另立 ADR</strong>，
+          判据是「用户是否真的在侧边栏里搭工作流」，而不是「技术上能不能转发」。</p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li><code>canvas.js</code> 的 editor 空守卫实测 <strong>4 处</strong>：<code>:89</code> / <code>:133</code> / <code>:264</code> / <code>:344</code>，全部返回「画布还没准备好。」
+            （登记写「三处，<code>:87/:128/:176</code>」—— 行号全漂，且<strong>多了一处</strong>。）✅ 核心判断成立</li>
+          <li>工具的 ctx 依赖声明全部含 <code>editor</code>（<code>:469/:503/:526/:540</code>）。✅</li>
+          <li><code>canvas.js:12</code> 头注仍在解释 editor 由宿主经 <code>index.js</code> 注入；唯一注入通道 <code>agentHost.js</code> 的 <code>...(deps.canvas || {})</code>。✅</li>
+          <li><strong>分步方案已滞后一节</strong>：条目把「第一步要先修 T-50」当前置，但 <strong>T-50 已归档完成</strong>，且 <code>agentHost.js</code> 本轮有未提交改动。<strong>第一步的阻塞项可能已解除</strong>，需重新确认「context 组现在通到哪一步」。</li>
+        </ul>
+        <p class="verdict v-part-t">结论：架构判断<strong>完全成立且有代码硬证据</strong>。两处须先修再排期：① 三个待答问题（尤其 G5 红线）；② 第一步的前置已消失，分步方案需按新现状重写。</p>
+      </div>
+    </div>
+  </details>
+</section>
+
+<!-- ============ 已批准 ============ -->
+<section class="group" id="g-appr">
+  <div class="group-h">
+    <h2>四、已批准（待排期）</h2>
+    <span class="pill p-done">1 条 · 进行中</span>
+  </div>
+  <p class="group-desc">已获拍板、代码已落地，等真机实测后归档。列在此处是为了让「未完成区」的完整性不被误解成「全都还没动」。</p>
+
+  <details class="card">
+    <summary>
+      <span class="id dim">T-81b</span>
+      <div class="ttl">
+        <h3>skills 两级注入 + read_skill 工具 + zip 导入导出</h3>
+        <div class="tags"><span class="tag st st-wip">进行中</span><span class="tag">2026-10-05 登记 / 06 评审</span><span class="tag">新功能 · 大票</span><span class="tag">借鉴 pi skills.ts:355-380</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>给助手加一个<strong>可扩展的任务知识库</strong>：用户写「技能」（说明 + 附带参考文件），助手在需要时自己读。</p>
+        <ul>
+          <li><strong>两级注入</strong>：system prompt 只放索引（每技能一行「名称 — 描述」），指示模型任务匹配时<strong>用工具读全文</strong> —— 避免所有正文常驻吃 context。新增 <code>read_skill</code> 挂 <code>context</code> 组（<code>class: read</code>，红线兼容）。</li>
+          <li><strong>防撑爆</strong>：索引 &gt;4K 警告（不阻断）；单技能 256K 软上限。<strong>技能描述长度硬闸在 2026-10-06 被实测推翻并降级</strong> —— 生态 skill 描述本就数百字符（那是给模型的触发判据），硬闸会挡住导入主场景。</li>
+          <li><strong>明确边界</strong>：附带文件在本运行时<strong>只有「读」没有「执行」</strong>；二进制/脚本导入时<strong>拒收并明确告知，不静默丢</strong>。</li>
+        </ul>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）</h4>
+        <ul>
+          <li>状态与登记一致（进行中）；落地在 commit <code>af3f329b</code>。</li>
+          <li>条目写的「488 测试绿」已被后续多批落地超越 —— 当前 <code>npm test</code> 实跑 <strong>576 项</strong>。该数字应更新。</li>
+        </ul>
+      </div>
+    </div>
+  </details>
+</section>
+
+<!-- ============ B 区 ============ -->
+<section class="group" id="g-b">
+  <div class="group-h">
+    <h2>五、B 编号 · 内置助手功能自身的欠账</h2>
+    <span class="pill p-feat">6 条</span>
+  </div>
+  <p class="group-desc">
+    这区定位不同：<strong>B 编号不是「会话里撞见的问题」，而是助手功能自己知道的欠账</strong>。
+    每条记四件事：内容 / 为什么缓 / <strong>重开的触发条件</strong> / 状态。最后一项最有价值 ——
+    它把「什么时候必须做」提前写死，避免将来凭感觉决定。
+  </p>
+
+  <details class="card">
+    <summary><span class="id b">B2</span><div class="ttl"><h3>LLM 历史最后防线：空消息清洗 + 相邻同 role 修复</h3><div class="tags"><span class="tag st st-plan">待排期 ~0.5d</span><span class="tag">纵深防御</span></div></div><svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg></summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>发送前给消息历史做两道清洗，机制借鉴 pie 的 <code>history-validation.ts</code>：<strong>drop 空消息</strong>（Kimi 对空 assistant 直接 400）；<strong>相邻同 role 之间插哨兵消息</strong>（Anthropic 400，system 对不算违规）。不可恢复输入抛专用错误，遥测只记长度+哈希。</p>
+        <p><strong>为什么缓</strong>：当前主用模型（ModelScope / OpenAI 兼容）<strong>未实测出</strong>这两类 400，属纵深防御。</p>
+        <p><strong>重开条件</strong>：接 Anthropic / Kimi 类严格端点，或多轮续接 + 插话组合后出现不明 400。</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary><span class="id b">B3</span><div class="ttl"><h3>设置页 provider 三件套</h3><div class="tags"><span class="tag st st-plan">待排期 ~1d</span><span class="tag">功能增量</span></div></div><svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg></summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <ul>
+          <li>① <strong>「测试连接」按钮走真实 chat 流</strong>（16 token + 15s 超时）；</li>
+          <li>② <strong>「拉取模型列表」</strong>（<code>/v1/models</code> 归一化）；</li>
+          <li>③ <strong>模型元数据驱动 token 预算</strong>（vision / tools / contextWindow），<strong>替代手填 contextWindow</strong>。</li>
+        </ul>
+        <p>第③项与 <a href="#t95">T-95</a> 是同一件事的两端：T-95 想用真实 usage 校准估算，B3 想<strong>直接把手填换成从 provider 拉的元数据</strong> —— 后者更根本，<strong>做完 B3③ 会改变 T-95 的收益评估</strong>。</p>
+        <p><strong>为什么缓</strong>：功能增量，不影响正确性。<strong>重开条件</strong>：下一轮设置页改造。</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary><span class="id b">B4</span><div class="ttl"><h3>eval 轻量回归集</h3><div class="tags"><span class="tag st st-plan">待排期 ~1d</span><span class="tag">质量保障</span></div></div><svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg></summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>把 <code>.agent-test/*.mjs</code> 三个 live 脚本升级为<strong>固定任务集</strong>：每任务一份 JSON（prompt / 桩 / 断言）+ 汇总输出，目标「改 prompt 或换模型后一键回归」。</p>
+        <p><strong>为什么缓</strong>：目前 prompt 变更频率低，手测可覆盖。<strong>重开条件</strong>：prompt 开始频繁迭代、或接入第二个 provider 需要对比。</p>
+        <p><b>本轮观察</b>：T-81b 改 prompt/换 provider 层、T-09~T-16 一批 prompt 事实表改动，正是触发条件描述的那种场景 ——
+          现在这类验证靠 <code>npm test</code> 的单元测试 + 手点，<strong>没有「同一批任务跨改动对比」的手段</strong>。</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary><span class="id b">B6</span><div class="ttl"><h3>agent:run-js 完整执行路径</h3><div class="tags"><span class="tag st st-dec">待决策</span><span class="tag">CSP 兼容</span></div></div><svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg></summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p><code>test_js</code> / <code>agent:run-js</code> 现在是 <code>new Function</code> 求值（async、10s 页内超时、15s 硬超时均已补 —— 后两项是 T-29/T-30 归档时补的）。方案承诺但<strong>没做</strong>的还有：<strong>CSP 违规监听、严格 CSP 页面走 <code>chrome.debugger</code> 降级、Firefox 守卫、console 捕获</strong>。</p>
+        <p><strong>为什么缓</strong>：目标页多为普通站点，<code>executeScript</code> MAIN world 可用；debugger 降级会引入<strong>调试横幅等 UI 代价</strong>，需单独设计。</p>
+        <p><strong>重开条件</strong>：用户报告在严格 CSP 页面 <code>test_js</code> 全部失败。</p>
+        <p><b>连带一笔文案债</b>：归档条目 T-06 的结论里写过 —— 确认卡上那句 CSP 提示<strong>刻意没有照抄方案</strong>，
+          改成了诚实描述（「严格 CSP 的页面可能拒绝执行，本版没有降级方案」），并注明<strong>「B6 落地后再按方案回填」</strong>。</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary><span class="id b">B7</span><div class="ttl"><h3>中止后的「上一轮被中断」提示</h3><div class="tags"><span class="tag st st-plan">待排期（小）</span><span class="tag">会话恢复</span></div></div><svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg></summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>loop 跑在 newtab 页上，所以<strong>关掉页面 = loop 直接消失</strong>。重开页面时若发现当前会话末尾有未收尾事件（悬空 tool_calls 已被净化，可安全续接），给一条 system-notice 告知「上一轮被中断」，而不是让用户对着半截对话莫名。</p>
+        <p><strong>为什么缓</strong>：净化已保证不炸，只是缺提示。<strong>重开条件</strong>：与 P3 插话 / 会话 UI 下一轮迭代一起做。</p>
+        <p><b>本轮观察</b>：T-49 提出的「loop 跑在 newtab 页」这个约束，<strong>正是本条问题规模的根源</strong>。侧边栏方案能缓解它，但那是 T-49 的收益，<strong>不该顺手拿来当 B7 已做的理由</strong>。</p>
+      </div>
+    </div>
+  </details>
+
+  <!-- B9 -->
+  <details class="card" id="b9">
+    <summary>
+      <span class="id b">B9</span>
+      <div class="ttl">
+        <h3>换 pi-agent-core 内核的四项已知退化（决策记录，不是待办）</h3>
+        <div class="tags"><span class="tag st st-dec">待决策</span><span class="tag">ADR 0004</span><span class="tag">明知故犯</span><span class="tag v-no">标题在本轮工作副本中仍缺失</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">这条在说什么</h4>
+        <p>全 backlog 里<strong>唯一明确写着「这一条是决策记录，不是待办」</strong>的条目 —— 四项退化都是明知故犯，写下来是为了「三个月后没人记得为什么长对话会炸」。用户 2026-10-05 在<strong>知悉实测代价的前提下</strong>拍板：换内核 + 丢自研 provider + 不做上下文护栏 + 测试全部重写。</p>
+        <p><strong>① 无 token 预算裁剪、无步数上限。</strong>pi-agent-core 实测<strong>没有任何默认行为</strong>：<code>transformContext</code> 只是个回调位置，pi 从不自己调它做任何事，也没有 <code>MAX_STEPS</code> 等价物。后果：长对话直接撞 provider context 上限；模型可无限工具循环。<br><b>连带</b>：<code>window.js</code> 的裁剪与 T-01/B2 的「纵深防御」注释<strong>都建立在这个前提上</strong>，去掉它等于把纵深防御一起去掉。</p>
+        <p><strong>② <code>ERROR_KIND</code> 六种分类降级。</strong>实测 pi 的 openai-completions 失败路径上 <code>diagnostics</code> <strong>恒为 <code>undefined</code></strong>，<code>onResponse</code> 在 <code>await retryProviderRequest(...)</code> <strong>之后</strong>调用，对 401/429 一次都不触发。唯一可靠的只有 <code>stopReason</code>（两值）+ <code>errorMessage</code> 字符串。后果：配置缺失 vs provider 401、429 配额耗尽 vs 真限流，都得靠我们自己<strong>对字符串做正则反解</strong>；而现状 <code>classifyHttpError</code> 直接拿得到 status 与 body 全文，<strong>信息更全</strong>。</p>
+        <p><strong>③ 丢掉全部 364 条测试的回归保护。</strong>归档里每条已解决条目背后都有一条测试。重写期间若新代码有 bug，<strong>没有旧测试能回答「这里本来是对的」</strong>。基线快照在 <code>.scratch/</code>（已 gitignore），<strong>换机器就没了</strong>。</p>
+        <p><strong>④ 未知工具名不再过确认门</strong>（票 08 落地时发现，非用户决策）。pi 内部短路未知工具，<strong>不经 <code>beforeToolCall</code></strong>，用户看不到确认卡 —— 与 ADR 0002 字面上有落差。<strong>判断为可接受</strong>：不存在的工具本来也执行不了；ADR 0002 要防的是「模型改了不该改的东西」，这条路径上什么都没发生。<strong>但若将来引入「按名字动态注册工具」，这条必须重开。</strong></p>
+        <p><strong>实测体积</strong>：内核 153.6 KB min / 40.4 KB gzip + provider 层 309.7 KB min / 77.8 KB gzip = <strong>463.3 KB min / 118.2 KB gzip</strong>，两个都是异步 chunk。比 PoC 预估的 596.6 KB 小（只 import 两个子路径）。</p>
+        <p><strong>重开条件（任一命中即应重开）：</strong>① 用户报告长对话撞 context 上限，或模型陷入工具循环；② <code>ERROR_KIND</code> 降级导致错误提示无法区分（<b>已部分命中</b>：T-04 抱怨错误渲染太弱）；③ 重构后出现「说不清是新引入还是存量」的问题，且基线快照已不在本机。</p>
+      </div>
+      <div class="verify">
+        <h4 class="lb">本轮核对（2026-10-07）：技术判断全对，文档结构缺陷仍在</h4>
+        <ul>
+          <li><code>grep MAX_STEPS src/</code> 零命中 → ①的「无步数上限」仍成立。✅</li>
+          <li><code>loop.js:655/:662</code> 压缩链路仍是纯估算 → ①与 T-95 的缺口未变。✅</li>
+          <li><strong>条目标题仍然缺失</strong>：<code>backlog.md:271</code> 直接以粗体正文开头，上方无 <code>### B9</code> 标题与「来源」行（<code>git show HEAD:docs/backlog.md</code> 里两者都在）。B8 已于期间归档到 <code>backlog-done.md</code>，但<strong>无作废说明</strong>。</li>
+          <li><strong>数字矛盾仍在</strong>：<code>:271</code> 写「三项退化」，<code>:273</code> 写「内容（<strong>四项</strong>）」。</li>
+        </ul>
+        <p class="verdict v-no-t">结论：四项退化的技术判断全部仍成立。<b>但 <code>backlog-done.md</code> 与多个 spec 文档共 10 处以上引用「B9 第 1 项」，而按标题检索 B9 一无所获 —— 这份决策记录存在的唯一理由就是可达。</b></p>
+      </div>
+    </div>
+  </details>
+</section>
+
+<!-- ============ 已归档 ============ -->
+<section class="group" id="g-archived">
+  <div class="group-h">
+    <h2>六、本次已归档（从待审核区清出）</h2>
+    <span class="pill p-ok">5 条</span>
+  </div>
+  <p class="group-desc">
+    这 5 条在第一版里是「待审核」，现已全部落地并移入 <code>docs/backlog-done.md</code>。
+    列出结论要点，因为<strong>它们的做法值得沿用</strong> —— 变异测试 + 纯模块抽取 + 诚实标注未实测部分。
+  </p>
+
+  <table class="mini">
+    <tr><th>条目</th><th>做了什么</th><th>本轮可见的遗留</th></tr>
+    <tr>
+      <td><strong>T-60</strong><br>缺 toolCallId 打点</td>
+      <td><code>loop.js</code> 加本轮计数 + 独立 <code>tool.call.missingId</code> 打点，DONE 恒带计数；<strong>只加可观测性，不改 pi 行为</strong>；变异测试 4 条全红</td>
+      <td>DONE <strong>UI 不渲染</strong>（正是 T-09①）—— 该条已随 T-09 归档而解决</td>
+    </tr>
+    <tr>
+      <td><strong>T-12</strong><br>输入框与插话反馈</td>
+      <td>发现 <code>autoresize</code> <strong>本来就坏着</strong>（<code>emitValue</code> 里的调用一直被注释），修共享组件 + 面板开 <code>autoresize</code>（88px/128px 兜底）+ 运行时只读 <code>pendingInstructionCount()</code> 做常驻插话计数；变异测试 8 条全红</td>
+      <td><code>maxlength</code> / 字数提示<strong>刻意没做</strong>（属引擎层约束，加了会让用户以为写满了却被静默截断）</td>
+    </tr>
+    <tr>
+      <td><strong>T-16</strong><br>整条回答可复制</td>
+      <td>复制入口加在 <code>AgentMarkdown.vue</code> 根容器（<code>raw</code> 在手边，思考过程也顺带能复制）；三个取舍都写进结论：复制 <code>props.raw</code> 而非拼 blocks、按钮带不透明底色、放顶部而非底部</td>
+      <td><strong>8 条变异有 1 条测不出</strong>（<code>v-if="false"</code>）→ 直接催生了 <strong>T-128</strong></td>
+    </tr>
+    <tr>
+      <td><strong>T-10</strong><br>空态示例与能力徽标</td>
+      <td>新增纯模块 <code>examples.js</code>，徽标与示例<strong>都从同一份 <code>enabledGroups</code> 推导</strong>（拒绝「面板说有画布、其实没有」）；徽标按固定顺序；示例只挑该宿主真做得到的；点击只填草稿不自动发送；变异测试 10 条全红</td>
+      <td>面板实际观感（4 示例 + 4 徽标在 320px 侧栏）<strong>未经真人验证</strong></td>
+    </tr>
+    <tr>
+      <td><strong>T-09</strong><br>轮次/模型/水位可见性</td>
+      <td>START 加 <code>at</code> 字段 + 折叠层加 <code>turn</code> 槽位；<code>AgentSessionList</code> 加 model 与水位；判定逻辑全进纯模块 <code>usage.js</code>。<strong>单测当场抓到一个真 bug</strong>：<code>contextPercent(null, cw)</code> 因 <code>Number(null)===0</code> 把「没有用量」显示成 0%</td>
+      <td>水位分母是<strong>用户填的建议值</strong>（BYOK 下协议不暴露真实窗口），tooltip 整句写明「这是估算」，守卫钉住这句不许删</td>
+    </tr>
+  </table>
+
+  <div class="callout">
+    <h4 class="lb">这批工作里最值得沿用的三个做法</h4>
+    <ul style="margin-bottom:0">
+      <li><strong>变异测试</strong> —— 真改源码、跑真测试、跑完还原，而且断言「变异确实改成了想改的样子」。T-16 的诚实边界（1 条测不出）正是靠它暴露的。</li>
+      <li><strong>逻辑进纯模块，组件只摆位置</strong> —— T-09 的 <code>usage.js</code>、T-10 的 <code>examples.js</code> 都是同一规矩，本仓挂不上组件测试，这条从 <code>confirm.js</code>/<code>sessions.js</code> 就立着。</li>
+      <li><strong>如实标注「未实测」</strong> —— 每条结论都写明哪些只由静态守卫覆盖、哪些未经真人验证，不拿「看起来对」冒充闭环。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 新发现 ============ -->
+<section class="group" id="g-find">
+  <div class="group-h">
+    <h2>七、核对中新发现（未登记）</h2>
+    <span class="pill p-bug">2 条</span>
+  </div>
+  <p class="group-desc">
+    按 <code>AGENTS.md</code>「发现即登记」，这两条应先落进 <code>docs/backlog.md</code> 等审核。
+    <strong>本轮仍未改任何 backlog 文件</strong>。
+  </p>
+
+  <details class="card" id="find1">
+    <summary>
+      <span class="id" style="background:var(--bug-soft);color:var(--bug)">新-1</span>
+      <div class="ttl">
+        <h3>B9 的条目标题在工作副本中仍缺失，首句「三项」与正文「四项」自相矛盾</h3>
+        <div class="tags"><span class="tag st st-review">待登记 · bug</span><span class="tag">2026-10-07</span><span class="tag v-no">两版均已复核，仍在</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">问题</h4>
+        <p>
+          <code>docs/backlog.md</code> 工作副本里 B9 那条<strong>没有 <code>###</code> 标题</strong> ——
+          <code>:269</code> 是 B7 的「状态：待排期（小）。」，<code>:271</code> 直接以粗体正文开头。
+          <code>git show HEAD:docs/backlog.md</code> 里有完整标题与「来源」行。<strong>两版之间其他条目都有维护，这个标题一直没被补回来。</strong>
+        </p>
+        <p>同时该条<strong>内部数字矛盾</strong>：<code>:271</code> 写「三项退化」，<code>:273</code> 写「内容（<strong>四项</strong>）」。原标题也是「三项」—— 第④项是后加的，标题与首句都没跟着改。</p>
+        <p>
+          <strong>为什么不能当格式小问题处理</strong>：<code>backlog-done.md</code> 与 <code>docs/agent-compaction-spec.md</code>、
+          <code>docs/agent-core-migration-spec.md</code> 等处共 <strong>10 处以上引用「B9 第 1 项」/「B9-2」</strong>。
+          标题丢了之后按标题检索一无所获，而这份决策记录存在的<strong>唯一目的</strong>就是「三个月后还能被找到」。
+        </p>
+      </div>
+      <h4 class="lb">证据（实测）</h4>
+      <ul>
+        <li><code>git show HEAD:docs/backlog.md</code> → 含 <code>### B8</code> 与 <code>### B9 —— 换pi-agent-core 内核的三项已知退化（决策，2026-10-05）</code> + 「来源」行。</li>
+        <li>工作副本 <code>Select-String '^### B'</code> → 只命中 B2/B3/B4/B6/B7，<strong>无 B8、无 B9</strong>。</li>
+        <li><code>backlog.md:271</code>「三项退化」vs <code>:273</code>「内容（四项）」。</li>
+        <li>B8 已在期间归档进 <code>backlog-done.md</code>，但<strong>工作副本里没有留下作废说明</strong>。</li>
+      </ul>
+      <h4 class="lb">建议</h4>
+      <p>补回 <code>### B9</code> 标题并把标题里的「三项」改为「四项」（或写「四项已知退化」以免再次漂移），首句「三项退化」一并改；
+        B8 若确系有意归档，在 B 区开头补一行「B8 随 agent tab 迁移作废，已移入归档」。</p>
+    </div>
+  </details>
+
+  <details class="card" id="find2">
+    <summary>
+      <span class="id" style="background:var(--bug-soft);color:var(--bug)">新-2</span>
+      <div class="ttl">
+        <h3>T-128 的建议①已完整落地并经我独立变异验证，但条目仍写「待审核 + 三档建议」</h3>
+        <div class="tags"><span class="tag st st-review">待登记 · 流程</span><span class="tag">2026-10-07</span><span class="tag v-no">实测证据充分</span></div>
+      </div>
+      <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 5l7 7-7 7"/></svg>
+    </summary>
+    <div class="body">
+      <div class="explain">
+        <h4 class="lb">问题</h4>
+        <p>
+          第一版我把「T-60 建议已落地但条目还在待审核」列为新发现 —— 它已被归档，处理得很好。
+          <strong>同型问题现在换了一条：T-128</strong>。它的建议①（<code>@vue/compiler-sfc</code> + <code>vue/server-renderer</code> 渲成字符串断言）
+          已经以 <code>utils/sfc-render.mjs</code>（184 行）+ <code>src/agent/panelRender.test.js</code>（5 个测试）的形态落地，
+          头注逐条对照着条目写的三个能力与两个不覆盖项 —— 但条目本身仍列着「①/②/③ 三档建议」、状态仍是「待审核」。
+        </p>
+        <p>这有连带后果：<strong>T-53 的排期依赖这个结论</strong>。T-128 明确说「顺序建议排在 T-53 之前 —— T-53 正在为『测不到』付结构性代价，若先有①，这笔代价可能不必付」。
+          T-53 现在仍写「抽 90 行 reducer」，而实际已经有能力直接渲染断言了。<strong>两条一起审很可能白抽一次 reducer。</strong></p>
+        <p>另外 <code>panelUi.test.js:4</code> 的头注仍写着「本仓没有组件测试基建（backlog T-26/T-53 已登记）」—— <strong>该注释现已过期</strong>，会继续误导读者以为面板挂不上测试。</p>
+      </div>
+      <h4 class="lb">证据（实测，含真变异测试）</h4>
+      <ul>
+        <li><code>utils/sfc-render.mjs</code> 存在，184 行，<code>git status</code> 为未跟踪新文件。</li>
+        <li><code>src/agent/panelRender.test.js</code> <code>import { renderSfc } from '../../utils/sfc-render.mjs'</code>，基线 <strong>5 pass / 0 fail</strong>。</li>
+        <li><strong>变异测试</strong>（改真源码 → 跑真测试 → 还原，SHA256 校验一致）：
+          把复制按钮包进 <code>v-if="false"</code> 后，<code>panelRender</code> <strong>fail 1</strong>、<code>panelUi</code>（42 条静态守卫）<strong>fail 0</strong>。
+          既证实了 T-128 的诊断，也证实了档①有效。</li>
+        <li><code>npm test</code> 全量实跑 <strong>576 项 / 575 pass / 0 fail / 1 skipped</strong>，新基建未打破任何现有守卫。</li>
+      </ul>
+      <h4 class="lb">建议</h4>
+      <p>① 把 T-128 改写为「档①已完成（含实测证据），档②/③ 待决策」并更新状态；
+        ② <strong>把 T-53 的排期决定明确挂到 T-128 档②的结论上</strong>（有 test-utils+jsdom 就不用抽 reducer，还是维持原方案）；
+        ③ 修 <code>panelUi.test.js:4</code> 那句过期头注。</p>
+    </div>
+  </details>
+</section>
+
+<footer class="doc">
+  <p>
+    数据源：<code>docs/backlog.md</code> 未完成区（待审核 / 已批准 / B 编号）+ <code>docs/backlog-done.md</code> 交叉核对。
+    归档区（126 条已解决）不在本页主体范围 —— 它的定位是追溯而非待办。
+  </p>
+  <p>
+    核对时间 2026-10-07（第二版）。工作副本有 <strong>40+ 个文件处于未提交状态</strong>，含 <code>docs/backlog.md</code>、<code>docs/backlog-done.md</code>、<code>loop.js</code>、<code>loop.test.js</code>、<code>agentHost.js</code>、<code>[id].vue</code> 与四个 <code>.vue</code> 组件，
+    以及 6 个未跟踪新文件（<code>examples.js</code> / <code>usage.js</code> / <code>panelRender.test.js</code> / <code>sfc-render.mjs</code> / <code>engineHandlers.test.js</code> 等）。
+    <strong>部分行号会随提交变动</strong>，涉及 T-49 / T-51 的接线结论建议提交后再复核一次。
+  </p>
+</footer>
+
+</main>
+</div>
+
+<script>
+  const links = [...document.querySelectorAll('.nav a')];
+  const secs = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => {
+      if (!e.isIntersecting) return;
+      links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + e.target.id));
+    });
+  }, { rootMargin: '-15% 0px -75% 0px' });
+  secs.forEach(s => io.observe(s));
+
+  const cards = [...document.querySelectorAll('details.card')];
+  document.getElementById('expandAll')?.addEventListener('click', () => cards.forEach(c => c.open = true));
+  document.getElementById('collapseAll')?.addEventListener('click', () => cards.forEach(c => c.open = false));
+</script>
+</body>
+</html>

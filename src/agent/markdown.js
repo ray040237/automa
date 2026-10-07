@@ -251,3 +251,104 @@ export function markdownToBlocks(raw) {
 
   return blocks;
 }
+
+/**
+ * 围栏外的一个空行就是块边界 —— 上面每个 while 循环都以「空行或块起始」收尾，
+ * 所以按空行切开后分段解析的结果与整段解析完全一致。唯一的例外是代码围栏：
+ * 围栏里的空行是代码内容，不能切。切点判定必须与 FENCE_OPEN/FENCE_CLOSE 用同一套
+ * 正则，否则会和上面的解析器对不上（下面 advanceCut 就是这么做的）。
+ */
+function advanceCut(text, from) {
+  let fence = false;
+  let lineStart = from;
+  let safe = from;
+
+  while (lineStart < text.length) {
+    const nl = text.indexOf('\n', lineStart);
+    const lineEnd = nl === -1 ? text.length : nl;
+    const line = text.slice(lineStart, lineEnd);
+
+    if (fence) {
+      if (FENCE_CLOSE.test(line)) fence = false;
+    } else if (FENCE_OPEN.test(line)) {
+      fence = true;
+    } else if (!line.trim() && nl !== -1) {
+      // nl !== -1 是硬条件：这个空行必须**已经被换行终止**才算切点。
+      // delta 是按 token 来的，会切在一行中间 —— 此时看到的「空行」可能只是
+      // 下一行的前缀（两个空格 + 后面还要来的「补充：…」）。提前切掉的话，
+      // 解析器会把后续内容当成新块，而整段解析会把它并进上一条列表项：
+      // 列表续行规则 /\s{2,}\S/ 要求的正是「缩进 + 非空」。
+      safe = lineEnd + 1;
+    }
+
+    if (nl === -1) break;
+    lineStart = lineEnd + 1;
+  }
+
+  return Math.min(safe, text.length);
+}
+
+/**
+ * 流式增量解析（T-14）。
+ *
+ * 问题：`blocks = computed(() => markdownToBlocks(raw))`，而 raw 每来一个 delta 就变一次，
+ * 于是整段被反复重解析，累计成本随回答长度**平方**增长。
+ *
+ * 实测（本机 node，`src/agent/markdown.test.js` 同一份 markdown.js，2026-10-07）：
+ *   单次解析是**线性**的，约 0.55 ms / 万字（5K 字 0.44ms、40K 字 2.26ms）——
+ *   单帧最差 2.2ms，**不到掉帧**。真正贵的是累计：20K 字按 40 字一个 delta 累计
+ *   **313ms**，按 10 字一个 delta 累计 **1.1s** 主线程时间。
+ *   对照：只重解析最后一个未完成块，20K 字累计 **4ms**（约 70 倍）。
+ *   渲染侧（SSR 渲染当代理指标，编译已剔除）每次 0.9~2.8ms，与解析同量级，
+ *   所以本次只治可测的解析成本；**浏览器里的 DOM patch 成本未实测**。
+ *
+ * 做法：已确定完成的块缓存起来，只重解析「最后一个还没写完的块」。
+ *
+ * 契约：`push(text)` 接整段文本（不是增量片段），内部自己算差量；返回当前全部块。
+ *   text 不是已收文本的追加（换了会话 / 组件复用）时自动整体重来。
+ *   `parsed()` 是累计交给 markdownToBlocks 的字符数，给测试断言「缓存真的在生效」。
+ */
+export function createMarkdownStream() {
+  let raw = '';
+  let cut = 0;
+  let done = [];
+  let parsed = 0;
+
+  const parse = (text) => {
+    parsed += text.length;
+    return markdownToBlocks(text);
+  };
+
+  const all = () => done.concat(parse(raw.slice(cut)));
+
+  return {
+    blocks: all,
+    push(text) {
+      const next = String(text ?? '');
+      if (next !== raw && !next.startsWith(raw)) {
+        raw = next;
+        cut = 0;
+        done = [];
+        parsed = 0;
+      } else {
+        raw = next;
+      }
+
+      const nextCut = advanceCut(raw, cut);
+      if (nextCut > cut) {
+        done = done.concat(parse(raw.slice(cut, nextCut)));
+        cut = nextCut;
+      }
+
+      return all();
+    },
+    reset() {
+      raw = '';
+      cut = 0;
+      done = [];
+      parsed = 0;
+    },
+    parsed: () => parsed,
+    text: () => raw.length,
+  };
+}

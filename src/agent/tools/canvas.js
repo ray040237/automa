@@ -14,6 +14,7 @@
  */
 
 import { joinLines, safeJson } from '../confirm';
+import { defineTool } from './define';
 
 /**
  * 在画布上加一个块。
@@ -436,7 +437,7 @@ function listBlockIds(blocks) {
 
 /**
  * 把「用户在放行什么」的画布 diff 摘要整形出来 —— 两个写类工具的
- * confirmDetail 共用（T-83）。
+ * confirmDetail 共用（T-134）。
  */
 function canvasConfirmDetail(action, idKey, args) {
   const id = args && args[idKey] ? String(args[idKey]) : '';
@@ -462,7 +463,7 @@ function canvasConfirmDetail(action, idKey, args) {
 /**
  * 工具定义。
  */
-export const addBlockTool = {
+export const addBlockTool = defineTool({
   name: 'add_block',
   class: 'write',
   group: 'canvas',
@@ -494,9 +495,9 @@ export const addBlockTool = {
   async execute(args, ctx) {
     return addBlock(ctx, args || {});
   },
-};
+});
 
-export const updateBlockTool = {
+export const updateBlockTool = defineTool({
   name: 'update_block',
   class: 'write',
   group: 'canvas',
@@ -517,9 +518,9 @@ export const updateBlockTool = {
   async execute(args, ctx) {
     return updateBlock(ctx, args || {});
   },
-};
+});
 
-export const listCanvasTool = {
+export const listCanvasTool = defineTool({
   name: 'list_canvas',
   class: 'read',
   group: 'canvas',
@@ -531,9 +532,9 @@ export const listCanvasTool = {
   async execute(args, ctx) {
     return listCanvas(ctx, args || {});
   },
-};
+});
 
-export const readBlockTool = {
+export const readBlockTool = defineTool({
   name: 'read_block',
   class: 'read',
   group: 'canvas',
@@ -565,4 +566,4 @@ export const readBlockTool = {
   async execute(args, ctx) {
     return readBlock(ctx, args || {});
   },
-};
+});

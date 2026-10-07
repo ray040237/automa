@@ -8,6 +8,8 @@
  * 因为 P0 的验收标准是「能不能一次写出正确的 selector」，与写操作无关。
  */
 
+import { defineTool } from './define';
+
 /**
  * @typedef {Object} ToolCtx
  * @property {(params: {detail?: string, maxChars?: number}) => Promise<string|{text: string, fingerprint?: string}>} ctx.readPage
@@ -99,7 +101,7 @@ export function normalizeReadPageArgs(args) {
  *   full      content + HTML 片段（极少用）
  * 预算兜底从参数里拿掉了 —— 旧 auto 档的隐式降级正是「砍错地方」的根因。
  */
-export const readPage = {
+export const readPage = defineTool({
   name: 'read_page',
   class: 'read',
   group: 'page',
@@ -116,8 +118,13 @@ export const readPage = {
         type: 'string',
         enum: READ_PAGE_DETAILS,
         description:
-          'probe=URL/标题/元素数/指纹(~150 token)；addresses=结构与地址(默认，写 selector 用这个)；' +
+          'probe=URL/标题/元素数/指纹(~150 token，默认也会附每个 frame 摘要)；addresses=结构与地址(默认，写 selector 用这个)；' +
           'content=再加可见正文；full=再加 HTML 片段(极少用)。',
+      },
+      frame: {
+        type: 'string',
+        description:
+          '读哪个 frame。默认 all=顶层+所有 iframe 一起读；top=只顶层；传 frameId 数字=只读该 frame。',
       },
       maxChars: {
         type: 'number',
@@ -133,6 +140,7 @@ export const readPage = {
     const res = await ctx.readPage({
       detail: norm.detail,
       maxChars: norm.maxChars,
+      ...(args && args.frame ? { frame: args.frame } : {}),
     });
 
     if (res && typeof res === 'object') {
@@ -144,7 +152,7 @@ export const readPage = {
 
     return { payload: res };
   },
-};
+});
 
 /**
  * 页内按文本找元素。
@@ -153,7 +161,7 @@ export const readPage = {
  * 不知道 selector 但知道页面上写了什么，用 find_text 找入口。
  * 只做字面匹配（不做正则：注入面 + 语法错误，见设计稿 §12）。
  */
-export const findText = {
+export const findText = defineTool({
   name: 'find_text',
   class: 'read',
   group: 'page',
@@ -194,14 +202,28 @@ export const findText = {
     const res = await ctx.findText({ keyword, limit });
     return { payload: res && typeof res === 'object' ? res.text : res };
   },
-};
+});
 
 /**
- * 读工作流当前变量。
+ * 变量值的类型标注（T-113）。
+ *
+ * description 承诺「含值与类型」，但实现一直只打印值 —— 模型写模板引用时
+ * 类型恰恰是最容易错的一处（Automa 模板里字符串要引号、数字不要）。
+ * typeof 对数组会说 object，对 null 会说 object，所以这里分别兜住；
+ * undefined 在 JSON 里本来就打不出来，标成 undefined 才能与「值是 undefined」
+ * 区分开（那种值会在模板里渲染成空串）。
+ */
+const valueType = (v) => {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return 'array';
+  return typeof v;
+};
+
+/** * 读工作流当前变量。
  *
  * 只读，不改。模型需要知道用户已有哪些变量，才能引用对名字。
  */
-export const getVariables = {
+export const getVariables = defineTool({
   name: 'get_variables',
   class: 'read',
   group: 'context',
@@ -230,21 +252,19 @@ export const getVariables = {
     const globals = data.globals || {};
     const lines = ['## 变量'];
 
+    // T-113：每行带上类型标注（string/number/boolean/object/array/null/undefined）。
+    const line = (k, v) =>
+      '  - ' + k + ' = ' + JSON.stringify(v) + '（' + valueType(v) + '）';
+
     lines.push('工作流变量:');
     const varKeys = Object.keys(vars);
     if (varKeys.length === 0) lines.push('  （空）');
-    else
-      varKeys.forEach((k) =>
-        lines.push('  - ' + k + ' = ' + JSON.stringify(vars[k]))
-      );
+    else varKeys.forEach((k) => lines.push(line(k, vars[k])));
 
     lines.push('全局变量:');
     const globalKeys = Object.keys(globals);
     if (globalKeys.length === 0) lines.push('  （空）');
-    else
-      globalKeys.forEach((k) =>
-        lines.push('  - ' + k + ' = ' + JSON.stringify(globals[k]))
-      );
+    else globalKeys.forEach((k) => lines.push(line(k, globals[k])));
 
     if (data && data.workflowId) lines.push('');
     if (data && data.workflowId)
@@ -252,7 +272,7 @@ export const getVariables = {
 
     return lines.join('\n');
   },
-};
+});
 
 /**
  * 查块 schema。
@@ -260,7 +280,7 @@ export const getVariables = {
  * 刻意不做模糊匹配：模型猜错块名时，返回明确的可用块名列表，
  * 而不是拿最像的那个糊弄过去 —— 糊弄过去的代价是生成一个静默失效的工作流。
  */
-export const getBlockSchema = {
+export const getBlockSchema = defineTool({
   name: 'get_block_schema',
   class: 'read',
   group: 'context',
@@ -334,4 +354,4 @@ export const getBlockSchema = {
 
     return lines.join('\n');
   },
-};
+});

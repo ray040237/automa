@@ -16,7 +16,33 @@ import { automaFuncsSnippets } from '@/utils/codeEditorAutocomplete';
 import templatingFunctions from '@/workflowEngine/templating/templatingFunctions';
 import { tasks } from '@/utils/shared';
 import credentialUtil from '@/utils/credentialUtil';
-import { sendMessage as backgroundSend } from '@/utils/message';
+
+/**
+ * 浏览器通道 adapter（T-126 第二步抽出去的）：两条超时常量 + `toBackground`
+ * + `readPageFromTab` + 帧合并，约 300 行，单独一个模块了。
+ *
+ * 搬走的理由、以及「三条超时常量为什么必须跟着一起走」，都写在那边文件的头注里。
+ *
+ * **先 import 再单独 re-export 是刻意的过渡设计**：导出面一个不动，
+ * `agentHost.js` 与 `assembly.test.js` 的 import 都不用改。什么时候可以删，
+ * 取决于那些消费方有没有跟着改成从 `./browserAdapter` 直接引 —— 见 T-126
+ * 第三步（本次明确不做）。
+ *
+ * 注意不能写成 `export {...} from './browserAdapter'`：那种写法只导出、
+ * **不在本文件作用域里建立绑定**，而 `createAgentRuntime` 的 toolCtx 里要用
+ * `sendMessage: toBackground`。
+ */
+import { toBackground, readPageFromTab } from './browserAdapter';
+
+/**
+ * 全链路日志（控制台 + 环形缓冲）。排查卡死/异常时的现场，见 log.js 头注。
+ *
+ * 实例本体搬到 `log.js` 了（同一次拆分）：`browserAdapter.js` 要写同一条日志
+ * （`channel.send` / `channel.reply` / `channel.timeout`），而环形缓冲**必须
+ * 只有一个** —— 拆成两个实例，页面卡死时从 `window.__agentLogs` 导出的现场就
+ * 只剩一半。同样先 import 再 re-export，导出面不变。
+ */
+import { agentLog } from './log';
 
 import { buildFacts } from './facts';
 import { createAgent } from './loop';
@@ -32,8 +58,13 @@ import {
   originOf,
   normalize,
 } from './tab';
-import { loadConfig, saveConfig } from './config';
-import { createSessionId, createSessionStore } from './sessions';
+import { isHttpUrl, loadConfig, saveConfig } from './config';
+import {
+  createSessionId,
+  createSessionStore,
+  hasInterruptedTail,
+  INTERRUPTED_TURN_NOTICE,
+} from './sessions';
 import {
   accumulateUsage,
   buildTurnRecord,
@@ -50,11 +81,18 @@ import {
   upsertPin,
 } from './targetState';
 import { buildTitleMessages, cleanTitle } from './title';
-import { raceTimeout } from './agentEvalInPage';
-import { createAgentLog } from './log';
 
-/** 全链路日志（控制台 + 环形缓冲）。排查卡死/异常时的现场，见 log.js 头注。 */
-export const agentLog = createAgentLog();
+/** 见上（文件头的 adapter 注释）：过渡期的 re-export，导出面保持不变。 */
+export { toBackground, readPageFromTab, agentLog };
+
+// 两条超时常量的本体在 browserAdapter.js 了（它们「为什么会在一起」的理由写
+// 在那边头注里 —— 那个才是这段代码真正的位置）。这里继续 re-export 只是为了
+// 不动 index.test.js 的「16 个导出」基线断言；删掉它们等于顺手改那条断言的
+// 口径，那是第三步的事。
+export {
+  BACKGROUND_CHANNEL_TIMEOUT_MS,
+  TAB_CHANNEL_TIMEOUT_MS,
+} from './browserAdapter';
 
 // 环形缓冲暴露到页面：转中不落盘（T-34），页面卡死时刷新前还能从这里导出现场。
 if (typeof window !== 'undefined') {
@@ -197,181 +235,6 @@ export async function lookupBlockSchema(name) {
 }
 
 /**
- * runtime 通道（background）的发送侧硬超时。
- *
- * background 自己有 15s 的页内执行兜底（T-30），但那层在 background **内部**：
- * 若 SW 被回收 / 消息回程丢了，发送方的 promise 永不 settle，没有任何一层
- * 能救 —— 用户真机日志里 `channel.send` 之后既无 `channel.reply` 也无
- * `channel.fail`，整轮 agent 就挂死在那里（T-39；本机 t40-probe 三层全通，
- * 差异只剩真机的回程）。这里是最后一层，必须大于 background 的 15s，
- * 正常回程一定先到。
- */
-export const BACKGROUND_CHANNEL_TIMEOUT_MS = 20000;
-
-/**
- * 工具 → background 的唯一通道。
- *
- * 工具侧约定发 `{type, ...params}`，background 侧的 MessageListener 只认
- * `{name: 'background--<type>', data: params}` —— 两个协议在这是唯一交汇点。
- * 导出是为了让测试能拿真实 MessageListener 验路由（backlog T-28：协议对不上时
- * 报的是一句指不到真因的 Unhandled Background Error，只能靠契约测试钉住）。
- *
- * 整个 round trip 套了硬超时（T-39）：超时不 reject 而是回 `{ok:false, error}`
- * 的观察值形状，工具照常把它喂回模型 —— 通道慢/断不再等于「这轮卡死」。
- * 真正的 send 失败（如端口不存在）仍照旧 reject 走 channel.fail。
- *
- * @param {{type: string} & Object} msg
- * @param {{timeoutMs?: number}=} options timeoutMs 供测试缩短（默认 20s）
- * @returns {Promise<Object>}
- */
-export function toBackground(msg, options = {}) {
-  const { type, ...payload } = msg || {};
-  const timeoutMs = options.timeoutMs || BACKGROUND_CHANNEL_TIMEOUT_MS;
-  const startedAt = Date.now();
-
-  agentLog('channel.send', { type });
-
-  const roundTrip = raceTimeout(
-    backgroundSend(type, payload, 'background'),
-    timeoutMs,
-    {
-      ok: false,
-      __timeout: true,
-      // 模型需要知道「到底执没执行」——如实说不确定，并给下一步动作，
-      // 否则它会原地重复同一调用（T-33 的教训）。
-      error:
-        `background 通道无响应（${Math.round(
-          timeoutMs / 1000
-        )}s 无应答）：这一步是否已执行无法确认` +
-        '（background 可能被浏览器回收了）。请先用 read_page 看一眼当前' +
-        '页面状态再决定要不要重试，不要直接重复同一调用。',
-    }
-  );
-
-  return roundTrip.then(
-    (res) => {
-      const ms = Date.now() - startedAt;
-
-      if (res && res.__timeout) {
-        agentLog.error('channel.timeout', { type, ms, timeoutMs });
-
-        const rest = { ...res };
-        delete rest.__timeout; // 内部标记不进观察值
-        return rest;
-      }
-
-      agentLog('channel.reply', {
-        type,
-        ok: Boolean(res && res.ok),
-        error: res && res.error,
-        ms,
-      });
-      return res;
-    },
-    (err) => {
-      agentLog.error('channel.fail', {
-        type,
-        message: err && err.message ? err.message : String(err),
-        ms: Date.now() - startedAt,
-      });
-      throw err;
-    }
-  );
-}
-
-/**
- * 读目标页 / 页内找文本。通过 content script 通道拿结构化观察值。
- *
- * 失败时回一句人话而不是抛异常：工具异常会被 loop 转成 error 观察值喂回模型，
- * 模型能据此换一种参数重试；把栈抛上去只会让它原地打转。
- *
- * @param {Object} tab
- * @param {{detail?: string, maxChars?: number, op?: string, keyword?: string, limit?: number}|string} params
- *   传字符串时按 detail 处理（兼容旧调用点）
- * @returns {Promise<string|{text: string, fingerprint: (string|null)}>}
- */
-/**
- * tabs 消息通道的硬超时。
- *
- * 目标页主线程被注入代码占死时（test_js 的死循环/alert），同进程的
- * content script 无法应答，tabs.sendMessage 的 promise 永不 settle ——
- * executeScript 通道有 raceTimeout 兜底（background 侧 T-30），这条通道
- * 没有的话整轮 agent 就挂死在下一步的 probe / read_page 上（T-33，
- * 已在 t33-probe.mjs 实测复现：占死后 read_page 15s 仍无回应）。
- */
-export const TAB_CHANNEL_TIMEOUT_MS = 15000;
-
-export async function readPageFromTab(tab, params) {
-  const options =
-    typeof params === 'string' ? { detail: params } : params || {};
-
-  if (!tab) return '没有确定目标页。请先让用户选一个标签页。';
-
-  const timeoutMs = options.timeoutMs || TAB_CHANNEL_TIMEOUT_MS;
-
-  try {
-    const res = await raceTimeout(
-      browser.tabs.sendMessage(tab.id, {
-        type: 'agent:read-page',
-        op: options.op || 'read',
-        detail: options.detail,
-        maxChars: options.maxChars,
-        keyword: options.keyword,
-        limit: options.limit,
-      }),
-      timeoutMs,
-      {
-        __timeout: true,
-      }
-    );
-
-    // 页面无应答 ≠ 通道坏了：八成是之前注入的代码把页面占死了。
-    // 必须给模型一句能行动的话（换页/让用户刷新），否则它会原地反复重试。
-    if (res && res.__timeout) {
-      agentLog.warn('page.timeout', { tabId: tab.id, timeoutMs });
-      return (
-        '页面无响应（' +
-        Math.round(timeoutMs / 1000) +
-        's 无应答）：页面可能被之前注入的代码占死了。请停止对本页的读页和执行操作，' +
-        '让用户手动刷新或关闭该页，或用 focus_tab 换一个标签页。'
-      );
-    }
-
-    // content 侧读页返回 {text, fingerprint}；指纹必须原样带回来 ——
-    // 它是「页面变没变」的唯一判据，塞进文本会被陈旧快照剔除抹掉（设计稿 §6.2）
-    if (res && typeof res === 'object' && typeof res.text === 'string') {
-      agentLog('page.read', {
-        tabId: tab.id,
-        detail: options.detail || options.op || 'read',
-        chars: res.text.length,
-        fingerprint: res.fingerprint || null,
-      });
-      return { text: res.text, fingerprint: res.fingerprint || null };
-    }
-
-    if (typeof res === 'string' && res) {
-      agentLog.warn('page.read.odd', { tabId: tab.id, res: res.slice(0, 80) });
-      return res;
-    }
-
-    return (
-      '这个页面读不到结构。常见原因：页面尚未加载完；这是一个扩展内置页' +
-      '（chrome:// 与扩展自己的页面都没有注入 content script）；或站点未授予扩展权限。'
-    );
-  } catch (err) {
-    agentLog.warn('page.read.fail', {
-      tabId: tab.id,
-      message: err && err.message ? err.message : String(err),
-    });
-    return (
-      '读取目标页失败：' +
-      (err && err.message ? err.message : String(err)) +
-      '多半是该标签页没有注入 content script（扩展页、chrome:// 内置页、或还没加载完）。'
-    );
-  }
-}
-
-/**
  * 组装可用的 agent runtime。
  *
  * @param {Object} deps
@@ -449,7 +312,7 @@ export function createAgentRuntime(deps) {
       return res;
     },
     findText: (params) =>
-      readPageFromTab(targetTab, { op: 'find-text', ...params }),
+      readPageFromTab(targetTab, { op: 'find-text', frame: 'top', ...params }),
     getVariables,
     getBlockSchema,
     // read_skill 工具（T-81b）的查找实现：缺省读 configIO 里的技能库。
@@ -477,7 +340,7 @@ export function createAgentRuntime(deps) {
     sendMessage: toBackground,
     // 工具执行时读到的是「这一刻」的目标页：getter 每次求值 —— adapter 每次
     // execute 都重新 spread（tools/adapter.js），工具拿到的就是本步执行时刻的
-    // 快照。setTargetTab 只改闭包变量，不再需要手动回写 toolCtx（T-71）。
+    // 快照。setTargetTab 只改闭包变量，不再需要手动回写 toolCtx（T-133）。
     get targetTab() {
       return targetTab;
     },
@@ -556,7 +419,10 @@ export function createAgentRuntime(deps) {
       fpCheckPending = false;
 
       if (lastRead && lastRead.tabId === tab.id) {
-        const res = await readPageFromTab(targetTab, { detail: 'probe' });
+        const res = await readPageFromTab(targetTab, {
+          detail: 'probe',
+          frame: 'top',
+        });
         const fp = res && typeof res === 'object' ? res.fingerprint : null;
 
         if (fp && fp !== lastRead.fingerprint) {
@@ -626,6 +492,23 @@ export function createAgentRuntime(deps) {
       throw err;
     }
 
+    // T-66：接口地址是空串或非 http(s) 时，在这儿停住。走到 buildModel 只会
+    // 让 pi 抛一句指不到真因的 provider 报错（T-40：错误要能定位）。
+    // 文案带上用户自己填的那个值（config.baseUrlInvalid —— resolveActiveConfig
+    // 清洗时把原值留在了这个字段上）：「你填的是 ftp://…」比「接口地址非法」
+    // 有用得多。
+    if (!isHttpUrl(config.baseUrl)) {
+      const err = new Error(
+        '接口地址必须以 http:// 或 https:// 开头（当前：' +
+          (config.baseUrlInvalid || config.baseUrl || '空') +
+          '）'
+      );
+      err.kind = 'config';
+      // 有具体文案就用它，没有的（apiKey 空）才回落到宿主那把 i18n 文案
+      err.specific = true;
+      throw err;
+    }
+
     // 会话续接：每次 send 都从存储现读，不在 runtime 里另存一份副本 ——
     // 两份状态必然漂移。上一轮中断留下的悬空 tool_calls 由 pi 的消息净化
     // 兜住（为孤儿调用合成结果，见 ADR 0004）。
@@ -662,7 +545,7 @@ export function createAgentRuntime(deps) {
     });
 
     // 按宿主声明过滤工具组：page/context/tab 通用，canvas 只在有画布的宿主启用
-    // enabledGroups 支持数组或 () => 数组（T-69/T-84）：函数形式每次 send
+    // enabledGroups 支持数组或 () => 数组（T-135/T-84）：函数形式每次 send
     // 求值——团队权限（haveEditAccess）变化后下一轮生效，无需重建 runtime；
     // promptFacts 本来就 per-send 重建，事实表的工具清单自动跟上。
     const groups =
@@ -875,11 +758,39 @@ export function createAgentRuntime(deps) {
       if (!sessionStore || !id) return { events: [], targetTab: null };
 
       const rec = await sessionStore.load(id);
-      const events = (rec && rec.events) || [];
+      let events = (rec && rec.events) || [];
       pins = (rec && rec.pins) || [];
       focusedTabId = (rec && rec.focusedTabId) || null;
       // 插话属于原会话的上下文，切走就丢
       instructionQueue.length = 0;
+
+      // B7：上一轮在收尾前被打断（页面被杀，loop 随闭包消失，没有 DONE/ERROR
+      // 收尾信号）。补一条 system-notice 让用户知道，并**立即落盘** —— 幂等靠
+      // 它：下次 openSession 在 tail 里看到这条就不再补（hasInterruptedTail）。
+      // 落盘失败只留 warn、不拖垮「打开会话」这条读路径：提示本就是行有余力的
+      // 告知，代价顶多是下次重开再提示一次。
+      if (hasInterruptedTail(events)) {
+        events = [
+          ...events,
+          {
+            kind: AGENT_EVENTS.SYSTEM_NOTICE,
+            text: INTERRUPTED_TURN_NOTICE,
+            // SYSTEM_NOTICE 进 transcript 的契约（historyToPiMessages）：必须带
+            // 包装文本，否则续接下一轮时 promptTextOf 直接抛错。
+            promptText: wrapUntrusted(
+              'untrusted_system_notice',
+              INTERRUPTED_TURN_NOTICE
+            ),
+          },
+        ];
+        try {
+          await sessionStore.save({ ...rec, events });
+        } catch (err) {
+          agentLog.warn('openSession.interruptNotice.save.fail', {
+            message: err && err.message ? err.message : String(err),
+          });
+        }
+      }
 
       // 目标页从 pin 恢复（focus_tab 会改 focusedTabId，比扫 TARGET_TAB
       // 事件更准）。纯显示用途——真实执行前预检会发现 tab 已关并报给模型
@@ -931,6 +842,16 @@ export function createAgentRuntime(deps) {
       if (!t) return false;
       instructionQueue.push(t);
       return true;
+    },
+
+    /**
+     * 还没送达模型的插话条数（T-12：面板常驻显示「已入队 N 条」）。
+     *
+     * 队列本身没有出队事件，所以调用方只能在收到别的信号时读一次长度 ——
+     * 这就是它只是个 getter、不发事件的原因。
+     */
+    pendingInstructionCount() {
+      return instructionQueue.length;
     },
 
     /** 删除会话；删的是当前会话时自动回到新会话状态。 */

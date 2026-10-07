@@ -93,10 +93,17 @@ function markBroken(id) {
   brokenFavicons[id] = true;
 }
 
+//
+// T-68：一律显示「窗口 {n}」。原来这里特判 `id === 1` 当主窗口，但 Chrome 的
+// 窗口 id 不保证是 1 —— 会话恢复、先开后关都可能让主窗口拿到别的 id，于是标签
+// 偶尔标错。
+//
+// 不去查 `browser.windows.getLastFocused` 拿真实主窗口 id：那个值每次开关窗口
+// 都会变，为了一个显示标签引入一个必须跟着生命周期维护的状态不划算；而且
+// 「主窗口」这个概念对用户几乎没什么用 —— 他关心的是「这一组是哪个窗口的标签」，
+// 而 id 本身就在括号里明写着。
 function windowLabel(id) {
-  return id === 1
-    ? t('workflow.agent.pickTab.mainWindow')
-    : t('workflow.agent.pickTab.window', { n: id });
+  return t('workflow.agent.pickTab.window', { n: id });
 }
 
 function pick(tab) {

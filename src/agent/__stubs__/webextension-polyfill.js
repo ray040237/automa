@@ -9,6 +9,12 @@ const store = new Map();
 export const state = {
   tabs: [],
   sendMessageThrows: null,
+  frames: null, // null = 未 mock；测试按需设成 [{frameId:0},{frameId:3},...]
+  sendMessageByFrame: null, // null = 单实现；设成 (tabId,msg,frameId)=>response 覆盖
+  // runtime 通道（装配层 toBackground 走 utils/message → 这里）。
+  // null = 单实现，返回 undefined；设成 (payload)=>response 覆盖返回值。
+  runtimeSendMessage: null,
+  runtimeSendMessageThrows: null,
 };
 
 function area(storeObj) {
@@ -46,16 +52,28 @@ const browser = {
     async query() {
       return state.tabs;
     },
-    async sendMessage(tabId, msg) {
+    async sendMessage(tabId, msg, options) {
       if (state.sendMessageThrows) throw state.sendMessageThrows;
+      if (state.sendMessageByFrame)
+        return state.sendMessageByFrame(tabId, msg, options && options.frameId);
 
       return { ok: true, tabId, msg };
+    },
+  },
+  webNavigation: {
+    async getAllFrames() {
+      return state.frames || [{ frameId: 0 }];
     },
   },
   runtime: {
     getURL: (p) => `chrome-extension://stub/${p}`,
     getManifest: () => ({ version: '0.0.0-test' }),
-    sendMessage: async () => undefined,
+    async sendMessage(payload) {
+      if (state.runtimeSendMessageThrows) throw state.runtimeSendMessageThrows;
+      if (state.runtimeSendMessage) return state.runtimeSendMessage(payload);
+
+      return undefined;
+    },
   },
 };
 
@@ -63,6 +81,10 @@ export function resetBrowser() {
   store.clear();
   state.tabs = [];
   state.sendMessageThrows = null;
+  state.frames = null;
+  state.sendMessageByFrame = null;
+  state.runtimeSendMessage = null;
+  state.runtimeSendMessageThrows = null;
 }
 
 export default browser;

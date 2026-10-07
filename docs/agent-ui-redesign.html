@@ -1,0 +1,246 @@
+<!--
+  这一版是「贴合真实 AgentPanel.vue 结构的重做版」。
+  上一版（同路径旧内容）把截图误读成「通用网页侧边助手产品」，并脑补了
+  「重新抓取 / 类比标签 / 抓取按钮」等不存在的交互——前提错了，已作废。
+  本版严格对应项目真实组件：
+    - header：会话 chip（切换/用量/删除 + 模型名 + 上下文水位）+ 新建
+    - transcript：user / text(markdown) / thinking / tool / notice / error / compaction 时间线
+    - 未配 key 横幅、流内确认门、目标页 chip、/ 模板菜单、插话提示、autoresize 输入框
+  注意：截图里那些「卡片排版」全是 LLM 在 markdown 里自己写的，UI 只是渲染
+  （见 AgentMarkdown.vue + src/agent/markdown.js 零依赖渲染器），不是固定组件。
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agent 面板 · 贴合真实 AgentPanel 的重做版</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1b1e24; --card: #21252c; --card-2: #262b33;
+    --border: #2e343d; --text: #e6e9ee; --dim: #9aa3b0; --faint: #6b7480;
+    --accent: #5b8cff; --green: #3ecf8e; --red: #f0626a; --amber: #f5b14c;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", Segoe UI, Roboto, sans-serif;
+    background: #0c0e11; color: var(--text); padding: 28px 16px;
+    display: flex; gap: 28px; flex-wrap: wrap; justify-content: center;
+  }
+  .sidebar {
+    width: 380px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 16px; display: flex; flex-direction: column; overflow: hidden;
+    height: fit-content; max-height: 94vh; box-shadow: 0 6px 24px rgba(0,0,0,.35);
+  }
+
+  /* header */
+  .header { display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  .sess-chip {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 8px; cursor: pointer; color: var(--text); font-size: 13px;
+  }
+  .sess-chip:hover { background: #2b3038; }
+  .sess-chip .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sess-chip .ico { color: var(--faint); font-size: 13px; }
+  .new-btn {
+    width: 34px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--card); color: var(--text); cursor: pointer; font-size: 15px;
+  }
+  .new-btn:hover { background: #2b3038; }
+
+  /* transcript */
+  .transcript { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+  .user-bubble { align-self: flex-end; background: rgba(91,140,255,.15); padding: 8px 12px; border-radius: 10px; font-size: 13px; max-width: 85%; }
+  .turn-div { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--faint); }
+  .turn-div .line { flex: 1; height: 1px; background: var(--border); }
+
+  .msg { font-size: 13px; line-height: 1.6; position: relative; }
+  .msg .copy-all {
+    position: absolute; top: 0; right: 0; font-size: 11px; color: var(--dim);
+    background: rgba(33,37,44,.95); padding: 2px 6px; border-radius: 6px; opacity: 0; cursor: pointer;
+  }
+  .msg:hover .copy-all { opacity: 1; }
+  .msg h3 { font-size: 15px; font-weight: 600; margin: 6px 0 4px; }
+  .msg ul { margin: 6px 0 6px 20px; }
+  .msg li { margin: 3px 0; }
+  .msg table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+  .msg th, .msg td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; }
+  .msg th { background: var(--card); font-weight: 600; }
+  .msg code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; background: rgba(91,140,255,.14); color: #a9c2ff; padding: 1px 5px; border-radius: 4px; }
+
+  /* tool card */
+  .tool {
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13px;
+  }
+  .tool-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; }
+  .tool-head .tname { font-weight: 600; }
+  .tool-badge { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 7px; border-radius: 999px; }
+  .ok { background: rgba(62,207,142,.15); color: var(--green); }
+  .err { background: rgba(240,98,106,.15); color: var(--red); }
+  .rej { background: rgba(245,177,76,.15); color: var(--amber); }
+  .tool-body { border-top: 1px solid var(--border); padding: 8px 12px; font-size: 11.5px; color: var(--dim); display: none; }
+  .tool.open .tool-body { display: block; }
+
+  /* confirm card（流内，输入框上方，非浮层） */
+  .confirm {
+    border: 1px solid rgba(91,140,255,.45); background: rgba(91,140,255,.08);
+    border-radius: 10px; padding: 10px 12px; font-size: 12.5px;
+  }
+  .confirm .ctitle { font-weight: 600; margin-bottom: 4px; }
+  .confirm .cdetail { color: var(--dim); font-size: 12px; margin-bottom: 8px; }
+  .confirm .crow { display: flex; gap: 8px; align-items: center; }
+  .cbtn { padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; font-size: 12px; }
+  .cbtn.allow { background: var(--accent); border: none; color: #fff; }
+  .cbtn.remember { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 4px; }
+
+  /* tab picker chip */
+  .tabchip {
+    display: flex; align-items: center; gap: 6px; margin: 8px 10px 4px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; cursor: pointer; font-size: 12px;
+  }
+  .tabchip:hover { background: #2b3038; }
+  .tabchip img { width: 16px; height: 16px; border-radius: 3px; }
+  .tabchip .tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tabchip .auto-badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--card-2); color: var(--dim);
+    border: 1px solid var(--border); cursor: help;
+  }
+  .tabchip .caret { color: var(--faint); }
+
+  /* footer input */
+  .footer { border-top: 1px solid var(--border); background: var(--panel); padding: 8px 10px; }
+  .input-row { display: flex; align-items: flex-end; gap: 8px; }
+  .input-row textarea {
+    flex: 1; resize: none; min-height: 56px; max-height: 110px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 13px;
+    padding: 10px; font-family: inherit; outline: none;
+  }
+  .input-row textarea:focus { border-color: var(--accent); }
+  .send { width: 38px; height: 38px; border-radius: 10px; border: none; background: var(--accent); color: #fff; cursor: pointer; font-size: 16px; }
+
+  /* 右侧说明 */
+  .notes { width: 360px; align-self: flex-start; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; font-size: 12.5px; line-height: 1.65; }
+  .notes h2 { font-size: 15px; color: #fff; margin-bottom: 12px; }
+  .legend { font-size: 11px; color: var(--faint); margin: 10px 0 14px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: 8px; }
+  .notes h3 { font-size: 13px; margin: 16px 0 6px; color: var(--accent); }
+  .notes ul { padding-left: 18px; display: flex; flex-direction: column; gap: 9px; }
+  .notes li::marker { color: var(--accent); font-weight: 700; }
+  .ok-t { color: var(--green); }
+  .todo-t { color: var(--amber); }
+  .notes b { color: #fff; }
+</style>
+</head>
+<body>
+
+  <!-- ============ 侧栏本体（严格对应 AgentPanel.vue） ============ -->
+  <aside class="sidebar">
+
+    <!-- header：会话 chip + 新建 -->
+    <div class="header">
+      <button class="sess-chip">
+        <span class="ico">💬</span>
+        <span class="name">页面功能说明</span>
+        <span class="ico">▾</span>
+      </button>
+      <button class="new-btn" title="新建会话">＋</button>
+    </div>
+
+    <div class="transcript">
+      <!-- user 消息 -->
+      <div class="user-bubble">帮我看看这个网站是干什么的</div>
+
+      <!-- 轮次分隔线（10-07 15:41 来自 turn 事件） -->
+      <div class="turn-div"><span class="line"></span><span>10-07 15:41</span><span class="line"></span></div>
+
+      <!-- agent 的 text 消息：下面是 LLM 在 markdown 里自己写的，UI 只渲染 -->
+      <div class="msg">
+        <button class="copy-all">复制</button>
+        <h3>页面功能说明</h3>
+        <p>这是一个面向开发者的<b>大模型 API 聚合与推理加速平台</b>。类似 DMXAPI，需要 API Key 鉴权。</p>
+        <p><b>核心能力</b></p>
+        <ul>
+          <li>多模型接入（OpenAI / Claude / Gemini 等一键切换）</li>
+          <li>推理加速（缓存与并发调度降低首字延迟）</li>
+          <li>统一计费与配额</li>
+        </ul>
+        <p><b>主要接口</b></p>
+        <table>
+          <thead><tr><th>方法</th><th>端点</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td><code>POST</code></td><td><code>/v1/chat</code></td><td>对话补全</td></tr>
+            <tr><td><code>GET</code></td><td><code>/models</code></td><td>模型列表</td></tr>
+            <tr><td><code>POST</code></td><td><code>/v1/embed</code></td><td>向量化</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- tool 卡：read_page 执行结果（真实交互的一部分，上一版完全没体现） -->
+      <div class="tool open">
+        <div class="tool-head">
+          <span class="ico">🔧</span>
+          <span class="tname">read_page</span>
+          <span class="tool-badge ok">✓ 成功</span>
+        </div>
+        <div class="tool-body">已读取 dmxapi.cn 正文（8.2K 字符，预算内）</div>
+      </div>
+
+      <!-- 确认门卡：write 工具执行前（流内、非浮层，T-06） -->
+      <div class="confirm">
+        <div class="ctitle">⚠ 需要确认：保存工作流</div>
+        <div class="cdetail">此操作会修改当前画布并标记为未保存。是否放行？</div>
+        <div class="crow">
+          <button class="cbtn allow">允许</button>
+          <button class="cbtn">拒绝</button>
+          <label class="cbtn remember"><input type="checkbox" /> 记住我的选择</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- 目标页 chip：favicon + 标题 + auto 徽标（auto = 运行时自动解析目标页） -->
+    <div class="tabchip">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' rx='3' fill='%235b8cff'/%3E%3C/svg%3E" />
+      <span class="tname">DMXAPI官网</span>
+      <span class="auto-badge" title="运行时自动选取当前页；点开可固定(pin)。页被关闭或跳站会显示红色失效态。">自动</span>
+      <span class="caret">▾</span>
+    </div>
+
+    <!-- 输入框：placeholder 两宿主共用，独立页其实没有「这页」概念（见右侧改进点） -->
+    <div class="footer">
+      <div class="input-row">
+        <textarea placeholder="问问这个页面…（回车发送，Shift+回车换行；busy 时变「插话」）"></textarea>
+        <button class="send">↑</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ 右侧评价 ============ -->
+  <section class="notes">
+    <h2>基于真实代码的评价</h2>
+    <div class="legend">
+      上一版设计稿把截图误读成「通用网页助手产品」，脑补了「重新抓取 / 类比标签 / 抓取按钮」——前提错了，已作废。
+      本版严格对应 <code>AgentPanel.vue</code>。截图里的卡片排版全是 LLM 生成的 markdown，UI 只是渲染器。
+    </div>
+
+    <h3>当前 UI 已做对的地方</h3>
+    <ul>
+      <li><span class="ok-t">✓</span> <b>确认门放文档流而非浮层</b>（T-06）：不盖住输入区，翻历史也不悬着。</li>
+      <li><span class="ok-t">✓</span> <b>目标页 chip 贴在输入区顶上</b>：正是「我正要问这页」的决策点，参考 Cursor/VSCode。</li>
+      <li><span class="ok-t">✓</span> <b>目标页失效显式化</b>（T-08）：页关掉/origin 漂移不假装正常，红色 stale + 重新选择。</li>
+      <li><span class="ok-t">✓</span> <b>工具状态不止靠颜色</b>（T-13）：✓/✕/⊗ 形状不同，色觉障碍也能分。</li>
+      <li><span class="ok-t">✓</span> <b>错误独立成类、可重试可复制详情</b>（T-04），权重高于善意提醒。</li>
+      <li><span class="ok-t">✓</span> <b>面板卸载时拒掉确认门</b>（T-02），避免 loop 永久挂起、表现像卡死。</li>
+    </ul>
+
+    <h3>我建议的改进（均读代码推断，未实测用户反馈）</h3>
+    <ul>
+      <li><span class="todo-t">①</span> <b>「自动」徽标对非技术用户费解</b>：它指 targetTab 解析模式（auto=运行时自动选 / pinned=用户固定），普通用户看不懂。建议 hover tooltip 已加（本稿），或文案改为「跟随当前页 / 已固定」。</li>
+      <li><span class="todo-t">②</span> <b>placeholder 两宿主共用</b>：独立助手页（<code>Agent.vue</code>）没有画布、无「这页」概念，却也显示「问问这个页面」。建议按宿主区分：侧栏用「问问这个页面」，独立页用「问我任何事」。</li>
+      <li><span class="todo-t">③</span> <b>窄侧栏表格体验</b>：markdown 表格靠 <code>overflow-x-auto</code> 横滑，320px 宽时可读性差。可在长表格上加「可横向滑动」微提示，或 agent 输出约定里建议窄表拆分。</li>
+      <li><span class="todo-t">④</span> <b>会话 chip 信息密度</b>：下拉里塞了模型名+上下文水位，窄侧栏 w-72 可能溢出，值来自 host.config。建议实测超长模型名时的截断。</li>
+    </ul>
+  </section>
+
+</body>
+</html>

@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent 面板 · 输入区圆环水位与紧凑化方案</title>
+    <style>
+      :root {
+        --bg: #f4f5f7;
+        --panel: #ffffff;
+        --line: #e5e7eb;
+        --line-2: #d1d5db;
+        --ink: #111827;
+        --ink-2: #4b5563;
+        --ink-3: #9ca3af;
+        --box: rgba(17, 24, 39, 0.04);
+        --accent: #2563eb;
+        --blue: #3b82f6;
+        --amber: #f59e0b;
+        --red: #ef4444;
+        --red-bg: #fef2f2;
+        --red-line: #fecaca;
+        --amber-bg: #fffbeb;
+        --amber-line: #fde68a;
+        --note: #f9fafb;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 28px 24px 60px;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          'PingFang SC', 'Microsoft YaHei', sans-serif;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      h1 {
+        font-size: 19px;
+        margin: 0 0 4px;
+      }
+      .sub {
+        color: var(--ink-2);
+        margin: 0 0 24px;
+      }
+      section {
+        margin-bottom: 34px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 0 0 4px;
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      h2 .n {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--accent);
+        background: rgba(37, 99, 235, 0.1);
+        border-radius: 4px;
+        padding: 1px 6px;
+      }
+      .lead {
+        color: var(--ink-2);
+        margin: 0 0 14px;
+        max-width: 980px;
+      }
+      .grid2 {
+        display: grid;
+        grid-template-columns: 320px 320px;
+        gap: 20px;
+        align-items: start;
+      }
+      .col {
+        min-width: 0;
+      }
+      .colhead {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--ink-2);
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .tag {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: var(--line);
+        color: var(--ink-2);
+      }
+      .tag.new {
+        background: rgba(37, 99, 235, 0.12);
+        color: var(--accent);
+      }
+
+      /* ---------- 面板外壳 ---------- */
+      .panel {
+        width: 320px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .p-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px;
+      }
+      .chip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        flex: 1;
+        background: var(--box);
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-size: 13px;
+      }
+      .chip .t {
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .icon-btn {
+        flex: none;
+        background: var(--box);
+        border-radius: 6px;
+        padding: 6px 8px;
+        display: flex;
+        align-items: center;
+      }
+      .p-body {
+        flex: 1;
+        padding: 12px;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        min-height: 150px;
+        background: #fcfcfd;
+      }
+      .bubble {
+        align-self: flex-end;
+        background: rgba(59, 130, 246, 0.15);
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        margin-left: auto;
+        width: fit-content;
+        max-width: 90%;
+      }
+      .msg {
+        font-size: 13px;
+        color: var(--ink-2);
+        margin-top: 10px;
+      }
+      .tabchip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 8px 4px;
+        padding: 5px 8px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font-size: 12px;
+        color: var(--ink-2);
+        background: #fff;
+      }
+      .favicon {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        flex: none;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      }
+      .badge {
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: rgba(107, 114, 128, 0.15);
+        color: var(--ink-2);
+        flex: none;
+      }
+      .badge.pin {
+        background: rgba(37, 99, 235, 0.14);
+        color: var(--accent);
+      }
+      .form {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        padding: 8px;
+        padding-top: 0;
+      }
+      .ta {
+        flex: 1;
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 13px;
+        color: var(--ink-3);
+        background: #fff;
+      }
+      .ta.tall {
+        min-height: 88px;
+      }
+      .ta.short {
+        min-height: 68px;
+      }
+      .btn {
+        flex: none;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+      }
+      .btn.primary {
+        background: var(--accent);
+        color: #fff;
+      }
+      .btn.ghost {
+        background: var(--box);
+        color: var(--ink-2);
+      }
+      .btn.icon {
+        padding: 8px 10px;
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      /* ---------- 下拉 ---------- */
+      .dd {
+        width: 288px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: 0 6px 20px rgba(17, 24, 39, 0.12);
+        padding: 4px;
+        margin-top: 8px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        border-radius: 4px;
+        font-size: 13px;
+      }
+      .row.on {
+        background: var(--box);
+      }
+      .row .t {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .dd-foot {
+        margin-top: 4px;
+        border-top: 1px solid var(--line);
+        padding: 8px;
+        font-size: 12px;
+        color: var(--ink-2);
+      }
+      .usage-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .lbl {
+        font-size: 10px;
+        color: var(--ink-3);
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        padding: 0 3px;
+      }
+      .meter {
+        margin-top: 6px;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--line);
+        overflow: hidden;
+      }
+      .meter i {
+        display: block;
+        height: 100%;
+        border-radius: 2px;
+      }
+
+      /* ---------- 圆环 ---------- */
+      .ring-wrap {
+        position: relative;
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 6px;
+        cursor: help;
+      }
+      .ring {
+        display: block;
+        transform: rotate(-90deg);
+      }
+      .tip {
+        position: absolute;
+        bottom: calc(100% + 7px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: #111827;
+        color: #fff;
+        font-size: 11px;
+        line-height: 1.5;
+        padding: 5px 8px;
+        border-radius: 5px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s;
+        z-index: 5;
+      }
+      .ring-wrap:hover .tip,
+      .ring-wrap.show .tip {
+        opacity: 1;
+      }
+      .ring-lg-wrap {
+        position: relative;
+        display: inline-flex;
+        cursor: help;
+      }
+      .ring-lg-wrap .tip {
+        bottom: calc(100% + 10px);
+        font-size: 12px;
+        padding: 7px 10px;
+      }
+      .ring-lg-wrap.show .tip {
+        opacity: 1;
+      }
+      .tip .k {
+        color: #e4e4e7;
+      }
+
+      /* ---------- 三档示意 ---------- */
+      .tiers {
+        display: flex;
+        gap: 26px;
+        align-items: flex-end;
+        padding: 22px 18px 14px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        flex-wrap: wrap;
+      }
+      .tier {
+        text-align: center;
+        font-size: 11px;
+        color: var(--ink-2);
+      }
+      .tier .cap {
+        margin-top: 8px;
+      }
+      .tier .cap b {
+        display: block;
+        color: var(--ink);
+        font-size: 12px;
+      }
+
+      /* ---------- 卡片清单 ---------- */
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+        gap: 14px;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px 16px;
+      }
+      .card h3 {
+        font-size: 13px;
+        margin: 0 0 6px;
+        display: flex;
+        align-items: baseline;
+        gap: 7px;
+        flex-wrap: wrap;
+      }
+      .card p {
+        margin: 0 0 8px;
+        color: var(--ink-2);
+      }
+      .card p:last-child {
+        margin-bottom: 0;
+      }
+      .save {
+        font-size: 11px;
+        font-weight: 600;
+        color: #047857;
+        background: rgba(4, 120, 87, 0.1);
+        border-radius: 3px;
+        padding: 1px 5px;
+      }
+      .risk {
+        font-size: 10px;
+        font-weight: 600;
+        border-radius: 3px;
+        padding: 1px 5px;
+      }
+      .risk.low {
+        color: #047857;
+        background: rgba(4, 120, 87, 0.1);
+      }
+      .risk.mid {
+        color: #b45309;
+        background: rgba(180, 83, 9, 0.1);
+      }
+      .risk.hi {
+        color: #b91c1c;
+        background: rgba(185, 28, 28, 0.1);
+      }
+      code {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 11.5px;
+        background: var(--box);
+        border-radius: 3px;
+        padding: 1px 4px;
+      }
+      .where {
+        font-size: 11.5px;
+        color: var(--ink-3);
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px dashed var(--line);
+      }
+      .where b {
+        color: var(--ink-2);
+        font-weight: 600;
+      }
+
+      /* ---------- 表格 ---------- */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        font-size: 12.5px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        background: #f9fafb;
+        font-weight: 600;
+        font-size: 12px;
+        color: var(--ink-2);
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.num {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        white-space: nowrap;
+      }
+      .del {
+        color: var(--ink-3);
+        text-decoration: line-through;
+      }
+      .now {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .total td {
+        background: #f9fafb;
+        font-weight: 600;
+      }
+      .foot {
+        margin-top: 26px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line-2);
+        color: var(--ink-3);
+        font-size: 12px;
+      }
+      .svg-ico {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Agent 面板 · 圆环水位 + 紧凑化</h1>
+    <p class="sub">
+      侧栏内容区恒 320px，面板固定高度。所有常驻行都在抢
+      transcript 的地方 —— 优化方向是「把信息折叠进已有控件，而不是新开一行」。
+    </p>
+
+    <!-- ============ 1 圆环 ============ -->
+    <section>
+      <h2><span class="n">1</span>上下文水位 → 输入区圆环</h2>
+      <p class="lead">
+        圆环直径 14px，塞进按钮行（与发送按钮同一行、垂直居中），
+        <b>不占任何额外垂直高度</b>。数字与用量全部收进 hover tooltip —— 常驻只剩一个环。
+        水位算不出来时（<code>contextWindow</code> 未填）整个环不渲染，连这 14px 也退回。
+      </p>
+
+      <div class="grid2">
+        <!-- 当前 -->
+        <div class="col">
+          <div class="colhead">当前 <span class="tag">基线</span></div>
+          <div class="panel">
+            <div class="p-head">
+              <div class="chip">
+                <svg class="svg-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.8">
+                  <path d="M4 5h16v11H8l-4 4V5z" />
+                </svg>
+                <span class="t">调试登录流程 · 12 分钟前</span>
+                <svg class="svg-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </div>
+              <div class="icon-btn">
+                <svg class="svg-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="2">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </div>
+            </div>
+
+            <div class="p-body">
+              <div class="bubble">这个表单提交后跳哪去了？</div>
+              <div class="msg">
+                提交后先走 <code>onSubmit</code>，校验失败会停在原地并高亮第一个错误字段；
+                通过才跳 <code>/result</code>。
+              </div>
+            </div>
+
+            <div class="tabchip">
+              <span class="favicon"></span>
+              <span
+                style="
+                  min-width: 0;
+                  flex: 1;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                "
+                >登录页 · localhost:5173</span
+              >
+              <span class="badge">自动</span>
+            </div>
+
+            <div class="form">
+              <div class="ta tall">输入消息…</div>
+              <div class="btn primary">发送</div>
+            </div>
+          </div>
+
+          <div class="dd">
+            <div class="row on">
+              <svg class="svg-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
+                <path d="M4 5h16v11H8l-4 4V5z" />
+              </svg>
+              <span class="t">调试登录流程 · 12 分钟前</span>
+              <svg class="svg-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.4">
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div class="row">
+              <svg class="svg-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
+                <path d="M4 5h16v11H8l-4 4V5z" />
+              </svg>
+              <span class="t">抓取竞品定价</span>
+            </div>
+            <div class="dd-foot">
+              <div style="margin-bottom: 6px; color: var(--ink-3)">
+                claude-sonnet-4-5
+              </div>
+              <div class="usage-row">
+                <span>1.2K/3.4K</span>
+                <span style="margin-left: auto">42%</span>
+              </div>
+              <div class="meter"><i style="width: 42%; background: var(--blue)"></i></div>
+            </div>
+          </div>
+          <div style="margin-top: 8px; font-size: 11.5px; color: var(--ink-3)">
+            水位与用量都藏在这个下拉里 —— 要打开菜单才看得到，而它恰恰是
+            <b style="color: var(--ink-2)">发送前</b>该知道的信息。
+          </div>
+        </div>
+
+        <!-- 改后 -->
+        <div class="col">
+          <div class="colhead">改后 <span class="tag new">圆环</span></div>
+          <div class="panel">
+            <div class="p-head">
+              <div class="chip">
+                <svg class="svg-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.8">
+                  <path d="M4 5h16v11H8l-4 4V5z" />
+                </svg>
+                <span class="t">调试登录流程 · 12 分钟前</span>
+                <svg class="svg-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </div>
+              <div class="icon-btn">
+                <svg class="svg-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="2">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </div>
+            </div>
+
+            <div class="p-body">
+              <div class="bubble">这个表单提交后跳哪去了？</div>
+              <div class="msg">
+                提交后先走 <code>onSubmit</code>，校验失败会停在原地并高亮第一个错误字段；
+                通过才跳 <code>/result</code>。
+              </div>
+            </div>
+
+            <div class="tabchip">
+              <span class="favicon"></span>
+              <span
+                style="
+                  min-width: 0;
+                  flex: 1;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                "
+                >登录页 · localhost:5173</span
+              >
+              <span class="badge">跟随当前页</span>
+            </div>
+
+            <div class="form">
+              <div class="ta short">输入消息…</div>
+
+              <!-- 圆环 -->
+              <div class="ring-wrap show">
+                <svg class="ring" width="14" height="14" viewBox="0 0 16 16">
+                  <circle cx="8" cy="8" r="6" fill="none" stroke="#18181b" stroke-width="2" class="opacity-25" />
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="6"
+                    fill="none"
+                    stroke="#18181b"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-dasharray="37.7"
+                    stroke-dashoffset="21.87"
+                  />
+                </svg>
+                <div class="tip">
+                  上下文 <span class="k">42%</span>（估算）· 窗口 200K<br />
+                  输入 <span class="k">1.2K</span> · 输出 <span class="k">3.4K</span>
+                </div>
+              </div>
+
+              <div class="btn primary">发送</div>
+            </div>
+          </div>
+
+          <div class="dd">
+            <div class="row on">
+              <svg class="svg-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
+                <path d="M4 5h16v11H8l-4 4V5z" />
+              </svg>
+              <span class="t">调试登录流程 · 12 分钟前</span>
+              <svg class="svg-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.4">
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div class="row">
+              <svg class="svg-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
+                <path d="M4 5h16v11H8l-4 4V5z" />
+              </svg>
+              <span class="t">抓取竞品定价</span>
+            </div>
+            <div class="dd-foot" style="color: var(--ink-3)">claude-sonnet-4-5</div>
+          </div>
+          <div style="margin-top: 8px; font-size: 11.5px; color: var(--ink-3)">
+            下拉里只剩模型名 —— 水位与用量已由圆环承担，下拉矮了约
+            <b style="color: var(--ink-2)">30px</b>。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 2 三档 ============ -->
+    <section>
+      <h2><span class="n">2</span>三档配色与 hover 文案（放大示意）</h2>
+      <p class="lead">
+        实测修正：项目主色 <code>--color-accent</code> 浅色下是
+        <code>24 24 27</code>（近黑）、深色下是 <code>244 244 245</code>（近白）——
+        <b>accent 本身就是黑白</b>，整套 UI 也只认这一个色。所以三档不靠颜色，
+        靠<b>粗细</b>：常态细环、接近上限加粗，只有真要到顶才用红（红在本面板已有
+        明确语义 —— T-04 把 error 从琥珀改成红，不该再拿去做装饰）。
+      </p>
+      <div class="tiers">
+        <div class="tier">
+          <div class="ring-lg-wrap">
+            <svg class="ring" width="48" height="48" viewBox="0 0 48 48">
+              <circle cx="24" cy="24" r="20" fill="none" stroke="#18181b" stroke-width="4" style="opacity: 0.25" />
+              <circle
+                cx="24"
+                cy="24"
+                r="20"
+                fill="none"
+                stroke="#18181b"
+                stroke-width="4"
+                stroke-linecap="round"
+                stroke-dasharray="125.66"
+                stroke-dashoffset="72.88"
+              />
+            </svg>
+          </div>
+          <div class="cap"><b>42% · 细环</b>正常</div>
+        </div>
+
+        <div class="tier">
+          <div class="ring-lg-wrap show">
+            <svg class="ring" width="48" height="48" viewBox="0 0 48 48">
+              <circle cx="24" cy="24" r="20" fill="none" stroke="#18181b" stroke-width="6" style="opacity: 0.25" />
+              <circle
+                cx="24"
+                cy="24"
+                r="20"
+                fill="none"
+                stroke="#18181b"
+                stroke-width="6"
+                stroke-linecap="round"
+                stroke-dasharray="125.66"
+                stroke-dashoffset="27.65"
+              />
+            </svg>
+            <div class="tip">
+              上下文 <span class="k">78%</span>（估算）· 窗口 200K<br />
+              输入 <span class="k">96.4K</span> · 输出 <span class="k">59.6K</span><br />
+              接近上限，考虑开新会话
+            </div>
+          </div>
+          <div class="cap"><b>78% · 加粗</b>接近上限</div>
+        </div>
+
+        <div class="tier">
+          <div class="ring-lg-wrap">
+            <svg class="ring" width="48" height="48" viewBox="0 0 48 48">
+              <circle cx="24" cy="24" r="20" fill="none" stroke="#ef4444" stroke-width="6" style="opacity: 0.25" />
+              <circle
+                cx="24"
+                cy="24"
+                r="20"
+                fill="none"
+                stroke="#ef4444"
+                stroke-width="6"
+                stroke-linecap="round"
+                stroke-dasharray="125.66"
+                stroke-dashoffset="8.8"
+              />
+            </svg>
+          </div>
+          <div class="cap"><b>93% · 加粗 + 红</b>即将压缩</div>
+        </div>
+
+        <div class="tier" style="text-align: left; max-width: 340px">
+          <div style="font-size: 12px; color: var(--ink-2)">
+            <b style="color: var(--ink)">实现的三件事</b><br />
+            ① 环 = <code>&lt;svg&gt;</code> 两圈
+            <code>&lt;circle&gt;</code>，<code>stroke-dasharray</code> =
+            周长、<code>stroke-dashoffset</code> = 周长 ×(1−pct)，
+            <code>rotate(-90deg)</code> 从 12 点起画。无需依赖，与项目「零依赖自研
+            markdown」的取向一致。<br />
+            ② 档位由 <code>@/agent/usage</code> 的
+            <code>contextPercent</code> 判定 —— 它<b>已有单测</b>，计算层不动，只加显示分支；
+            三档是 <code>stroke-width</code> 2 → 3，配 <code>text-accent</code>（项目主色，
+            本身就是黑白）→ <code>text-red-500</code>，<b>不引入蓝/琥珀</b>。<br />
+            ③ 无障碍：环加
+            <code>role="img"</code> + <code>:aria-label</code>（读屏读到完整句子），
+            <code>:title</code> 只服务鼠标 hover；两者不重复朗读。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 3 其他优化 ============ -->
+    <section>
+      <h2><span class="n">3</span>还有哪些地方能省空间 / 该顺手修</h2>
+      <p class="lead">
+        按「能省多少 × 风险」排序。前三条是纯 class / i18n，零逻辑风险；后两条要么要实测、要么牵逻辑。
+      </p>
+
+      <div class="cards">
+        <div class="card">
+          <h3>
+            输入框 min-h 88 → 68 <span class="save">常态省 20px</span>
+            <span class="risk low">零风险</span>
+          </h3>
+          <p>
+            空草稿时输入框钉死 88px（三行观感）。autoresize 会随内容长到
+            <code>max-h-128</code>，所以这 20px 只在草稿短时占用，却<b>永久</b>从
+            transcript 里扣。改成 68px（两行观感）后，长草稿行为完全不变。
+          </p>
+          <p style="color: var(--ink-3); font-size: 12px">
+            嫌窄可取 72px（省 16px）。若担心「输入框太矮不像能打长指令」，可只在
+            <code>host.busy</code> 或草稿为空时保持 88 —— 但那是加分支，建议先按定值试。
+          </p>
+          <div class="where">
+            <b>落点</b> <code>AgentPanel.vue:169</code>
+            <code>min-h-[88px]</code> → <code>min-h-[68px]</code>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>
+            会话 chip 的下拉箭头改为 hover 才显
+            <span class="save">横向省 20px</span>
+            <span class="risk low">零风险</span>
+          </h3>
+          <p>
+            箭头 <code>riArrowDownSLine</code> 恒占 14px + gap 6px。在 320px 宽里这是
+            chip 标题能多显示 <b>2–3 个字</b>的差别，而「标题 · 时间」正是被
+            <code>truncate</code> 截断最狠的地方。改成
+            <code>group-hover:opacity-100 opacity-0</code>（键盘 focus 时也要显，
+            用 <code>group-focus-within</code> 兜住）。
+          </p>
+          <p style="color: var(--ink-3); font-size: 12px">
+            代价：静态时 chip 少一个「可点开」的视觉暗示 —— 但项目里 46+ 处
+            <code>bg-box-transparent</code> 已经承担了这个暗示，箭头不是唯一线索。
+          </p>
+          <div class="where">
+            <b>落点</b> <code>AgentPanel.vue:33-36</code>（箭头 span 加
+            <code>transition opacity</code> + <code>group</code>/<code>group-hover</code>）
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>
+            未配置 API Key 横幅压成一行
+            <span class="save">该态省 16px</span>
+            <span class="risk low">零风险</span>
+          </h3>
+          <p>
+            现在是 <code>p-3 text-sm</code> 整行（约 44px）。它是<b>阻塞态</b>没错，但发送按钮
+            已经 disabled 了，横幅只需要一句「发送已禁用 · 去设置」——
+            <code>px-2 py-1.5 text-xs</code> 足够。与 T-152 的「改红」合并做。
+          </p>
+          <p style="color: var(--ink-3); font-size: 12px">
+            顺带：这行也是唯一会把「功能不可用」与「善意提醒」混淆的地方（T-152），
+            改红后语义才立得住。
+          </p>
+          <div class="where">
+            <b>落点</b> <code>AgentPanel.vue:87-94</code>（<code>p-3 text-sm</code> →
+            <code>px-2 py-1.5 text-xs</code>，配色随 T-152 改红）
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>
+            busy 态输入区被两个按钮挤到 208px
+            <span class="risk mid">需实测</span>
+          </h3>
+          <p>
+            <code>host.busy</code> 时 form 里同时有「停止」图标按钮 + 「插话」文字按钮：
+            320 − 16(padding) − 36(停止) − ≈44(插话) − 16(gap) ≈ <b>208px</b> 留给
+            textarea，比空闲时的 240px 还窄。而 busy 恰恰是你最想打字（插话）的时候。
+          </p>
+          <p style="color: var(--ink-3); font-size: 12px">
+            可选方向：插话按钮在窄态退化为图标 + <code>title</code>；或把「停止」并入
+            已存在的 pendingInterjections 行（<code>:148</code>）。<b>我没有实测过
+            320px 下的真实换行</b>，建议先量一次再定，别凭估算改。
+          </p>
+          <div class="where"><b>落点</b> <code>AgentPanel.vue:173-191</code></div>
+        </div>
+
+        <div class="card">
+          <h3>
+            disabled 的发送按钮说不出「为什么点不动」
+            <span class="risk mid">需评审</span>
+          </h3>
+          <p>
+            <code>:186</code> 是
+            <code>:disabled="!draft.trim() || !configured"</code>，但按钮上没有 title。
+            项目自己在 <code>AgentSessionList.vue:17-18</code> 注释里写过「disabled
+            按钮在部分浏览器不派发鼠标事件、title 弹不出来」——同一个面板里这条经验没贯彻到发送按钮。
+          </p>
+          <p style="color: var(--ink-3); font-size: 12px">
+            建议照抄 T-11 的做法：把 title 挂到<b>非 disabled 的包裹层</b>上，文案按
+            原因分两种（没草稿 / 没配 Key）。纯属性，但要区分两种原因，属小逻辑。
+          </p>
+          <div class="where">
+            <b>落点</b> <code>AgentPanel.vue:183-191</code>（包一层带
+            <code>:title</code> 的容器）
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>
+            slash 菜单 <code>max-h-48</code> 可能吃掉半屏
+            <span class="risk mid">需实测</span>
+          </h3>
+          <p>
+            模板菜单最高 192px，出现在输入框正上方。面板总高若只有 500–600px，
+            它会把 transcript 压掉三分之一。建议改成
+            <code>max-h-[30vh]</code> 或按条目数封顶（如 5 条 ×28px + padding）。
+          </p>
+          <p style="color: var(--ink-3); font-size: 12px">
+            <b>未实测</b>：我不知道真实模板数量与面板实际高度，改小可能让长列表难用。
+            先量，再定。
+          </p>
+          <div class="where"><b>落点</b> <code>AgentPanel.vue:128</code></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 4 账本 ============ -->
+    <section>
+      <h2><span class="n">4</span>垂直空间账本（常态 / 已配置）</h2>
+      <p class="lead">
+        面板是 <code>flex-col</code> + transcript <code>flex-1</code>，
+        所以每省掉 1px 固定行，正文就多 1px。下表只算常驻行。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 30%">常驻行</th>
+            <th style="width: 22%">当前</th>
+            <th style="width: 22%">改后</th>
+            <th>怎么省的</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>header（会话 chip + 新建）</td>
+            <td class="num">44px</td>
+            <td class="num">40px</td>
+            <td><code>py-1.5</code> → <code>py-1</code>（省 4）</td>
+          </tr>
+          <tr>
+            <td>transcript</td>
+            <td class="num">flex-1</td>
+            <td class="num">flex-1</td>
+            <td>所有省的都归它</td>
+          </tr>
+          <tr>
+            <td>目标页 chip</td>
+            <td class="num">34px</td>
+            <td class="num">34px</td>
+            <td>不动（T-150 只改文案/tooltip，不改高度）</td>
+          </tr>
+          <tr>
+            <td>输入区 form</td>
+            <td class="num del">96px</td>
+            <td class="num now">76px</td>
+            <td>
+              textarea <code>min-h-[88px]</code> → <code>min-h-[68px]</code>（省 20）；
+              圆环塞进按钮行，<b>不额外占高</b>
+            </td>
+          </tr>
+          <tr class="total">
+            <td>正文多得</td>
+            <td class="num">—</td>
+            <td class="num now">+24px</td>
+            <td>约多出 1 行对话正文</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="color: var(--ink-3); font-size: 12px; margin-top: 8px">
+        未配置 Key 时横幅再省 16px；会话下拉矮约 30px（不影响面板高度，但滚动更少）。
+        总量不算惊人 —— 真正的收益是<b>水位从「要开菜单才看得到」变成「发送前扫一眼就有」</b>。
+      </p>
+    </section>
+
+    <!-- ============ 5 落点 ============ -->
+    <section>
+      <h2><span class="n">5</span>落点清单</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 26%">改动</th>
+            <th style="width: 40%">文件 : 行</th>
+            <th>动作 / 风险</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>圆环水位</td>
+            <td>
+              <code>AgentPanel.vue:161-192</code>（form 内新增 14px svg）<br />
+              <code>@/agent/usage</code> 取 <code>contextPercent</code>（<b>已有单测</b>）
+            </td>
+            <td>新增显示组件（可独立成 <code>AgentContextRing.vue</code>）；<span class="risk low">零逻辑风险</span></td>
+          </tr>
+          <tr>
+            <td>i18n 文案</td>
+            <td>
+              <code>locales/zh|en/newtab.json</code><br />
+              复用 <code>contextHint</code> + <code>usage</code> 两键拼 tooltip
+            </td>
+            <td><span class="risk low">零风险</span>，可不加新键</td>
+          </tr>
+          <tr>
+            <td>下拉瘦身</td>
+            <td><code>AgentSessionList.vue:88-107</code>（删除水位条与百分比 span）</td>
+            <td><span class="risk low">零风险</span>；<code>data-test="context-meter"</code> 要跟着挪到圆环上，否则测试断</td>
+          </tr>
+          <tr>
+            <td>textarea 高度</td>
+            <td><code>AgentPanel.vue:169</code></td>
+            <td><span class="risk low">零风险</span></td>
+          </tr>
+          <tr>
+            <td>chip 箭头</td>
+            <td><code>AgentPanel.vue:33-36</code></td>
+            <td><span class="risk low">零风险</span>，注意 <code>group-focus-within</code></td>
+          </tr>
+          <tr>
+            <td>未配置横幅</td>
+            <td><code>AgentPanel.vue:87-94</code></td>
+            <td><span class="risk low">零风险</span>，与 T-152 合并</td>
+          </tr>
+          <tr>
+            <td>busy 态拥挤 / 发送按钮 title / slash 高度</td>
+            <td>
+              <code>:173-191</code> / <code>:183-191</code> / <code>:128</code>
+            </td>
+            <td><span class="risk mid">需先实测</span>，本轮不落地</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="foot">
+      本稿为设计验证，未改动任何 <code>src/</code> 代码。
+      圆环数据来自 panel 已有的 <code>host.usage</code> 与
+      <code>host.config.contextWindow</code>，无需新接数据源；
+      计算层 <code>@/agent/usage</code> 已有单测覆盖，本方案不动它。
+      垂直高度按 Tailwind 默认 spacing 推算，未做浏览器实测。
+    </div>
+  </body>
+</html>

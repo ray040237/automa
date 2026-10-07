@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { createAgent, fromPiEvent, historyToPiMessages } from './loop';
+import { defineTool } from './tools/define';
 import { AGENT_EVENTS, ERROR_KIND, TOOL_STATUS } from './events';
 import { wrapUntrusted } from './untrusted';
 import { buildUserMessage } from './prompt';
@@ -113,20 +114,23 @@ function assistant(content, extra = {}) {
 }
 
 // 票 02：工具定义夹具。票 04 接确认门时需要一只 write 类工具。
-const echoTool = {
+//
+// T-127：这两只夹具现在走 `defineTool` —— 与 15 个生产工具同一条构造器。
+// 以前它们显式写 `label` 而生产工具一个都没有，于是「主循环默认回归路径」
+// 验的从来不是生产形状：`adapter.js` 的 `tool.label || tool.name` 兜底
+// 分支从没被真正跑过。改 label / ctx 声明 / class 时，两边一起被构造器拦。
+const echoTool = defineTool({
   name: 'echo',
-  label: '回显参数',
   class: 'read',
   group: 'context',
   ctx: [],
   description: '回显参数',
   parameters: { type: 'object', properties: {} },
   execute: async (args) => ({ payload: 'echo:' + JSON.stringify(args) }),
-};
+});
 
-const writeTool = {
+const writeTool = defineTool({
   name: 'do_write',
-  label: '写东西',
   class: 'write',
   group: 'page',
   ctx: [],
@@ -134,7 +138,7 @@ const writeTool = {
   description: '写页面',
   parameters: { type: 'object', properties: { code: { type: 'string' } } },
   execute: async () => '已写入',
-};
+});
 
 const testModel = {
   id: 'test-model',
@@ -477,7 +481,10 @@ test('tools 以 pi 的工具声明下发，class/group 保留在运行时工具�
     'context',
     'group 必须留着 —— 票 03 的不可信标签靠它'
   );
-  assert.equal(runtime.label, '回显参数', 'label 是 pi 必填项');
+  // T-127：夹具改走 defineTool 后，label 由 name 补齐 —— 这正是 15 个生产
+  // 工具的实际形状（它们都不显式写 label，靠 `label || name`）。以前这里断言
+  // '回显参数'，验的是夹具自己声明的 label，与生产不同形。
+  assert.equal(runtime.label, 'echo', 'label 由构造器补 name（与生产同形）');
 });
 
 test('tool_call -> 执行 -> 再问一轮，工具结果回到对话', async () => {
@@ -776,6 +783,56 @@ test('LLM 报错时发 ERROR 事件，且 send 返回 ERROR 而非 DONE', async 
   );
 });
 
+test('T-60：缺 toolCallId 要有独立打点，且正常轮次计数为 0（反向断言）', async () => {
+  const entries = [];
+  const log = (event, data) => entries.push({ event, data });
+  log.warn = log;
+  log.error = log;
+
+  // 先跑有 id 的正常轮次：计数器必须是 0，否则「恒 ≥ 1」这种实现也能过
+  const ok = makeAgent(
+    [toolCallStream('echo', { msg: 'x' }), piStream('好的')],
+    {
+      log,
+    }
+  );
+  const okDone = await send(ok);
+  assert.equal(okDone.missingToolCallIds, 0, '有 id 的调用不该被记成缺失');
+  assert.equal(
+    entries.filter((e) => e.event === 'tool.call.missingId').length,
+    0,
+    '正常轮次不该打 missingId'
+  );
+
+  // 再跑缺 id 的轮次：计数与打点都要出现
+  const entries2 = [];
+  const log2 = (event, data) => entries2.push({ event, data });
+  log2.warn = log2;
+  log2.error = log2;
+  const bad = makeAgent(
+    [toolCallStreamNoId('echo', { msg: 'x' }), piStream('好的')],
+    { log: log2 }
+  );
+  const badDone = await send(bad);
+  assert.equal(badDone.missingToolCallIds, 1, '缺 id 的调用要计 1');
+  const warn = entries2.filter((e) => e.event === 'tool.call.missingId');
+  assert.equal(
+    warn.length,
+    1,
+    '缺 id 要有一条独立打点，而不是混在 tool.call 里'
+  );
+  assert.equal(warn[0].data.name, 'echo', '打点要带上是哪个工具');
+
+  // 计数必须是「本轮」的：**同一个 agent** 再发一轮（fakeStream 队列空了就回
+  // piStream('ok')，这轮没有工具调用），计数要归零。不这么写就测不到重置 ——
+  // 换一个 agent 测的话，闭包本来就是新的，恒过。
+  const second = await send(bad);
+  assert.equal(
+    second.missingToolCallIds,
+    0,
+    '第二轮没有缺 id 的调用，计数必须清零'
+  );
+});
 test('toolCall 块缺 id 时 pi 不崩，工具照常执行', async () => {
   // 迁移前 wire.js 会跳过没有 toolCallId 的空转块。pi 的行为**不同**：
   // 实测（探针，见票 08 完成记录）它不跳过，直接把 id 当undefined 传下去，
@@ -799,6 +856,13 @@ test('toolCall 块缺 id 时 pi 不崩，工具照常执行', async () => {
     `工具应照常执行，实际 ${toolMsg.content[0].text}`
   );
   assert.equal(doneEv.kind, AGENT_EVENTS.DONE, '缺 id 不终止整轮');
+
+  // T-60：光「不炸」不够 —— 要让这件事在这一轮的收尾处看得见。
+  assert.equal(
+    doneEv.missingToolCallIds,
+    1,
+    '缺 toolCallId 的调用要计入 DONE，否则只能事后翻日志找'
+  );
 });
 
 test('显式传入 system 时不被覆盖', async () => {
@@ -1329,10 +1393,93 @@ test('log 至少打点轮次起止，工具打点等票 02', async () => {
   assert.equal(typeof end.data.usage, 'object');
 });
 
-test.skip('log 工具调用与结果打点，含参数摘要', async () => {}, {
-  // ⚠️ 这不是迁移造成的缺口：迁移前的 loop.js **也没有**这两个打点
-  // （基线快照只有 turn.error 与 turn.end）。已登记为 T-59。
-  skip: 'T-59：迁移前就缺，票 08 明确不做「顺手改别的」',
+test('T-59：read 类工具的调用与结果都要有打点（含参数摘要）', async () => {
+  const entries = [];
+  const log = (event, data) => entries.push({ event, data });
+  log.warn = log;
+  log.error = log;
+
+  // 用 read 类工具：write 类本来就有 confirm.ask 带 args，read 类此前一个点都没有
+  const h = makeAgent(
+    [toolCallStream('echo', { q: '关键词' }), piStream('好的')],
+    { log }
+  );
+  await send(h);
+
+  const call = entries.find((e) => e.event === 'tool.call');
+  assert.ok(call, '缺 tool.call 打点');
+  assert.equal(call.data.name, 'echo');
+  assert.ok(
+    call.data.toolCallId,
+    '打点要能对上 toolCallId，否则并行调用分不清'
+  );
+  assert.equal(
+    call.data.args,
+    '{"q":"关键词"}',
+    '参数摘要必须是模型真传的那份（pi start 事件带的 args）'
+  );
+
+  const result = entries.find((e) => e.event === 'tool.result');
+  assert.ok(result, '缺 tool.result 打点');
+  assert.equal(result.data.name, 'echo');
+  assert.equal(
+    result.data.status,
+    TOOL_STATUS.OK,
+    '结果打点要带上终态，用户被拒的应是 REJECTED'
+  );
+  assert.ok(
+    result.data.observation.includes('echo:'),
+    '结果摘要要能看到工具返回了什么，实际：' + result.data.observation
+  );
+});
+
+test('T-59：用户拒的工具，tool.result 打点记 REJECTED 而不是失败', async () => {
+  const entries = [];
+  const log = (event, data) => entries.push({ event, data });
+  log.warn = log;
+  log.error = log;
+
+  const h = makeAgent(
+    [toolCallStream('do_write', { code: '1' }), piStream('好')],
+    {
+      tools: [writeTool],
+      log,
+      requestConfirmation: async () => ({ approved: false }),
+    }
+  );
+  await send(h);
+
+  const result = entries.find((e) => e.event === 'tool.result');
+  assert.ok(result, '缺 tool.result 打点');
+  assert.equal(
+    result.data.status,
+    TOOL_STATUS.REJECTED,
+    'pi 只知道「这次工具失败了」，拒绝这件事只有我们的钩子知道'
+  );
+});
+
+test('T-59：超长参数要截断，否则一行日志能冲垮 ring 缓冲', async () => {
+  const entries = [];
+  const log = (event, data) => entries.push({ event, data });
+  log.warn = log;
+  log.error = log;
+
+  const big = 'x'.repeat(5000);
+  const h = makeAgent([toolCallStream('echo', { q: big }), piStream('好的')], {
+    log,
+  });
+  await send(h);
+
+  const call = entries.find((e) => e.event === 'tool.call');
+  assert.ok(call, '缺 tool.call 打点');
+  assert.ok(
+    call.data.args.length < 500,
+    '截断后不该超过约 400 + 截断标记，实际 ' + call.data.args.length
+  );
+  assert.ok(
+    call.data.args.includes('已截断'),
+    '要写明这是截断的，否则读日志的人会以为参数就这么多'
+  );
 });
 
 test('write 工具的确认门打点：confirm.ask / confirm.answer', async () => {
@@ -1569,7 +1716,7 @@ test('historyToPiMessages 遇到未知事件类型抛错，不静默丢（T-71�
   );
 });
 
-test('tool_execution_end 的 observation 是包装好的结果文本（T-70）', () => {
+test('tool_execution_end 的 observation 是包装好的结果文本（T-132）', () => {
   // adapter 产出的结果已包装：原样透传，不二次包装
   const wrapped = wrapUntrusted('untrusted_tool_result', '工具的产出');
   const ours = fromPiEvent({
@@ -1600,7 +1747,7 @@ test('tool_execution_end 的 observation 是包装好的结果文本（T-70）',
   assert.ok(piNative.observation.includes('not found'), '错误文本保留');
 });
 
-test('重建 transcript 用的是 observation 包装文本，不是 details 的 JSON（T-70）', () => {
+test('重建 transcript 用的是 observation 包装文本，不是 details 的 JSON（T-132）', () => {
   // 修复前 end 事件 observation 是空占位，重建时把整个 AgentToolResult
   // JSON.stringify 进上下文 —— 未包装、双层编码。
   const observation = wrapUntrusted('untrusted_tool_result', '工具的产出');
@@ -2029,4 +2176,84 @@ test('T-63: 没有目标页时活轮次只剩用户原文, 不留空包装块', 
     .filter((m) => m.role === 'user')
     .pop();
   assert.deepEqual(live.content, [{ type: 'text', text: '你好' }]);
+});
+
+/* ---------------- T-95：活轮次的实测上下文 ---------------- */
+
+test('T-95：活轮次有实测 usage 时用实测判阈值，不再按估算压历史', async () => {
+  // 与上面那条 T-76 用例同一份 initialHistory：估算约 3900 token > 阈值 2048，
+  // 所以**没有**实测值时会先发一次摘要请求。
+  const initialHistory = [
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧一',
+      promptText: wrapUser('旧一'),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '好' },
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧二',
+      promptText: wrapUser('旧二'.repeat(650)),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '旧答'.repeat(650) },
+  ];
+
+  // 先跑一轮把 pi 的 transcript 填上：最后一条 assistant 带真实 usage，
+  // 报「上一次请求的完整 prompt 只有 1600 token」= input 100 + cacheRead 1500。
+  // （cacheRead 必须算进去，否则这条就退化成「只读 input」的弱断言。）
+  const h = makeAgent(
+    [
+      piStream('第一轮回答', {
+        usage: { input: 100, output: 20, cacheRead: 1500, cacheWrite: 0 },
+      }),
+      piStream('本轮回答'),
+    ],
+    { contextWindow: 4096, systemPromptOverride: 'sys' }
+  );
+  await send(h);
+
+  const doneEv = await send(h, { initialHistory });
+  assert.equal(doneEv.kind, AGENT_EVENTS.DONE);
+  assert.equal(
+    h.streamFn.calls.length,
+    2,
+    '两轮各一次主请求，没有多出摘要请求'
+  );
+  assert.ok(
+    !h.streamFn.calls.some(
+      (c) => c.context.systemPrompt === SUMMARIZATION_SYSTEM_PROMPT
+    ),
+    '实测上下文 1600 < 阈值 2048，不该按 3900 的估算去压历史'
+  );
+  assert.equal(of(h, AGENT_EVENTS.COMPACTION).length, 0, '不该产生压缩事件');
+});
+
+test('T-95：没有实测值时行为不变（照旧按估算压）', async () => {
+  const initialHistory = [
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧一',
+      promptText: wrapUser('旧一'),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '好' },
+    {
+      kind: AGENT_EVENTS.USER_MESSAGE,
+      text: '旧二',
+      promptText: wrapUser('旧二'.repeat(650)),
+    },
+    { kind: AGENT_EVENTS.TEXT_DELTA, text: '旧答'.repeat(650) },
+  ];
+  const h = makeAgent(
+    [piStream('第一轮回答'), piStream('这是摘要'), piStream('本轮回答')],
+    {
+      contextWindow: 4096,
+      systemPromptOverride: 'sys',
+    }
+  );
+  // 第 1 轮报 0 用量（重放历史正是这个样子）→ 第 2 轮没有可用实测值
+  await send(h, { initialHistory });
+  assert.ok(
+    h.streamFn.calls.length >= 2,
+    '没有可用实测值时阈值判断还得跟以前一样按估算走'
+  );
 });

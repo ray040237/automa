@@ -8,7 +8,9 @@
       工作流块、Autocomplete、Packages 等 46+ 处在用）。只有 hover 而没有底色的
       控件会和面板背景糊在一起，用户看不出哪里能点。
     -->
-    <div class="flex items-center gap-1.5 px-2 py-1.5">
+    <!-- T-158：py-1 而不是 py-1.5 —— 面板是 flex-col + transcript flex-1，
+         常驻行每省 1px，正文就多 1px。 -->
+    <div class="flex items-center gap-1.5 px-2 py-1">
       <!-- w-72 = 288px < 侧栏内容区 320px，右侧仍留 12px -->
       <agent-dropdown
         v-model="sessionMenuOpen"
@@ -20,7 +22,7 @@
         <template #trigger>
           <button
             type="button"
-            class="bg-box-transparent hover:bg-opacity-10 flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
+            class="group bg-box-transparent hover:bg-opacity-10 flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
             :title="t('workflow.agent.session.placeholder')"
           >
             <v-remixicon
@@ -30,17 +32,27 @@
             <span class="min-w-0 flex-1 truncate text-sm">
               {{ sessionLabel }}
             </span>
+            <!-- T-158：箭头只在 hover / 键盘 focus 时出现。320px 侧栏里这 20px
+                 等于标题多显示两三个字，而标题正是被 truncate 截断最狠的地方。
+                 「可以点开」的暗示由 bg-box-transparent 承担（全项目 46+ 处在用），
+                 箭头不是唯一线索。focus-within 兜住键盘用户 —— 没有它，纯键盘
+                 用户永远看不到自己正停在哪个控件上。 -->
             <v-remixicon
               name="riArrowDownSLine"
-              class="shrink-0 text-gray-500 dark:text-gray-400"
+              class="shrink-0 text-gray-500 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 dark:text-gray-400"
             />
           </button>
         </template>
 
+        <!-- T-09②③：模型名挂在会话下拉里（会话级信息），值来自 host.config ——
+             config 以前只被用来判断 apiKey 存不存在。
+             T-153：上下文水位与用量**不在这里**了，它们搬到了输入区的圆环上
+             （见 §form）—— 那是「发送前」要知道的信息，藏在下拉里等于逼用户
+             先开菜单才能决定要不要按发送。 -->
         <agent-session-list
           :sessions="host.sessions"
           :current-session-id="host.sessionId"
-          :usage="host.usage"
+          :model="host.config.model"
           :disabled="host.busy"
           @select="onSelectSession"
           @delete="onDeleteSession"
@@ -66,18 +78,27 @@
 
     <!-- T-04：错误卡上的「重试」把出错那一轮的原文交回宿主重发。
          刻意不碰 draft —— 用户可能正在打下一句，替他清空是越权。 -->
+    <!-- T-10：空态要告诉用户「这里能问什么」与「这个宿主开了什么」。
+         groups / 示例都从 host.groups 推导，组件自己不含任何能力知识。 -->
     <agent-transcript
       class="flex-1"
       :events="host.events"
       :busy="host.busy"
+      :groups="host.groups"
+      :examples="exampleList"
       @retry="host.send($event)"
+      @pick-example="draft = $event"
     />
 
     <!-- 没配 API Key 时把入口摆在正中：
          这个状态下发消息只会回一句「请先配置」，让人以为功能坏了。 -->
+    <!-- T-158：横幅压成一行（p-3 text-sm → px-2 py-1.5 text-xs，省约 16px）。
+         它只需要说清「发送已禁用、去哪配」—— 发送按钮本身就 disabled 了，
+         不需要用一整块的篇幅去重复这件事。
+         注：配色仍是黄（T-152 的「黄/琥珀三义共用」尚未批准，此处不动颜色）。 -->
     <div
       v-if="!configured"
-      class="border-b border-yellow-300 bg-yellow-500/10 p-3 text-sm text-yellow-800 dark:text-yellow-300"
+      class="border-b border-yellow-300 bg-yellow-500/10 px-2 py-1.5 text-xs text-yellow-800 dark:text-yellow-300"
     >
       <button type="button" class="underline" @click="goSettings">
         {{ t('workflow.agent.goSettings') }}
@@ -134,13 +155,45 @@
       </ul>
     </div>
 
+    <!-- T-12：插话已入队的常驻确认。事件流里那条「已排队」是一次性的 notice，
+         面板滚动一屏就没了；这条钉在输入框正上方，队列排空前一直在。 -->
+    <p
+      v-if="host.busy && host.pendingInterjections > 0"
+      class="mx-2 mb-1 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
+      data-test="pending-interjections"
+    >
+      <v-remixicon name="riStackLine" class="shrink-0" />
+      {{
+        t('workflow.agent.queuedPending', {
+          n: host.pendingInterjections,
+        })
+      }}
+    </p>
+
     <form class="flex items-end gap-2 p-2 pt-0" @submit.prevent="send">
+      <!-- T-12：原来 rows="3" 钉死高度，写长指令只能在小窗里滚。改 autoresize：
+           高度跟着内容长，到 max-h 封顶后内部滚动（面板只有 320px 宽，再高就把
+           对话正文挤没了）。min-h 是 CSS 兜底 —— calcHeight 写的是 px 高度，低于
+           min-h 时由 CSS 说了算，所以空草稿仍保持多行观感。
+           T-158：88 → 68（三行观感改两行）。autoresize 会让草稿长起来时照常
+           顶到 max-h-128，所以省下的是**短草稿时**白占的 20px，长文本行为不变。 -->
       <ui-textarea
         v-model="draft"
-        class="flex-1"
-        rows="3"
+        autoresize
+        class="min-h-[68px] max-h-[128px] flex-1 overflow-y-auto scroll scroll-xs"
         :placeholder="t('workflow.agent.placeholder')"
         @keydown="onDraftKeydown"
+      />
+
+      <!--
+        T-153：上下文水位圆环。
+        塞在按钮行里而不是另起一行 —— 它是「发送前」该看的信息（快满了就该开
+        新会话或等压缩），但常驻只占 14px 宽、**0px 高**。数字与用量收进 hover。
+        算不出水位时组件整个不渲染，连这 14px 都退回（见 AgentContextRing）。
+      -->
+      <agent-context-ring
+        :usage="host.usage"
+        :context-window="Number(host.config.contextWindow) || 0"
       />
       <ui-button
         v-if="host.busy"
@@ -169,6 +222,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { sessionOptionLabel } from '@/agent/sessions';
+import { suggestExamples } from '@/agent/examples';
 import { configIO } from '@/agent';
 import {
   filterCommands,
@@ -180,6 +234,7 @@ import AgentTabPicker from './AgentTabPicker.vue';
 import AgentSessionList from './AgentSessionList.vue';
 import AgentDropdown from './AgentDropdown.vue';
 import AgentConfirmCard from './AgentConfirmCard.vue';
+import AgentContextRing from './AgentContextRing.vue';
 
 /**
  * 面板收单个 `host` 对象 prop（T-90）—— 就是 useAgentHost 返回的那个
@@ -199,6 +254,10 @@ const props = defineProps({
 const { t } = useI18n();
 
 const draft = ref('');
+
+// T-10：示例问法按本宿主开放的能力挑。点击只填入草稿、**不自动发送** ——
+// 示例是猜的，用户要先能改再决定发不发。
+const exampleList = computed(() => suggestExamples(props.host.groups));
 
 // header 只剩这一个下拉（切换 / 用量 / 删除都在里面）
 const sessionMenuOpen = ref(false);

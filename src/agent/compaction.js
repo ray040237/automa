@@ -15,7 +15,7 @@
  *   4. 产物形状 —— agent:compaction 事件（buildCompactionEvent）
  */
 
-import { AGENT_EVENTS } from './events';
+import { AGENT_EVENTS, toolCallsOf } from './events';
 
 /** 序列化时单个工具观察值的截断上限。摘要请求自身也不能把窗口撑爆（pi 同款）。 */
 export const TOOL_RESULT_MAX_CHARS = 2000;
@@ -77,10 +77,7 @@ function eventTextOf(ev) {
     case AGENT_EVENTS.TEXT_DELTA:
       return ev.text || '';
     case AGENT_EVENTS.TOOL_CALL: {
-      const calls =
-        Array.isArray(ev.calls) && ev.calls.length
-          ? ev.calls
-          : [{ name: ev.name, args: ev.args }];
+      const calls = toolCallsOf(ev);
       return calls
         .map((c) => `${c.name}(${JSON.stringify(c.args || {})})`)
         .join('\n');
@@ -150,6 +147,64 @@ export function compactionThresholds(contextWindow) {
 export function shouldCompact(estimatedTokens, contextWindow) {
   const t = compactionThresholds(contextWindow);
   return Boolean(t) && estimatedTokens > t.thresholdTokens;
+}
+
+/**
+ * 活轮次的**实测**上下文大小（T-95）：读 pi transcript 里最后一次请求上报的
+ * usage，取不到就返回 null（调用方退回估算，不静默用 0 顶替）。
+ *
+ * 为什么能直接用：OpenAI 兼容端点的 `prompt_tokens` 就是**这次请求的完整
+ * prompt**，本轮新增内容都已在里面 —— 不像 Anthropic 那样只报未命中缓存的部分。
+ *
+ * **但不能直接读 `usage.input`**：pi 的 `parseChunkUsage`（pi-ai
+ * dist/api/openai-completions.js:1178）算的是
+ *
+ *     input = max(0, prompt_tokens - cacheRead - cacheWrite)
+ *
+ * 也就是**扣掉缓存命中与写入**后的增量部分。只读 input 会在命中提示词缓存时
+ * （长会话恰恰是最容易命中的场景）把真实上下文低估一大截，方向正好是最坏的那种：
+ * 以为没满、继续堆、直到撞模型上限。三项相加才还原 `prompt_tokens`：
+ *
+ *     完整 prompt = input + cacheRead + cacheWrite
+ *
+ * 另外三个坑，都在下面代码里逐条挡住：
+ *  1. **重放消息的 usage 全是 0**（loop.js 的 `provider: 'replay'`）。0 不是
+ *     「实测为零」而是「没有实测」，当成真值会把上下文算成空的，所以按
+ *     `provider` 判掉。
+ *  2. **一个工具轮有多次请求**，usage 是**每次请求各自的 prompt 大小**，不是
+ *     累加（累加是 `harvestUsage` 给计费用的语义）。所以从尾部找**最后一次**，
+ *     取最后那条：它的 prompt 已经包含前面所有请求的内容。
+ *  3. **那次请求之后又追加的消息**（上一轮的 assistant 输出、待发出去的本轮
+ *     user 消息）不在 `prompt_tokens` 里，要按估算补上 —— 补的是「最后一条
+ *     有实测的 assistant 消息之后」的那一段，不是整段历史。
+ *
+ * @param {{messages?: Array<Object>, pendingText?: string}} input
+ *   messages pi 的 state.messages；pendingText 本轮即将发出、尚未计入的 user 文本
+ * @returns {number|null} token 数，或 null（没有可用实测值）
+ */
+export function measuredContextTokens({ messages, pendingText } = {}) {
+  const list = Array.isArray(messages) ? messages : [];
+
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const m = list[i];
+    if (!m || m.role !== 'assistant' || m.provider === 'replay') continue;
+
+    const u = m.usage;
+    if (!u || typeof u !== 'object') continue;
+
+    const promptTokens =
+      (Number(u.input) || 0) +
+      (Number(u.cacheRead) || 0) +
+      (Number(u.cacheWrite) || 0);
+    if (!(promptTokens > 0)) continue;
+
+    const rest = list.slice(i + 1);
+    // 空切片不加 token：JSON.stringify([]) 是 '[]'，估出来 1 个，凭空多算。
+    const since = rest.length ? estimateTokens(JSON.stringify(rest)) : 0;
+    return promptTokens + since + estimateTokens(pendingText || '');
+  }
+
+  return null;
 }
 
 /** 含 index 的事件所属 user 轮的起点；前面没有 user 消息则视为第 0 条。 */
@@ -263,10 +318,7 @@ export function serializeForSummary(events, options = {}) {
         break;
       case AGENT_EVENTS.TOOL_CALL: {
         flushAssistant();
-        const calls =
-          Array.isArray(ev.calls) && ev.calls.length
-            ? ev.calls
-            : [{ name: ev.name, args: ev.args }];
+        const calls = toolCallsOf(ev);
         for (const c of calls) {
           const args = cap(JSON.stringify(c.args || {}), TOOL_ARGS_MAX_CHARS);
           lines.push(`[助手调用工具]: ${c.name}(${args})`);

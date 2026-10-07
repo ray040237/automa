@@ -128,3 +128,65 @@ export function raceTimeout(promise, ms, timeoutValue) {
 
   return Promise.race([promise, fallback]).finally(() => clearTimeout(timer));
 }
+
+/* ───────────────── CSP 拦截识别（backlog B6） ─────────────────
+ *
+ * 只能在**模块级**做：agentEvalInPage 会被序列化注入页面，函数体里引用
+ * 这些导出会是 ReferenceError。所以判定交给 background 侧，对它的返回值
+ * 做一次 CSP 判别，再决定要不要降级到 chrome.debugger。
+ *
+ * 背景：严格 CSP 页面（缺 unsafe-eval）会拦掉 MAIN world 的 new Function /
+ * eval，V8 抛的是 EvalError，消息形如
+ *   Refused to evaluate a string as JavaScript because 'unsafe-eval' is not
+ *   an allowed source of script in the following Content Security Policy ...
+ * 而 agentEvalInPage 的编译 catch 把它当成 SyntaxError，回执成「表达式与
+ * 语句两种形式都无法解析」——模型会以为是语法错，换着写法无限重试。
+ * 这里把它认出来，好换成「不是语法问题」的清晰文案，并触发降级。
+ */
+
+/**
+ * 一段错误（Error 或字符串）是不是「页面 CSP 拦掉了 eval」。
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isCspEvalBlock(err) {
+  if (!err) return false;
+  const msg = typeof err === 'string' ? err : err.message || String(err);
+
+  return (
+    /unsafe-eval/i.test(msg) ||
+    /Refused to evaluate/i.test(msg) ||
+    /Content Security Policy/i.test(msg)
+  );
+}
+
+/**
+ * runInPage 的返回值是不是一次「被 CSP 拦掉」的失败。
+ * 只认 ok:false —— 成功结果一律放行，绝不误触发降级。
+ * @param {unknown} res
+ * @returns {boolean}
+ */
+export function isCspBlockedResult(res) {
+  if (!res || typeof res !== 'object' || res.ok !== false) return false;
+
+  return isCspEvalBlock(res.error);
+}
+
+/**
+ * CSP 拦截后给模型看的说明。刻意点明「不是语法问题」并给出替代动作，
+ * 免得模型像收到语法错那样反复改写同一段代码。
+ * @param {boolean} isFirefox
+ * @returns {string}
+ */
+export function cspBlockedMessage(isFirefox) {
+  const tail = isFirefox
+    ? 'Firefox 不支持用调试器绕过页面 CSP。'
+    : '调试器降级也没有成功。';
+
+  return (
+    '页面 CSP 禁止 eval（unsafe-eval），这段代码没能在目标页执行。' +
+    '这不是代码语法问题 —— ' +
+    tail +
+    '请改用 read_page / find_text 等只读工具取数据，或换一个页面再试。'
+  );
+}

@@ -58,3 +58,6 @@ getPassKey.js
 
 # WorkBuddy 工作台：本机会话记录与技能，不该随项目代码走
 /.workbuddy
+
+# 另一个 AI 工具的本地文档目录，与本项目无关（2026-10-08 发现残留）
+/.trae/
