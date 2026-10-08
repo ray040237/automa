@@ -197,7 +197,75 @@ test('T-163：水位阈值显示 —— <80% 整段不渲染 / >=80 提级 / >=9
   );
 });
 
-test('T-153：模型名仍在会话下拉里渲染（搬走水位时别把它一起丢了）', async () => {
+test('T-168：会话历史列表渲染 —— 时间分组 / 消息数 / 空态 / 模型名', async () => {
+  // T-168 之前这个列表挂在 agent-dropdown 的 slot 里，而 slot 在渲染桩里根本
+  // 不渲染 —— 只能靠静态 grep。现在它是真实节点，这些断言终于写得出来了。
+  const DAY = 24 * 3600 * 1000;
+  // 取「今天 12:00」而不是 Date.now()：否则测试在凌晨跑时「减 1 小时」会落到
+  // 昨天，分组断言就成了碰运气。
+  const noon = new Date();
+  noon.setHours(12, 0, 0, 0);
+  const todayTs = noon.getTime();
+
+  const html = await renderSfc(LIST, {
+    props: {
+      sessions: [
+        {
+          id: 'a',
+          title: '今天的',
+          lastAccessedAt: todayTs - 3600e3,
+          messageCount: 12,
+        },
+        {
+          id: 'b',
+          title: '昨天的',
+          lastAccessedAt: todayTs - DAY,
+          messageCount: 3,
+        },
+        {
+          id: 'c',
+          title: '更早的',
+          lastAccessedAt: todayTs - 30 * DAY,
+          messageCount: 31,
+        },
+      ],
+      currentSessionId: 'a',
+      model: 'gpt-4o-mini',
+    },
+  });
+
+  assert.ok(html.includes('data-test="session-history"'), '历史列表要渲染出来');
+  assert.ok(
+    html.includes('data-test="session-group-today"'),
+    '要有「今天」分组'
+  );
+  assert.ok(
+    html.includes('data-test="session-group-yesterday"'),
+    '要有「昨天」分组'
+  );
+  assert.ok(
+    html.includes('data-test="session-group-earlier"'),
+    '要有「更早」分组'
+  );
+  assert.ok(
+    html.includes('workflow.agent.session.turnCount'),
+    '消息数要走文案键 —— 索引里的 messageCount 一直存着，以前没用上'
+  );
+  assert.ok(html.includes('data-test="model-name"'), '模型名要跟着列表走');
+  assert.equal(
+    html.includes('data-test="context-meter"'),
+    false,
+    '水位不该出现在历史里（它在输入区的圆环上）'
+  );
+
+  const empty = await renderSfc(LIST, { props: { sessions: [], model: 'm' } });
+  assert.ok(
+    empty.includes('data-test="session-empty"'),
+    '没有历史时要出空态文案'
+  );
+});
+
+test('T-153：模型名仍在会话列表里渲染（搬走水位时别把它一起丢了）', async () => {
   const html = await renderSfc(LIST, {
     props: {
       sessions: [],

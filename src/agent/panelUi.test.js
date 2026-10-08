@@ -244,12 +244,13 @@ test('守卫：删除在会话下拉里，且可点控件都有底色', () => {
 
   // 可点控件用项目通用的 bg-box-transparent（工作流块、Autocomplete、Packages
   // 等 46+ 处在用）。只有 hover 没有底色的控件会与面板背景糊在一起。
+  // T-168：会话 chip 不再是下拉的 trigger，而是「进历史视图」的按钮。
+  // 判据跟着改 —— 盯的是「这个可点控件有没有底色」，不是「它是不是 dropdown」。
   const panel = stripComments(readFileSync(panelPath, 'utf8'));
-  const chipAt = panel.indexOf('<agent-dropdown');
-  const chipEnd = panel.indexOf('</agent-dropdown>');
-  assert.ok(chipAt > 0 && chipEnd > chipAt, '会话下拉必须存在');
+  const chipAt = panel.indexOf('data-test="open-history"');
+  assert.ok(chipAt > 0, '会话 chip 必须存在（它是进历史视图的入口）');
   assert.match(
-    panel.slice(chipAt, chipEnd),
+    panel.slice(Math.max(0, chipAt - 400), chipAt),
     /bg-box-transparent/,
     '会话 chip 的触发器必须有底色，否则看不出能点'
   );
@@ -1318,11 +1319,7 @@ test('T-166：@ 菜单挂在 composer 上方，与 / 互斥，且不把 @token �
     /data-test="at-menu"/,
     '菜单要有 data-test —— 后续补交互测试时靠它定位'
   );
-  assert.match(
-    src,
-    /data-test="at-trigger"/,
-    '底行的 @ 入口要有 data-test'
-  );
+  assert.match(src, /data-test="at-trigger"/, '底行的 @ 入口要有 data-test');
 
   // 互斥：/ 是整框态，优先于词内的 @
   assert.match(
@@ -1344,11 +1341,7 @@ test('T-166：@ 菜单挂在 composer 上方，与 / 互斥，且不把 @token �
     /stripAtToken\(draft\.value, atToken\.value\)/,
     '选中目标页后要把 @token 从草稿里摘掉 —— 它是输入时的把手，不是要说的话'
   );
-  assert.match(
-    src,
-    /host\.pickTab\(tab\)/,
-    '选中的副作用是改目标页'
-  );
+  assert.match(src, /host\.pickTab\(tab\)/, '选中的副作用是改目标页');
 
   // 文案键
   for (const lang of ['zh', 'en']) {

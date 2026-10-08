@@ -1,83 +1,112 @@
 <template>
-  <div class="scroll scroll-xs max-h-[60vh] w-72 overflow-y-auto p-1">
-    <p
-      v-if="sessions.length === 0"
-      class="px-2 py-6 text-center text-sm text-gray-500"
-    >
-      {{ t('workflow.agent.session.empty') }}
-    </p>
+  <!--
+    T-168：会话历史列表（无外壳）。
 
-    <template v-else>
-      <!--
-        每行 = 一组：行主体点开切换，行尾垃圾桶删掉「这一条」。
-        不用列表底部的「删除当前会话」：想删一条旧会话时就得先切过去，而切换会
-        丢掉当前上下文（还要过 guardAgentSwitch），为了删一条历史记录被迫先搬过去。
-        垃圾桶与行主体是两个独立 button，点删除不会连带触发切换。
-      -->
-      <!-- T-11：行容器上也挂 title —— disabled 按钮在部分浏览器里不派发鼠标
-           事件，title 只挂在按钮上有时弹不出来；容器不是 disabled，稳。 -->
-      <div
-        v-for="s in sessions"
-        :key="s.id"
-        class="flex items-center rounded"
-        :class="{ 'bg-box-transparent': s.id === currentSessionId }"
-        :title="disabled ? t('workflow.agent.session.busyHint') : ''"
+    这一格以前是「会话下拉的内容」（w-72 + max-h-[60vh]）。浮层适合「临时选
+    一个」，不适合「浏览 + 搜索 + 管理」—— 会话历史是后者：它只增不减，攒多了
+    要靠搜索和时间来认，而切换还会清空插话队列、删除不可逆。现在它变成面板
+    正文区里的一整块视图（外壳由 AgentPanel 的 view 切换给）。
+
+    顺带解决一个测试盲区：`agent-dropdown` 在 utils/sfc-render.mjs 的
+    GLOBAL_STUBS 里 **slot 不渲染**，所以列表挂在下拉里时，渲染测试根本看不见
+    它 —— 只能靠静态 grep。搬出下拉之后，它是真实节点了。
+  -->
+  <div class="flex h-full min-h-0 flex-col" data-test="session-history">
+    <div class="px-2 pb-2">
+      <ui-input
+        v-model="query"
+        :placeholder="t('workflow.agent.session.searchPlaceholder')"
+        class="w-full"
+      />
+    </div>
+
+    <div class="scroll min-h-0 flex-1 overflow-y-auto px-1">
+      <p
+        v-if="total === 0"
+        class="px-2 py-6 text-center text-sm text-gray-500"
+        data-test="session-empty"
       >
-        <button
-          type="button"
-          :disabled="disabled"
-          class="flex min-w-0 flex-1 items-center gap-2 rounded px-2 py-1.5 text-left text-sm hoverable disabled:cursor-not-allowed disabled:opacity-60"
+        {{ t('workflow.agent.session.empty') }}
+      </p>
+
+      <!-- 有会话但一条都没中：**说明搜索的边界**而不是留一片空白 ——
+           用户会以为搜索坏了。 -->
+      <p
+        v-else-if="groups.length === 0"
+        class="px-3 py-6 text-center text-xs leading-relaxed text-gray-500"
+        data-test="session-search-limit"
+      >
+        {{ t('workflow.agent.session.searchLimit') }}
+      </p>
+
+      <template v-for="g in groups" :key="g.key">
+        <p
+          class="px-2 pb-1 pt-2 text-[10px] text-gray-400"
+          :data-test="'session-group-' + g.key"
+        >
+          {{ groupLabel(g.key) }}
+        </p>
+
+        <!--
+          两行密度：标题 + 「时间 · N 条消息」。
+          索引里一直存着 messageCount，以前没用上；而 24 字的标题区分度很低
+          （都是「帮我把这个页面的…」这种开头），认出一条历史真正靠的是时间与规模。
+        -->
+        <div
+          v-for="s in g.items"
+          :key="s.id"
+          class="flex items-start gap-1 rounded"
+          :class="{ 'bg-box-transparent': s.id === currentSessionId }"
           :title="disabled ? t('workflow.agent.session.busyHint') : ''"
-          @click="emit('select', s.id)"
         >
-          <v-remixicon
-            name="riChatHistoryLine"
-            class="shrink-0 text-gray-400"
-          />
-          <span class="min-w-0 flex-1 truncate">
-            {{ optionText(s) }}
-          </span>
-          <v-remixicon
+          <button
+            type="button"
+            :disabled="disabled"
+            :title="disabled ? t('workflow.agent.session.busyHint') : ''"
+            class="hoverable flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded px-2 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-60"
+            @click="emit('select', s.id)"
+          >
+            <span
+              class="w-full truncate text-[13px]"
+              :class="{ 'text-gray-400': !s.title }"
+              >{{ titleOf(s) }}</span
+            >
+            <span class="text-[10.5px] text-gray-400">{{ subOf(s) }}</span>
+          </button>
+
+          <span
             v-if="s.id === currentSessionId"
-            name="riCheckLine"
-            class="shrink-0 text-accent"
-          />
-        </button>
+            class="mt-2 shrink-0 text-[11px] text-accent"
+            >✓</span
+          >
 
-        <button
-          type="button"
-          class="shrink-0 rounded p-1.5 text-gray-500 hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-400 dark:hover:text-red-400"
-          :disabled="disabled"
-          :title="
-            disabled
-              ? t('workflow.agent.session.busyHint')
-              : t('workflow.agent.session.delete')
-          "
-          :aria-label="
-            disabled
-              ? t('workflow.agent.session.busyHint')
-              : t('workflow.agent.session.delete')
-          "
-          @click="emit('delete', s.id)"
-        >
-          <v-remixicon name="riDeleteBin7Line" class="shrink-0" />
-        </button>
-      </div>
-    </template>
+          <button
+            type="button"
+            class="mt-1 shrink-0 rounded p-1.5 text-gray-500 hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-400 dark:hover:text-red-400"
+            :disabled="disabled"
+            :title="
+              disabled
+                ? t('workflow.agent.session.busyHint')
+                : t('workflow.agent.session.deleteOne')
+            "
+            :aria-label="
+              disabled
+                ? t('workflow.agent.session.busyHint')
+                : t('workflow.agent.session.deleteOne')
+            "
+            @click="emit('delete', s.id)"
+          >
+            <v-remixicon name="riDeleteBin7Line" class="shrink-0" />
+          </button>
+        </div>
+      </template>
+    </div>
 
-    <!--
-      T-09②：模型名。
-      模型名原来只用来判断 apiKey 存不存在，换 provider / 换模型后无从确认
-      「这个答案是谁写的」。
-
-      T-153：上下文水位与 token 用量**不在这里了**。它们是「发送前」要知道的
-      信息 —— 快满了就该开新会话或等压缩 —— 藏在下拉里等于逼用户先开菜单才能
-      决定要不要按发送。已搬到输入区的圆环上（`AgentContextRing.vue`）：
-      常驻只占 14px，数字与用量收进 hover。
-    -->
+    <!-- T-09②：模型名是会话级信息，跟着列表走（换 provider / 换模型后要能确认
+         「这个答案是谁写的」）。T-153 之后水位不在这里了 —— 它在输入区的圆环上。 -->
     <p
       v-if="model"
-      class="mt-1 truncate border-t border-gray-200 px-2 pt-2 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400"
+      class="truncate border-t border-gray-200 px-3 py-2 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400"
       :title="model"
       data-test="model-name"
     >
@@ -87,25 +116,25 @@
 </template>
 
 <script setup>
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { sessionOptionLabel } from '@/agent/sessions';
+import {
+  GROUP_TODAY,
+  GROUP_YESTERDAY,
+  clockOf,
+  dateOf,
+  dayGroupOf,
+  filterSessionsByTitle,
+  groupSessionsByDay,
+} from '@/agent/sessionGroups';
 
 /**
- * 会话下拉的内容：会话列表（每行自带删除）+ 当前模型名。
+ * 会话历史列表。
  *
- * 原本 header 上还有一个「⋯」溢出菜单，专门用来装 token 用量与删除 —— 为了两个
- * 功能多出一层菜单、多一个按钮，删除要点两次。已收掉：这三件事本来就都属于
- * 「会话」，全放进这一个下拉。删除进一步改成**每行自带垃圾桶**（见模板里的注释）。
- *
- * T-153：水位与用量从这里搬到了输入区的圆环 —— 见模板里 model-name 上方的注释。
- *
- * 文案不在这里拼 —— 复用 sessions.js 的 sessionOptionLabel（已有单测钉住，
- * 它产出「标题 · 相对时间」）。更早那行原生 <select> 是靠给标题追加「（当前）」
- * 这种字符串后缀来标记当前会话的，换成列表后用勾选图标，不再往标题里塞字。
+ * 分组、相对时刻、搜索都在 `@/agent/sessionGroups`（纯函数，有单测）——
+ * 组件里只做取数与文案，判定不住在这里。
  */
-// 模板里直接用字段名，所以 defineProps 的返回值不必挂到变量上 ——
-// script 里已经没有任何地方要读 props（T-153 把水位搬走后，连 usage 都不读了）。
-defineProps({
+const props = defineProps({
   sessions: { type: Array, default: () => [] },
   currentSessionId: { type: String, default: null },
   disabled: { type: Boolean, default: false },
@@ -117,7 +146,54 @@ const emit = defineEmits(['select', 'delete']);
 
 const { t } = useI18n();
 
-function optionText(entry) {
-  return sessionOptionLabel(entry, t('workflow.agent.session.untitled'));
+const query = ref('');
+
+const total = computed(() => (props.sessions || []).length);
+
+/**
+ * 过滤 → 分组，两步都在 sessionGroups 里（纯函数，有单测）。
+ *
+ * `Date.now()` 不进响应式：列表本身会随 sessions / query 重算，而「现在」在
+ * 一次渲染内不必追究 —— 会话历史精确到分钟，没有秒级正确的需求。
+ */
+const groups = computed(() =>
+  groupSessionsByDay(
+    filterSessionsByTitle(props.sessions, query.value),
+    Date.now()
+  )
+);
+
+function titleOf(entry) {
+  return entry.title || t('workflow.agent.session.untitled');
+}
+
+/**
+ * 副行：时间 · N 条消息。
+ *
+ * 「昨天」走 i18n 键而不是拼在这里 —— 它是给人看的词，不是格式。
+ * 拿不到时间戳时只出消息数，绝不拼出「 · 」这种半截分隔符。
+ */
+function subOf(entry) {
+  const ts = Number(entry.lastAccessedAt || entry.createdAt) || 0;
+  const group = dayGroupOf(ts, Date.now());
+
+  let time = dateOf(ts);
+  if (group === GROUP_TODAY) time = clockOf(ts);
+  else if (group === GROUP_YESTERDAY)
+    time = `${t('workflow.agent.session.groupYesterday')} ${clockOf(ts)}`;
+
+  const count = t('workflow.agent.session.turnCount', {
+    n: Number(entry.messageCount) || 0,
+  });
+
+  return time ? `${time} · ${count}` : count;
+}
+
+function groupLabel(key) {
+  if (key === GROUP_TODAY) return t('workflow.agent.session.groupToday');
+  if (key === GROUP_YESTERDAY)
+    return t('workflow.agent.session.groupYesterday');
+
+  return t('workflow.agent.session.groupEarlier');
 }
 </script>

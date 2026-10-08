@@ -11,53 +11,50 @@
     <!-- T-158：py-1 而不是 py-1.5 —— 面板是 flex-col + transcript flex-1，
          常驻行每省 1px，正文就多 1px。 -->
     <div class="flex items-center gap-1.5 px-2 py-1">
-      <!-- w-72 = 288px < 侧栏内容区 320px，右侧仍留 12px -->
-      <agent-dropdown
-        v-model="sessionMenuOpen"
-        align="left"
-        side="bottom"
-        width="w-72"
-        class="min-w-0 flex-1"
+      <!--
+        T-168：chat 视图下的会话 chip。**点它是「进历史视图」，不再是「打开一个
+        下拉列表」** —— 会话历史需要浏览 + 搜索 + 管理，而浮层（max-h-[60vh]）
+        装不下这些：它适合「临时选一个」，历史是「翻旧账 + 删」。
+        箭头也跟着从 ▾ 改成 ▸：这个动作是「进入」，不是「展开」。
+      -->
+      <button
+        v-if="view === 'chat'"
+        type="button"
+        class="group bg-box-transparent hover:bg-opacity-10 flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
+        :title="t('workflow.agent.session.placeholder')"
+        data-test="open-history"
+        @click="view = 'history'"
       >
-        <template #trigger>
-          <button
-            type="button"
-            class="group bg-box-transparent hover:bg-opacity-10 flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
-            :title="t('workflow.agent.session.placeholder')"
-          >
-            <v-remixicon
-              name="riChatHistoryLine"
-              class="shrink-0 text-gray-500 dark:text-gray-400"
-            />
-            <span class="min-w-0 flex-1 truncate text-sm">
-              {{ sessionLabel }}
-            </span>
-            <!-- T-158：箭头只在 hover / 键盘 focus 时出现。320px 侧栏里这 20px
-                 等于标题多显示两三个字，而标题正是被 truncate 截断最狠的地方。
-                 「可以点开」的暗示由 bg-box-transparent 承担（全项目 46+ 处在用），
-                 箭头不是唯一线索。focus-within 兜住键盘用户 —— 没有它，纯键盘
-                 用户永远看不到自己正停在哪个控件上。 -->
-            <v-remixicon
-              name="riArrowDownSLine"
-              class="shrink-0 text-gray-500 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 dark:text-gray-400"
-            />
-          </button>
-        </template>
-
-        <!-- T-09②③：模型名挂在会话下拉里（会话级信息），值来自 host.config ——
-             config 以前只被用来判断 apiKey 存不存在。
-             T-153：上下文水位与用量**不在这里**了，它们搬到了输入区的圆环上
-             （见 §form）—— 那是「发送前」要知道的信息，藏在下拉里等于逼用户
-             先开菜单才能决定要不要按发送。 -->
-        <agent-session-list
-          :sessions="host.sessions"
-          :current-session-id="host.sessionId"
-          :model="host.config.model"
-          :disabled="host.busy"
-          @select="onSelectSession"
-          @delete="onDeleteSession"
+        <v-remixicon
+          name="riChatHistoryLine"
+          class="shrink-0 text-gray-500 dark:text-gray-400"
         />
-      </agent-dropdown>
+        <span class="min-w-0 flex-1 truncate text-sm">
+          {{ sessionLabel }}
+        </span>
+        <!-- T-158：箭头只在 hover / 键盘 focus 时出现。320px 侧栏里这 20px
+             等于标题多显示两三个字，而标题正是被 truncate 截断最狠的地方。 -->
+        <v-remixicon
+          name="riArrowRightSLine"
+          class="shrink-0 text-gray-500 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 dark:text-gray-400"
+        />
+      </button>
+
+      <!-- 历史视图的 header：返回 + 标题。新建按钮两个视图共用（在下面）。 -->
+      <template v-else>
+        <button
+          type="button"
+          class="hover:bg-box-transparent shrink-0 rounded-md px-1.5 py-1.5"
+          :title="t('workflow.agent.session.history')"
+          data-test="close-history"
+          @click="view = 'chat'"
+        >
+          <v-remixicon name="riArrowLeftSLine" />
+        </button>
+        <span class="min-w-0 flex-1 truncate text-sm font-medium">
+          {{ t('workflow.agent.session.history') }}
+        </span>
+      </template>
 
       <!-- T-11：busy 时 title 换成「为什么点不动」。原先 title 恒是「新建会话」，
            disabled 之后这句仍然在说功能名，用户看到的是「有按钮但不给理由」。 -->
@@ -81,6 +78,7 @@
     <!-- T-10：空态要告诉用户「这里能问什么」与「这个宿主开了什么」。
          groups / 示例都从 host.groups 推导，组件自己不含任何能力知识。 -->
     <agent-transcript
+      v-if="view === 'chat'"
       class="flex-1"
       :events="host.events"
       :busy="host.busy"
@@ -90,32 +88,52 @@
       @pick-example="draft = $event"
     />
 
-    <!-- 没配 API Key 时把入口摆在正中：
+    <!--
+      T-168：历史视图 —— 正文区整块替换，而不是弹一层浮层。
+      切视图不卸载 transcript 的数据（events 还在 host 上），回来不用重放；
+      但 transcript 组件本身会被卸载重建，这是「整块替换」的代价，可接受
+      （历史是低频操作，回来时滚动位置本来也该回到底部）。
+    -->
+    <agent-session-list
+      v-else
+      class="flex-1"
+      :sessions="host.sessions"
+      :current-session-id="host.sessionId"
+      :model="host.config.model"
+      :disabled="host.busy"
+      @select="onSelectSession"
+      @delete="onDeleteSession"
+    />
+
+    <!-- 下面这些只在对话视图里出现：历史视图下 composer 隐藏 ——
+         这时候不该让人以为能打字。 -->
+    <template v-if="view === 'chat'">
+      <!-- 没配 API Key 时把入口摆在正中：
          这个状态下发消息只会回一句「请先配置」，让人以为功能坏了。 -->
-    <!-- T-158：横幅压成一行（p-3 text-sm → px-2 py-1.5 text-xs，省约 16px）。
+      <!-- T-158：横幅压成一行（p-3 text-sm → px-2 py-1.5 text-xs，省约 16px）。
          它只需要说清「发送已禁用、去哪配」—— 发送按钮本身就 disabled 了，
          不需要用一整块的篇幅去重复这件事。
          注：配色仍是黄（T-152 的「黄/琥珀三义共用」尚未批准，此处不动颜色）。 -->
-    <div
-      v-if="!configured"
-      class="border-b border-yellow-300 bg-yellow-500/10 px-2 py-1.5 text-xs text-yellow-800 dark:text-yellow-300"
-    >
-      <button type="button" class="underline" @click="goSettings">
-        {{ t('workflow.agent.goSettings') }}
-      </button>
-    </div>
+      <div
+        v-if="!configured"
+        class="border-b border-yellow-300 bg-yellow-500/10 px-2 py-1.5 text-xs text-yellow-800 dark:text-yellow-300"
+      >
+        <button type="button" class="underline" @click="goSettings">
+          {{ t('workflow.agent.goSettings') }}
+        </button>
+      </div>
 
-    <!-- 确认门放在流内、输入框上方，而不是 absolute 浮层：
+      <!-- 确认门放在流内、输入框上方，而不是 absolute 浮层：
          浮层会盖住输入区与发送按钮，往回翻历史时还一直悬着（T-06）。
          这里是文档流，面板高度不够时压缩的是 transcript，输入框永远点得到。 -->
-    <agent-confirm-card
-      v-if="host.pendingConfirm"
-      class="mx-3 mb-3"
-      :confirm="host.pendingConfirm"
-      @answer="host.answerConfirm($event)"
-    />
+      <agent-confirm-card
+        v-if="host.pendingConfirm"
+        class="mx-3 mb-3"
+        :confirm="host.pendingConfirm"
+        @answer="host.answerConfirm($event)"
+      />
 
-    <!--
+      <!--
       T-166：@ 菜单（选目标页）。与 / 菜单同一立场 —— 文档流内、输入框上方，
       不盖正文（T-06），面板高度不够时压缩的是 transcript。键盘导航整套复用
       onDraftKeydown 已有的 ↑↓ / Enter / Esc。
@@ -124,193 +142,193 @@
       （见 §form），从「面板底部又一行控件」变成「输入区里的一个附件」——
       Dia 的 composer 内 @ 与 Gemini 的 composer 左下角 + 都是这个结构。
     -->
-    <div
-      v-if="atMenuOpen"
-      class="mx-2 mb-1 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
-      data-test="at-menu"
-    >
-      <ul class="scroll max-h-48 overflow-y-auto py-1">
-        <li v-for="(tab, i) in matchedTabs" :key="tab.id">
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm"
-            :class="i === atHighlight ? 'bg-box-transparent' : ''"
-            @click="pickAtTab(tab)"
-            @mousemove="atIndex = i"
-          >
-            <img
-              v-if="tab.favIconUrl"
-              :src="tab.favIconUrl"
-              class="h-4 w-4 shrink-0 rounded-sm"
-              :alt="t('workflow.agent.pickTab.faviconAlt')"
-            />
-            <v-remixicon
-              v-else
-              name="riEarthLine"
-              class="shrink-0 text-gray-400"
-            />
-            <span class="min-w-0 flex-1 truncate">{{
-              tab.title || tab.url
-            }}</span>
-            <span class="shrink-0 text-[10px] text-gray-400">
-              {{ t('workflow.agent.pickTab.window', { n: tab.windowId }) }}
-            </span>
-          </button>
-        </li>
-      </ul>
-    </div>
+      <div
+        v-if="atMenuOpen"
+        class="mx-2 mb-1 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        data-test="at-menu"
+      >
+        <ul class="scroll max-h-48 overflow-y-auto py-1">
+          <li v-for="(tab, i) in matchedTabs" :key="tab.id">
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm"
+              :class="i === atHighlight ? 'bg-box-transparent' : ''"
+              @click="pickAtTab(tab)"
+              @mousemove="atIndex = i"
+            >
+              <img
+                v-if="tab.favIconUrl"
+                :src="tab.favIconUrl"
+                class="h-4 w-4 shrink-0 rounded-sm"
+                :alt="t('workflow.agent.pickTab.faviconAlt')"
+              />
+              <v-remixicon
+                v-else
+                name="riEarthLine"
+                class="shrink-0 text-gray-400"
+              />
+              <span class="min-w-0 flex-1 truncate">{{
+                tab.title || tab.url
+              }}</span>
+              <span class="shrink-0 text-[10px] text-gray-400">
+                {{ t('workflow.agent.pickTab.window', { n: tab.windowId }) }}
+              </span>
+            </button>
+          </li>
+        </ul>
+      </div>
 
-    <!-- / 模板菜单（T-81a）：draft 以 / 开头时出现。放文档流里不盖正文，
+      <!-- / 模板菜单（T-81a）：draft 以 / 开头时出现。放文档流里不盖正文，
          与确认卡同一立场（T-06）。回车/点击选中后整框替换为模板正文。 -->
-    <div
-      v-if="slashMenuOpen"
-      class="mx-2 mb-1 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
-    >
-      <ul class="scroll max-h-48 overflow-y-auto py-1">
-        <li v-for="(c, i) in matchedCommands" :key="c.id">
-          <button
-            type="button"
-            class="flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-sm"
-            :class="i === highlightIndex ? 'bg-box-transparent' : ''"
-            @click="pickCommand(c)"
-            @mousemove="commandIndex = i"
-          >
-            <span class="shrink-0 font-mono">/{{ c.name }}</span>
-            <span class="min-w-0 truncate text-xs opacity-60">{{
-              c.description
-            }}</span>
-          </button>
-        </li>
-      </ul>
-    </div>
+      <div
+        v-if="slashMenuOpen"
+        class="mx-2 mb-1 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
+      >
+        <ul class="scroll max-h-48 overflow-y-auto py-1">
+          <li v-for="(c, i) in matchedCommands" :key="c.id">
+            <button
+              type="button"
+              class="flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-sm"
+              :class="i === highlightIndex ? 'bg-box-transparent' : ''"
+              @click="pickCommand(c)"
+              @mousemove="commandIndex = i"
+            >
+              <span class="shrink-0 font-mono">/{{ c.name }}</span>
+              <span class="min-w-0 truncate text-xs opacity-60">{{
+                c.description
+              }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
 
-    <!-- T-12：插话已入队的常驻确认。事件流里那条「已排队」是一次性的 notice，
+      <!-- T-12：插话已入队的常驻确认。事件流里那条「已排队」是一次性的 notice，
          面板滚动一屏就没了；这条钉在输入框正上方，队列排空前一直在。 -->
-    <p
-      v-if="host.busy && host.pendingInterjections > 0"
-      class="mx-2 mb-1 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
-      data-test="pending-interjections"
-    >
-      <v-remixicon name="riStackLine" class="shrink-0" />
-      {{
-        t('workflow.agent.queuedPending', {
-          n: host.pendingInterjections,
-        })
-      }}
-    </p>
+      <p
+        v-if="host.busy && host.pendingInterjections > 0"
+        class="mx-2 mb-1 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
+        data-test="pending-interjections"
+      >
+        <v-remixicon name="riStackLine" class="shrink-0" />
+        {{
+          t('workflow.agent.queuedPending', {
+            n: host.pendingInterjections,
+          })
+        }}
+      </p>
 
-    <form class="p-2 pt-0" @submit.prevent="send">
-      <!--
+      <form class="p-2 pt-0" @submit.prevent="send">
+        <!--
         T-166：composer 卡片。chip、输入框、底行共用一个边框 —— 目标页从「面板
         底部常驻的一行控件」变成「输入区里的一个附件」。省掉 chip 那一行约 30px，
         textarea 也从 256px 拿回全宽 288px（原结构里发送按钮与它并排抢宽）。
       -->
-      <div
-        class="rounded-lg border border-gray-200 px-2 py-1.5 dark:border-gray-700"
-      >
-        <agent-tab-picker
-          class="mb-1"
-          :target-tab="host.targetTab"
-          :state="host.targetState"
-          :pinned="host.targetPinned"
-          :list-tabs="host.listTabs"
-          @pick="host.pickTab($event)"
-          @unpin="host.unpinTab()"
-          @no-target="host.noTarget()"
-        />
+        <div
+          class="rounded-lg border border-gray-200 px-2 py-1.5 dark:border-gray-700"
+        >
+          <agent-tab-picker
+            class="mb-1"
+            :target-tab="host.targetTab"
+            :state="host.targetState"
+            :pinned="host.targetPinned"
+            :list-tabs="host.listTabs"
+            @pick="host.pickTab($event)"
+            @unpin="host.unpinTab()"
+            @no-target="host.noTarget()"
+          />
 
-        <ui-textarea
-          ref="draftEl"
-          v-model="draft"
-          autoresize
-          class="w-full min-h-[60px] max-h-[128px] overflow-y-auto scroll scroll-xs border-0 bg-transparent px-1 py-1"
-          :placeholder="t('workflow.agent.placeholder')"
-          @keydown="onDraftKeydown"
-        />
+          <ui-textarea
+            ref="draftEl"
+            v-model="draft"
+            autoresize
+            class="w-full min-h-[60px] max-h-[128px] overflow-y-auto scroll scroll-xs border-0 bg-transparent px-1 py-1"
+            :placeholder="t('workflow.agent.placeholder')"
+            @keydown="onDraftKeydown"
+          />
 
-        <!--
+          <!--
           底行（T-166）：@ 入口 + 水位 + 快捷键提示 + 发送。
 
           水位只在 >=80% 时出现（T-163），平时这一行只有 @ 与发送 —— 车道很空
           正是对的状态：没有坏事要汇报的时候，不该有东西占着视线。
         -->
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="shrink-0 rounded border border-gray-200 px-1.5 text-[11px] text-gray-500 hover:bg-box-transparent dark:border-gray-700 dark:text-gray-400"
-            :title="t('workflow.agent.pickTab.attach')"
-            :aria-label="t('workflow.agent.pickTab.attach')"
-            data-test="at-trigger"
-            @click="startAtMenu"
-          >
-            @
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="shrink-0 rounded border border-gray-200 px-1.5 text-[11px] text-gray-500 hover:bg-box-transparent dark:border-gray-700 dark:text-gray-400"
+              :title="t('workflow.agent.pickTab.attach')"
+              :aria-label="t('workflow.agent.pickTab.attach')"
+              data-test="at-trigger"
+              @click="startAtMenu"
+            >
+              @
+            </button>
 
-          <agent-dropdown
-            v-if="contextVisible"
-            v-model="contextOpen"
-            align="left"
-            side="top"
-            width="w-72"
-            class="shrink-0"
-          >
-            <template #trigger>
-              <agent-context-ring
-                :usage="host.usage"
-                :context-window="Number(host.config.contextWindow) || 0"
-              />
-            </template>
+            <agent-dropdown
+              v-if="contextVisible"
+              v-model="contextOpen"
+              align="left"
+              side="top"
+              width="w-72"
+              class="shrink-0"
+            >
+              <template #trigger>
+                <agent-context-ring
+                  :usage="host.usage"
+                  :context-window="Number(host.config.contextWindow) || 0"
+                />
+              </template>
 
-            <!-- 明细：水位 + 用量 + 「新建会话」。两行文案复用 contextHint /
+              <!-- 明细：水位 + 用量 + 「新建会话」。两行文案复用 contextHint /
                usage 两个既有键（圆环的 title 也是它们），不另造一套说法。 -->
-            <div class="p-2 text-xs text-gray-700 dark:text-gray-200">
-              <p>{{ contextHintLine }}</p>
-              <p class="mt-1">{{ usageLine }}</p>
-              <!-- T-163：完整那句「上下文将满，建议新建会话」从行内搬到这里 ——
+              <div class="p-2 text-xs text-gray-700 dark:text-gray-200">
+                <p>{{ contextHintLine }}</p>
+                <p class="mt-1">{{ usageLine }}</p>
+                <!-- T-163：完整那句「上下文将满，建议新建会话」从行内搬到这里 ——
                  行内改挂两个字的短词，整句会把底行挤换行。 -->
-              <p
-                v-if="contextCritical"
-                class="mt-1 text-red-500 dark:text-red-400"
-              >
-                {{ t('workflow.agent.contextCritical') }}
-              </p>
-              <hr class="my-2 border-gray-200 dark:border-gray-700" />
-              <button
-                type="button"
-                class="hoverable flex w-full items-center gap-1.5 rounded px-1 py-1 text-left disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="host.busy"
-                :title="
-                  host.busy ? t('workflow.agent.session.busyHint') : undefined
-                "
-                @click="startNewSession"
-              >
-                <v-remixicon name="riAddLine" class="shrink-0" />
-                <span class="min-w-0 flex-1">{{
-                  t('workflow.agent.session.new')
-                }}</span>
-              </button>
-              <p
-                class="px-1 pt-0.5 text-[11px] text-gray-500 dark:text-gray-400"
-              >
-                {{ t('workflow.agent.contextNewNote') }}
-              </p>
-            </div>
-          </agent-dropdown>
+                <p
+                  v-if="contextCritical"
+                  class="mt-1 text-red-500 dark:text-red-400"
+                >
+                  {{ t('workflow.agent.contextCritical') }}
+                </p>
+                <hr class="my-2 border-gray-200 dark:border-gray-700" />
+                <button
+                  type="button"
+                  class="hoverable flex w-full items-center gap-1.5 rounded px-1 py-1 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="host.busy"
+                  :title="
+                    host.busy ? t('workflow.agent.session.busyHint') : undefined
+                  "
+                  @click="startNewSession"
+                >
+                  <v-remixicon name="riAddLine" class="shrink-0" />
+                  <span class="min-w-0 flex-1">{{
+                    t('workflow.agent.session.new')
+                  }}</span>
+                </button>
+                <p
+                  class="px-1 pt-0.5 text-[11px] text-gray-500 dark:text-gray-400"
+                >
+                  {{ t('workflow.agent.contextNewNote') }}
+                </p>
+              </div>
+            </agent-dropdown>
 
-          <!-- T-166：这一句从「元信息行」搬到了底行。没配 API Key 时照样隐藏 ——
+            <!-- T-166：这一句从「元信息行」搬到了底行。没配 API Key 时照样隐藏 ——
              发送已禁用，教人按 Enter 没有意义（重设计里省下的那 22px 就是它）。 -->
-          <span
-            v-if="configured"
-            class="ml-auto min-w-0 truncate text-[11px] text-gray-400 dark:text-gray-500"
-          >
-            {{
-              host.busy
-                ? t('workflow.agent.interjectHint')
-                : t('workflow.agent.inputHint')
-            }}
-          </span>
+            <span
+              v-if="configured"
+              class="ml-auto min-w-0 truncate text-[11px] text-gray-400 dark:text-gray-500"
+            >
+              {{
+                host.busy
+                  ? t('workflow.agent.interjectHint')
+                  : t('workflow.agent.inputHint')
+              }}
+            </span>
 
-          <!--
+            <!--
           发送 / 停止共用同一个图标按钮位（T-159 + 重设计）：
           - 空闲：→ 发送（icon，40×40）
           - 忙碌：■ 停止生成；**插话改由 Enter 提交** —— 输入框忙碌时仍可打字，
@@ -319,32 +337,33 @@
           320px 侧栏里 textarea 只剩 144px（headless Chromium 实测），而忙碌恰恰是
           最要打字的时刻。合并成一个按钮位后，忙碌与空闲的 textarea 宽度一致。
         -->
-          <ui-button
-            v-if="host.busy"
-            variant="default"
-            icon
-            type="button"
-            :title="t('workflow.agent.stop')"
-            :aria-label="t('workflow.agent.stop')"
-            @click="host.abort()"
-          >
-            <v-remixicon name="riStopLine" class="shrink-0" />
-          </ui-button>
+            <ui-button
+              v-if="host.busy"
+              variant="default"
+              icon
+              type="button"
+              :title="t('workflow.agent.stop')"
+              :aria-label="t('workflow.agent.stop')"
+              @click="host.abort()"
+            >
+              <v-remixicon name="riStopLine" class="shrink-0" />
+            </ui-button>
 
-          <ui-button
-            v-else
-            variant="accent"
-            icon
-            type="submit"
-            :disabled="!draft.trim() || !configured"
-            :title="t('workflow.agent.send')"
-            :aria-label="t('workflow.agent.send')"
-          >
-            <v-remixicon name="riArrowRightLine" class="shrink-0" />
-          </ui-button>
+            <ui-button
+              v-else
+              variant="accent"
+              icon
+              type="submit"
+              :disabled="!draft.trim() || !configured"
+              :title="t('workflow.agent.send')"
+              :aria-label="t('workflow.agent.send')"
+            >
+              <v-remixicon name="riArrowRightLine" class="shrink-0" />
+            </ui-button>
+          </div>
         </div>
-      </div>
-    </form>
+      </form>
+    </template>
   </div>
 </template>
 
@@ -464,8 +483,14 @@ function startNewSession() {
   props.host.newSession();
 }
 
-// header 只剩这一个下拉（切换 / 用量 / 删除都在里面）
-const sessionMenuOpen = ref(false);
+/**
+ * 面板当前的视图（T-168）：'chat' 对话 / 'history' 会话历史。
+ *
+ * 窄宿主（320px 侧栏）下历史是**整块替换正文区**，不是弹一层浮层 —— 浮层适合
+ * 「临时选一个」，历史需要浏览 + 搜索 + 管理。宽宿主走左栏常驻，不切视图
+ * （见 layout）。
+ */
+const view = ref('chat');
 
 // 只有存在 apiKey 才算配好了。没配就发消息，用户只会收到一句「请先配置」，
 // 看起来像功能坏了 —— 所以入口要显眼，发送按钮直接禁用。
@@ -520,7 +545,8 @@ function goSettings() {
  */
 function onSelectSession(id) {
   if (!id) return;
-  sessionMenuOpen.value = false;
+  // 选中即回对话视图：用户要的是「打开这条会话」，历史列表只是通往它的路
+  view.value = 'chat';
   props.host.openSession(id);
 }
 
@@ -530,7 +556,7 @@ function onSelectSession(id) {
  */
 function onDeleteSession(id) {
   if (!id) return;
-  sessionMenuOpen.value = false;
+  // 删完留在历史里继续翻：删除是浏览过程中的动作，不是「选一条」的替代品
   props.host.deleteSession(id);
 }
 
