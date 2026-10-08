@@ -76,32 +76,9 @@
         />
       </component>
 
-      <div v-else-if="block.type === 'table'" class="my-2 overflow-x-auto">
-        <table class="w-full border-collapse text-left text-xs">
-          <thead>
-            <tr>
-              <th
-                v-for="(cell, j) in block.head"
-                :key="j"
-                class="border border-gray-200 bg-gray-50 px-2 py-1 font-medium dark:border-gray-700 dark:bg-gray-800"
-                :style="{ textAlign: block.align[j] || 'left' }"
-                v-html="cell"
-              />
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, j) in block.rows" :key="j">
-              <td
-                v-for="(cell, k) in row"
-                :key="k"
-                class="border border-gray-200 px-2 py-1 dark:border-gray-700"
-                :style="{ textAlign: block.align[k] || 'left' }"
-                v-html="cell"
-              />
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <!-- T-156：表格溢出提示（渐变遮罩 + 「可横滑」角标）收进 AgentTable，
+           这样多表格互不干扰、逻辑也好钉守卫 -->
+      <AgentTable v-else-if="block.type === 'table'" :block="block" />
     </template>
   </div>
 </template>
@@ -110,6 +87,7 @@
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { createMarkdownStream, markdownToBlocks } from '@/agent/markdown';
+import AgentTable from './AgentTable.vue';
 
 const props = defineProps({
   raw: { type: String, default: '' },

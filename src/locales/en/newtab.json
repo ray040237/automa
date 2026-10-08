@@ -786,6 +786,7 @@
       "copy": "Copy",
       "copied": "Copied",
       "copyAll": "Copy all",
+      "tableScrollHint": "Scroll horizontally for the full table",
       "contextShort": "Context {pct}%",
       "contextHint":
         "About {pct}% of the context window used ({win}). The window size is the suggested value from settings — BYOK providers do not expose the real limit, so this is an estimate.",

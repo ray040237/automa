@@ -786,6 +786,7 @@
       "copy": "复制",
       "copied": "已复制",
       "copyAll": "复制全文",
+      "tableScrollHint": "可横滑查看完整表格",
       "contextShort": "上下文 {pct}%",
       "contextHint":
         "上下文已用约 {pct}%（窗口 {win}）。窗口大小是设置页里的建议值，BYOK 下协议不暴露真实窗口，所以这是估算。",

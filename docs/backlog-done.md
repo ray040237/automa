@@ -3062,3 +3062,27 @@ build exit 0 且产物含 4 个新键、无 `interject` 残留。
 顺手把禁用条件提成 `canSend` computed：原先内联的 `!draft.trim() || !configured` 散在模板里，改动时容易漂移（比如漏掉 configured）。
 验收：`src/agent/affordance.test.js` 钉住 —— 包裹层存在且带 `:title`、ui-button 自身不得再挂 title、三种情形都有对应文案、`canSend` 的定义形式。变异 9（title 移回按钮）/ 10（canSend 只看草稿）均命中。
 状态：已完成（2026-10-09）
+
+
+### T-151 — 输入框 placeholder 在独立助手页误导（两宿主共用同一文案）
+
+类型：改进（复核后驳回）
+登记日期：2026-10-07
+现象（2026-10-07 读代码修正）：原登记称「独立页无 targetTab 概念，placeholder 共用「问问这个页面…」会误导」。读代码后**推翻**：`Agent.vue:22` 的 `enabledGroups` 含 `tab` 组（`['page','context','tab']`），两宿主都跑 `resolveTarget`（`agentHost.js:466`），独立页同样有 targetTab（默认解析当前窗口页）。故「这个页面」在独立页也成立，原「无页可读导致误导」前提证据不足。
+结论：驳回。这不是缺陷 —— 原担心的「误导」不成立；仅剩的弱点是独立页文案可更泛，属可选软优化，非必要。若日后要做，需 host 暴露标志位区分两宿主（composable 层注入 `isStandalone`），改动面大于收益，故本次不动。
+为什么拖了这么久：登记时是「推断，未实测」，没有读 `Agent.vue` 的 enabledGroups 去验证前提。读代码后前提不成立，但因为没有复核流程，条目一直挂在待审核区。
+状态：已驳回（2026-10-09）
+
+
+### T-156 — 窄侧栏 markdown 表格溢出时没有「可横滑」提示
+
+类型：改进
+登记日期：2026-10-07
+现象：`AgentMarkdown.vue` 的表格容器是 `overflow-x-auto`，但编辑器侧栏只有 320px，表格常横向溢出，界面上没有任何「可以横滑」的视觉提示，用户以为内容被截断、去翻历史找「完整版」。
+结论：抽出 `AgentTable.vue` 独立组件负责表格渲染与溢出提示：
+- 仅在 `scrollWidth > clientWidth`（确实藏住了内容）时，于右缘显示渐变遮罩（`bg-gradient-to-l from-gray-200/80`，深色 `from-gray-700/80`）+「可横滑」角标（`tableScrollHint`）；
+- 滚到最右列后遮罩 `opacity-0` 渐隐、角标 `v-if="overflowing && !atEnd"` 消失，不压末列；
+- 两个提示元素都 `pointer-events-none`，不挡横向拖拽；
+- `onMounted` 测量 + 窗口 resize 监听 + `watch(block)` 流式重测，覆盖侧栏宽度变化与增量渲染。
+验收：新增 `src/agent/scrollHint.test.js`，钉住 —— 表格渲染已委托给 AgentTable、提示以 `overflowing` 为总开关且末列后渐隐、两语 `tableScrollHint` 齐备、渐变类真产出到构建 CSS。变异 4（提示常驻不条件化）/ 8（角标不看 atEnd）均命中。`npm test` 731/0 fail，`npm run lint` 0 error，`check:i18n` passed，build 49 产物含首用渐变组合。
+状态：已完成（2026-10-09）
