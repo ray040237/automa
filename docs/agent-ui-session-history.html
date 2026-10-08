@@ -700,9 +700,18 @@
             </div>
           </div>
           <div class="px">
-            一屏可见约 <b>6 条</b>（540 − header 34 − 搜索 40 − 3 个分组标题 66，
-            每行 44px）。composer 让出约 <b>130px</b> 给列表 ——
-            这是视图切换的主要收益：从「60vh 浮层里的 12 条」变成「整个正文区的可滚列表」。
+            一屏可见约 <b>6 条</b>（540 − header 34 − 搜索 40 − 3 个分组标题 69
+            − 底部模型名 33 = 364px 可用，每行 <b>54px</b>）。composer
+            让出约 <b>162px</b> 给列表 —— 这是视图切换的主要收益：
+            从「60vh 浮层里的 12 条」变成「整个正文区的可滚列表」。
+            <br /><br />
+            <b>54px 这个数是算出来的，不是估的</b>：<code>py-1.5</code>(12) +
+            标题行 20 + <code>gap-0.5</code>(2) + 副标题行 20。注意
+            <code>text-[13px]</code> / <code>text-[10.5px]</code> 只改
+            <code>font-size</code>，<strong>不写 <code>line-height</code>
+            </strong>，两行都继承面板 base 的 <code>text-sm</code> →
+            <code>line-height: 20px</code>。我起初按 1.5 倍算成 44px，
+            少算了 10px —— <b>自定义字号时最容易漏的就是行高</b>。
           </div>
         </div>
 
@@ -877,8 +886,12 @@
           </div>
           <div class="px">
             时间独占一行，永远看得见；<code>messageCount</code> 终于用上了
-            （它一直在索引里）。行高 30 → 44px，一条贵 14px，但一屏仍能看到 6 条。
-            删除键 <code>hover / focus-within</code> 才出现 ——
+            （它一直在索引里）。行高 30 → <b>54px</b>，一条贵 24px，
+            但 540px 的正文区仍能看到 6 条（拆账见上）。
+            <strong>行高比预期高的原因</strong>：<code>text-[13px]</code> 与
+            <code>text-[10.5px]</code> 只声明了字号，两行都继承 base 的 20px 行高 ——
+            想压到 44px 得显式写 <code>leading-tight</code>，代价是两行挤在一起，
+            <b>没做</b>。删除键 <code>hover / focus-within</code> 才出现 ——
             <b>键盘用户靠 focus-within 一样够得到</b>，触屏另说（见第 5 节风险）。
           </div>
         </div>

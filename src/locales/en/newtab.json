@@ -778,7 +778,7 @@
         "staleDrift": "Target page navigated away",
       "reselect": "Re-select",
       "unpin": "Unpin — back to auto",
-      "attach": "@ Pick a page",
+      "attach": "Pick a target page",
       "faviconAlt": "Site icon"
       },
       "copy": "Copy",

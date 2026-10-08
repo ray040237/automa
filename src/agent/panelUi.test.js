@@ -6,7 +6,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -1568,5 +1568,143 @@ test('T-53：fold.js 不许碰 Vue 与浏览器全局（它得能在 node 里单
   assert.ok(
     foldSrc.includes("from './events'"),
     '事件种类与工具状态要从 events.js 引，别复制一份常量（复制就会各说各话）'
+  );
+});
+
+// —— T-171：Tailwind 静默覆盖 ——
+//
+// 现象：AgentPanel 给 <ui-textarea> 写了 px-1 py-1 bg-transparent 想把输入框
+// 「贴到卡片边上、底色与卡片一致」，但这三项全部无效 —— UiTextarea 根节点自带
+// px-4 py-2 bg-input，而 Tailwind 产出的 CSS 里：
+//   .bg-transparent(96687) < .bg-input(110753)
+//   .px-1(98187) < .px-4(98408)
+//   .py-1(98577) < .py-2(98802)
+// 同优先级（同为单类选择器）下后出现者赢，于是调用方的值被组件自身的值吃掉。
+//
+// 为什么值得单独立一条守卫：这类失效**没有任何运行时信号** —— 不报错、控制台干净、
+// 单测全绿，只有量像素或者盯 CSS 字节偏移才发现。而且它会骗过设计评审：
+// 读代码时 `px-1` 就在那里，看上去是生效的。
+//
+// 判据不写死偏移量，而是现读构建 CSS，谁排在后面谁赢；构造出来的偏移量若与真实
+// CSS 矛盾（比如有人手工调整了 tailwind 输出顺序），本守卫会先红给你看。
+const cssPath = join(ROOT, 'build/newtab.css');
+const cssExists = existsSync(cssPath);
+const cssText = cssExists ? readFileSync(cssPath, 'utf8') : '';
+
+test('T-171：覆盖 UiTextarea 的工具类必须加 !，否则被组件自身的类静默吃掉', (t) => {
+  if (!cssExists) {
+    // 没构建过就没有字节偏移可读，跳过而不是假绿 —— 假绿比红更坏。
+    t.skip('build/newtab.css 不存在，先跑一次 npm run build');
+    return;
+  }
+
+  const panelSrc = read('src/components/newtab/workflow/agent/AgentPanel.vue');
+  const taBlock = panelSrc.match(/<ui-textarea[\s\S]*?\/>/);
+  assert.ok(
+    taBlock,
+    '面板里应该还有 <ui-textarea>，找不到说明结构变了，本守卫要重写'
+  );
+  const taClass = taBlock[0].match(/class="([^"]*)"/);
+  assert.ok(taClass, '<ui-textarea> 上得有 class，工具类覆盖都写在这里');
+  const cls = taClass[1].split(/\s+/).filter(Boolean);
+
+  // 「组件根节点自带、面板必须显式盖掉」的清单。写成
+  // [被盖掉的属性, 面板想给自己的值] —— 关键不是值，是面板那一侧必须带 !。
+  // ui-textarea / ui-input 在整份 CSS 里没有任何规则（死类），不在清单里。
+  //
+  // base 那一项不是只用来拼错误消息的：下面会拿它去核对 UiTextarea 的**源码**。
+  // 这个核对是必要的 —— 守卫读的是上一次构建的 CSS 快照，而源码改了没重新构建时，
+  // 快照与源码会脱节；没有这道核对，一次「把 px-4 改成 px-3」的重构能悄悄
+  // 让 MUST_OVERRIDE 变成一张过期的清单，从此再没人发现覆盖失效。
+  const MUST_OVERRIDE = [
+    ['px-4', '!px-1'],
+    ['py-2', '!py-1'],
+    ['bg-input', '!bg-transparent'],
+  ];
+
+  const offset = (name) => {
+    // Tailwind 里 `.px-1\.5` 这种带点的类名要转义后再找；找不到返回 -1。
+    const esc = name.replace(/[.[\]()%#]/g, (ch) => '\\' + ch);
+    return cssText.indexOf('.' + esc + ' {');
+  };
+
+  // 清单 ↔ 源码 双向核对（只看根元素的 class，不看注释里提到的字面量）。
+  const taRoot = stripComments(read('src/components/ui/UiTextarea.vue')).match(
+    /<textarea[\s\S]*?class="([^"]*)"/
+  );
+  assert.ok(taRoot, 'UiTextarea 的根元素上得有 class');
+  const baseCls = taRoot[1].split(/\s+/).filter(Boolean);
+  for (const [base] of MUST_OVERRIDE) {
+    assert.ok(
+      baseCls.includes(base),
+      `MUST_OVERRIDE 里写着 UiTextarea 自带 ${base}，但它的根 class ` +
+        `[${baseCls.join(' ')}] 里没有这个类。要么组件改了（把清单里这一项` +
+        '连同面板上对应的 ' +
+        '! 前缀一起调整），要么清单已过期'
+    );
+  }
+
+  for (const [base, want] of MUST_OVERRIDE) {
+    assert.ok(
+      cls.includes(want),
+      `面板的 <ui-textarea> 上必须写 ${want} 来盖掉 UiTextarea 自带的 ${base}。` +
+        `（CSS 里 .${base} 在偏移 ${offset(
+          base
+        )}，排在同名「想盖掉它」的那一类之后，` +
+        '同优先级下后来者赢 —— 不加 ! 的话面板这条形同没写。' +
+        '如果确实不再需要覆盖，请把本行从 MUST_OVERRIDE 里删掉，别留着假装覆盖了）'
+    );
+    assert.ok(
+      !cls.includes(base),
+      `面板的 <ui-textarea> 上出现了不带 ! 的 ${base}，它赢不了组件自身的同名类` +
+        `（偏移 ${offset(base)}），是一条哑类 —— 删掉它，或改成 !${base}`
+    );
+  }
+
+  // 通则：面板在这张 textarea 上的 padding / background 覆盖必须全部带 !。
+  // 以后有人再加一条 `px-0` 想微调，这条会立刻拦住（它和 !px-1 一样是被吃的命）。
+  const risky = cls.filter(
+    (c) =>
+      !c.startsWith('!') &&
+      /^(px|py|p|pl|pr|pt|pb|bg)-/.test(c) &&
+      // 这些属性 UiTextarea 根节点没带，同名不构成竞争，不该被这条误伤。
+      !['p-0'].includes(c)
+  );
+  assert.deepEqual(
+    risky,
+    [],
+    '这些 padding/bg 类不带 !，在 UiTextarea 上随时会被组件自身的同名类吃掉：' +
+      risky.join(' ')
+  );
+});
+
+test('T-171：这个「后来者赢」的规律本身没变（守卫的前提不能悄悄失效）', (t) => {
+  if (!cssExists) {
+    t.skip('build/newtab.css 不存在，先跑一次 npm run build');
+    return;
+  }
+  const at = (name) => {
+    const esc = name.replace(/[.[\]()%#]/g, (ch) => '\\' + ch);
+    return cssText.indexOf('.' + esc + ' {');
+  };
+  // 断言的是 tailwind 的排序规律本身：数值越大 = 刻度越大 = 排得越靠后。
+  // 哪天升级 tailwind 改了排序（例如改成按使用顺序输出），本条会红，
+  // 提醒重新审视每一个覆盖处到底还成不成立。
+  assert.ok(
+    at('px-4') > at('px-1') &&
+      at('py-2') > at('py-1') &&
+      at('bg-input') > at('bg-transparent'),
+    'CSS 里这些类的先后顺序变了（「后来者赢」的推论要重新验证）：px-4=' +
+      at('px-4') +
+      ' px-1=' +
+      at('px-1') +
+      ' py-2=' +
+      at('py-2') +
+      ' py-1=' +
+      at('py-1') +
+      ' bg-input=' +
+      at('bg-input') +
+      ' bg-transparent=' +
+      at('bg-transparent')
   );
 });

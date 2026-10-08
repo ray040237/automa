@@ -741,8 +741,8 @@
             </div>
           </div>
           <div class="px">
-            输入区总高 <b>132px</b>。textarea 只有 <b>256px</b>（304 − 按钮 40 −
-            gap 8），而 chip 那行 <b>36px</b> 是面板里除正文外最贵的不动产 ——
+            输入区总高 <b>194px</b>。textarea 只有 <b>256px</b>（304 − 按钮 40 −
+            gap 8），而 chip 那行 <b>32px</b> 是面板里除正文外最贵的不动产 ——
             它 90% 的时间只是在「显示当前值」。
           </div>
         </div>
@@ -805,8 +805,9 @@
             </div>
           </div>
           <div class="px">
-            输入区总高 <b>130px</b>（含卡片 padding），textarea 满宽
-            <b>288px</b> —— 比现状宽 <b>+32px</b>、矮 2px。chip 与输入框共用一个
+            输入区总高 <b>162px</b>（含卡片 padding），textarea 满宽
+            <b>288px</b> —— 比改前宽 <b>+32px</b>、矮 <b>32px</b>（省下的正是
+            chip 那行，见 §5 的拆账）。chip 与输入框共用一个
             边框，读起来是「我带着这一页在问」，而不是「面板上有两个控件」。
           </div>
         </div>
@@ -1390,21 +1391,27 @@
       <table class="spec">
         <tr>
           <th style="width: 170px">项</th>
-          <th style="width: 90px">现状</th>
-          <th style="width: 90px">建议后</th>
+          <th style="width: 96px">改前</th>
+          <th style="width: 96px">改后</th>
           <th>说明</th>
         </tr>
         <tr>
           <td>输入区总高</td>
-          <td>132px</td>
-          <td>130px</td>
-          <td>chip 从独立一行并入卡片；底行由 32px 的按钮撑着</td>
+          <td>194px</td>
+          <td>162px</td>
+          <td>
+            省下的 32px 就是 chip 那一行。改后的 162 是<strong>逐段从源码算出来的</strong>
+            （下面有拆账），不是设计稿拍脑袋的数。
+          </td>
         </tr>
         <tr>
           <td>textarea 宽度</td>
           <td>256px</td>
           <td>288px</td>
-          <td>+32px。发送键移到底行，不再并排抢宽</td>
+          <td>
+            +32px。发送键移到底行，不再并排抢宽。
+            <strong>前提</strong>：<code>!px-1</code> 真生效了 —— 见下方 T-171。
+          </td>
         </tr>
         <tr>
           <td>告急态元信息行</td>
@@ -1425,6 +1432,54 @@
           <td>底行三个元素都 shrink-0 + spacer，hint 用 truncate 兜底</td>
         </tr>
       </table>
+
+      <h3>162px 是怎么算出来的</h3>
+      <p class="tight">
+        这一节是为了让任何人不用重新量一遍就能核对。每一段都标了它在哪个文件里：
+      </p>
+      <table class="spec">
+        <tr>
+          <th style="width: 60px">高度</th>
+          <th style="width: 250px">哪一段</th>
+          <th>出处</th>
+        </tr>
+        <tr><td>8px</td><td>外层 form 的 <code>pb-2</code></td><td><code>&lt;form class="p-2 pt-0"&gt;</code></td></tr>
+        <tr><td>2px</td><td>卡片 border 上下各 1px</td><td><code>rounded-lg border</code></td></tr>
+        <tr><td>12px</td><td>卡片 <code>py-1.5</code> 上下</td><td><code>px-2 py-1.5</code></td></tr>
+        <tr><td>28px</td><td>chip 行（<code>py-1.5</code>×2 + 内容 16px）</td><td><code>AgentTabPicker</code> 的 trigger button</td></tr>
+        <tr><td>4px</td><td>chip 的 <code>mb-1</code></td><td><code>&lt;agent-tab-picker class="mb-1"&gt;</code></td></tr>
+        <tr><td>60px</td><td>textarea <code>min-h</code></td><td><code>min-h-[60px]</code>，autoresize 再高也不会低于它</td></tr>
+        <tr><td>8px</td><td>textarea <code>py-1</code> 上下</td><td><code>!py-1</code>（加了 <code>!</code> 才真生效）</td></tr>
+        <tr><td>40px</td><td>底行（@ 按钮矮，取高的那个）</td><td><code>UiButton</code> 根节点自带 <code>h-10</code></td></tr>
+        <tr><td><strong>162px</strong></td><td colspan="2">与 headless Chromium 实测 160px 差 2px，来自 favicon 尺寸取整 —— 以源码账为准</td></tr>
+      </table>
+
+      <div class="pitfall">
+        <strong>T-171：这三个覆盖类本来全是哑的 —— 已修，且已加守卫。</strong>
+        <p>
+          <code>AgentPanel</code> 给 <code>&lt;ui-textarea&gt;</code> 写了
+          <code>px-1 py-1 bg-transparent</code>，想把它「贴到卡片边上、底色与卡片一致」。
+          <strong>三项全部无效</strong>：<code>UiTextarea</code> 根节点自带
+          <code>px-4 py-2 bg-input</code>，而 Tailwind 产出的 CSS 里
+          <code>.bg-input</code> 排在 <code>.bg-transparent</code> <em>之后</em>、
+          <code>.px-4</code> 排在 <code>.px-1</code> <em>之后</em> ——
+          同优先级下后来者赢，调用方那条被组件自身那条吃掉。
+        </p>
+        <p>
+          后果：输入框左右各多 12px、上下各多 4px（量得出、看不出），
+          以及输入区里多一块比卡片略深的矩形（黑 5% / 白 5%），
+          把「一条边框包住整个输入区」拆成了「边框里又有个框」。
+        </p>
+        <p>
+          修法是加 <code>!</code>（<code>!px-1 !py-1 !bg-transparent</code>，
+          项目里 <code>SettingsEvents.vue</code> 有先例）。
+          <strong>为什么值得单独立一条守卫</strong>：这类失效没有任何运行时信号 ——
+          不报错、控制台干净、单测全绿，只有量像素或盯 CSS 字节偏移才发现；
+          而且读代码时那个类就在那里，看上去是生效的。
+          守卫见 <code>src/agent/cssSpecificity.test.js</code>，它扫全仓，
+          判据是「两条类的 CSS 属性集有交集且调用方那条排得更靠后」。
+        </p>
+      </div>
 
       <h3>要动的文件</h3>
       <ul class="tight">

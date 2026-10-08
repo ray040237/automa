@@ -285,11 +285,21 @@
               @no-target="host.noTarget()"
             />
 
+            <!--
+              `!px-1 !py-1 !bg-transparent` 的感叹号不是随手写的：UiTextarea 根节点自带
+              `px-4 py-2 bg-input`，而 Tailwind 生成的 CSS 按「工具组 + 刻度」排序 ——
+              `.bg-input`(110753) 永远排在 `.bg-transparent`(96687) 之后，`.px-4` 永远排在
+              `.px-1` 之后，同优先级下后来者赢。不加 `!` 的话这三项会被静默吃掉：
+              左右各多 12px、上下各多 4px（量得出、看不出），以及输入区里多一块
+              比卡片略深的矩形（黑 5% / 白 5%），把「一条边框包住整个输入区」的设计
+              拆成「边框里又有个框」。项目里已有 `!px-3` / `!py-2` 的用法
+              （SettingsEvents.vue / EditorDebugging.vue），沿用同一手法。
+            -->
             <ui-textarea
               ref="draftEl"
               v-model="draft"
               autoresize
-              class="w-full min-h-[60px] max-h-[128px] overflow-y-auto scroll scroll-xs border-0 bg-transparent px-1 py-1"
+              class="w-full min-h-[60px] max-h-[128px] overflow-y-auto scroll scroll-xs border-0 !bg-transparent !px-1 !py-1"
               :placeholder="t('workflow.agent.placeholder')"
               @keydown="onDraftKeydown"
             />
