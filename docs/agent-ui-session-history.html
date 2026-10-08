@@ -1,0 +1,1185 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent 会话历史设计稿 · 从浮层到视图</title>
+    <style>
+      :root {
+        --bg: #f4f5f7;
+        --surface: #ffffff;
+        --panel: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --faint: #9ca3af;
+        --border: #e5e7eb;
+        --border-soft: #f3f4f6;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+        --box: rgba(0, 0, 0, 0.04);
+        --box-hover: rgba(0, 0, 0, 0.07);
+        --code-bg: #f3f4f6;
+        --red-bg: rgba(239, 68, 68, 0.1);
+        --red-fg: #b91c1c;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.05);
+        --mark: #fef08a;
+        --mark-fg: #854d0e;
+      }
+      body.dark {
+        --bg: #17181c;
+        --surface: #1f2126;
+        --panel: #1f2126;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --faint: #6b7280;
+        --border: #374151;
+        --border-soft: #2b2f36;
+        --accent: #f4f4f5;
+        --accent-fg: #18181b;
+        --box: rgba(255, 255, 255, 0.06);
+        --box-hover: rgba(255, 255, 255, 0.1);
+        --code-bg: #2b2f36;
+        --red-fg: #f87171;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --mark: #713f12;
+        --mark-fg: #fde68a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 13px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", Roboto,
+          Helvetica, Arial, sans-serif;
+      }
+      .wrap {
+        max-width: 1480px;
+        margin: 0 auto;
+        padding: 28px 20px 80px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 34px 0 12px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--border);
+      }
+      h3 {
+        font-size: 13px;
+        margin: 18px 0 8px;
+      }
+      .lede {
+        color: var(--muted);
+        margin: 0 0 4px;
+        max-width: 960px;
+      }
+      code {
+        background: var(--code-bg);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin: 14px 0 6px;
+        flex-wrap: wrap;
+      }
+      .toolbar button {
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .toolbar button:hover {
+        background: var(--box);
+      }
+      .toolbar label {
+        font-size: 12px;
+        color: var(--muted);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        align-items: flex-start;
+      }
+      .case {
+        width: 320px;
+      }
+      .case.wide {
+        width: 720px;
+      }
+      .cap {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .cap b {
+        color: var(--text);
+        font-size: 12.5px;
+      }
+
+      .panel {
+        width: 320px;
+        height: 540px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .panel.wide {
+        width: 720px;
+      }
+      .p-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        border-bottom: 1px solid var(--border-soft);
+        flex: 0 0 auto;
+      }
+      .p-body {
+        flex: 1;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      .p-foot {
+        border-top: 1px solid var(--border-soft);
+        padding: 8px;
+        flex: 0 0 auto;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+        border: 1px solid transparent;
+        background: var(--box);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .btn:hover {
+        background: var(--box-hover);
+      }
+      .btn.ghost {
+        background: transparent;
+      }
+      .btn.ghost:hover {
+        background: var(--box);
+      }
+      .btn.solid {
+        background: var(--accent);
+        color: var(--accent-fg);
+      }
+      .btn.icon {
+        padding: 0;
+        width: 28px;
+        height: 28px;
+        justify-content: center;
+        flex: 0 0 28px;
+      }
+      .truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .mini {
+        font-size: 11px;
+        color: var(--faint);
+      }
+      .spacer {
+        flex: 1 1 auto;
+      }
+
+      /* ---- 历史视图 ---- */
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 8px;
+        padding: 0 8px;
+        height: 32px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+      }
+      .search input {
+        border: 0;
+        outline: none;
+        background: transparent;
+        font: inherit;
+        font-size: 12.5px;
+        color: var(--text);
+        width: 100%;
+        min-width: 0;
+      }
+      .group {
+        padding: 8px 12px 2px;
+        font-size: 10.5px;
+        color: var(--faint);
+        letter-spacing: 0.03em;
+      }
+      .srow {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 0 6px;
+        padding: 7px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+        position: relative;
+      }
+      .srow:hover {
+        background: var(--box);
+      }
+      .srow.cur {
+        background: var(--box-hover);
+      }
+      .srow .main {
+        min-width: 0;
+        flex: 1;
+      }
+      .srow .t {
+        font-size: 12.5px;
+        line-height: 1.35;
+      }
+      .srow .s {
+        font-size: 10.5px;
+        color: var(--faint);
+        margin-top: 1px;
+      }
+      .srow .del {
+        flex: 0 0 22px;
+        width: 22px;
+        height: 22px;
+        border: 0;
+        background: transparent;
+        border-radius: 4px;
+        color: var(--faint);
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+        opacity: 0;
+        margin-top: 1px;
+      }
+      .srow:hover .del,
+      .srow:focus-within .del {
+        opacity: 1;
+      }
+      .srow .del:hover {
+        background: var(--red-bg);
+        color: var(--red-fg);
+      }
+      .srow .chk {
+        flex: 0 0 14px;
+        font-size: 11px;
+        margin-top: 2px;
+        color: var(--accent);
+      }
+      .empty {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: var(--faint);
+        font-size: 12.5px;
+        padding: 20px;
+      }
+
+      /* 确认弹窗（覆盖面板底部） */
+      .confirm {
+        position: absolute;
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        padding: 12px;
+        font-size: 12.5px;
+      }
+      .confirm .q {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .confirm .d {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+      .confirm .acts {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+      .panel-host {
+        position: relative;
+      }
+
+      /* 宽宿主分栏 */
+      .split {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+      }
+      .split .left {
+        flex: 0 0 240px;
+        border-right: 1px solid var(--border-soft);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .split .right {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .transcript {
+        flex: 1;
+        overflow: auto;
+        padding: 10px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .msg .who {
+        font-size: 10px;
+        color: var(--faint);
+        margin-bottom: 2px;
+      }
+      .bubble {
+        background: var(--box);
+        border-radius: 8px;
+        padding: 7px 9px;
+        font-size: 12.5px;
+      }
+      .bubble.me {
+        background: rgba(59, 130, 246, 0.15);
+      }
+      .composer {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 8px;
+        background: var(--surface);
+      }
+      .c-chip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        padding: 3px 4px;
+        border-radius: 5px;
+        background: var(--box);
+        font-size: 12px;
+      }
+      .fav {
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+        flex: 0 0 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        font-weight: 700;
+        color: #fff;
+      }
+      .badge {
+        font-size: 10px;
+        padding: 0 4px;
+        border-radius: 3px;
+        color: var(--muted);
+        flex: 0 0 auto;
+      }
+      .c-ta {
+        width: 100%;
+        min-height: 54px;
+        border: 0;
+        outline: none;
+        resize: none;
+        padding: 6px 4px;
+        font: inherit;
+        font-size: 13px;
+        color: var(--text);
+        background: transparent;
+        display: block;
+      }
+      .c-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+      }
+      .c-at {
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 6px;
+        border-radius: 5px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted);
+        font-size: 11px;
+        flex: 0 0 auto;
+      }
+      .c-hint {
+        font-size: 11px;
+        color: var(--faint);
+        white-space: nowrap;
+      }
+      .btn.icon.send {
+        width: 32px;
+        height: 32px;
+        flex: 0 0 32px;
+      }
+
+      table.spec {
+        border-collapse: collapse;
+        font-size: 12px;
+        margin-top: 8px;
+      }
+      table.spec th,
+      table.spec td {
+        border: 1px solid var(--border);
+        padding: 5px 9px;
+        text-align: left;
+        vertical-align: top;
+      }
+      table.spec th {
+        background: var(--box);
+        font-weight: 600;
+      }
+      ul.tight {
+        margin: 6px 0;
+        padding-left: 20px;
+      }
+      ul.tight li {
+        margin: 3px 0;
+      }
+      .note {
+        border-left: 3px solid var(--border);
+        padding: 6px 10px;
+        color: var(--muted);
+        font-size: 12px;
+        margin: 10px 0;
+        background: var(--box);
+        border-radius: 0 6px 6px 0;
+      }
+      .note.warn {
+        border-left-color: var(--red-fg);
+      }
+      .note.good {
+        border-left-color: #16a34a;
+      }
+      .mark {
+        background: var(--mark);
+        color: var(--mark-fg);
+        padding: 0 2px;
+        border-radius: 2px;
+      }
+      .px {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 6px;
+        border-top: 1px dashed var(--border);
+        padding-top: 5px;
+      }
+      .px b {
+        color: var(--text);
+      }
+      .tag {
+        display: inline-block;
+        font-size: 10.5px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .tag.now {
+        background: var(--box);
+      }
+      .tag.new {
+        background: var(--accent);
+        color: var(--accent-fg);
+        border-color: var(--accent);
+      }
+      .cmp {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        align-items: flex-start;
+      }
+      .cmp > div {
+        width: 320px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Agent 会话历史设计稿 · 从「浮层里的一个列表」到「一个视图」</h1>
+      <p class="lede">
+        承接上一轮的判断：目标页是<b>状态指示器</b>（高频、可逆），会话历史是<b>历史导航</b>（低频、需要浏览与搜索、删除不可逆）——
+        两者共用 <code>AgentDropdown</code> 只是因为都被关在 320px 侧栏里，不是因为交互语义相同。
+        本稿只处理会话这一半。所有文案取自
+        <code>src/locales/zh/newtab.json → workflow.agent.session</code>，字段取自
+        <code>sessions.js</code> 的索引条目。
+      </p>
+
+      <div class="toolbar">
+        <button id="btn-theme">切换深色 / 浅色</button>
+        <button id="btn-search">演示：搜索「比价」</button>
+        <button id="btn-del">演示：删除确认</button>
+      </div>
+
+      <h2>0 · 先说一个推翻我上一轮建议的发现</h2>
+      <div class="note warn">
+        上一轮我说「历史迟早需要搜索」。读完存储层发现
+        <b>搜索能搜到的东西比我以为的少得多</b>：
+        会话索引条目只有
+        <code>{ id, workflowId, title, status, createdAt, lastAccessedAt, messageCount }</code>
+        ——<b>不含 events</b>（<code>indexEntryFromSession</code> 刻意不带，否则列表一次读就是全量历史）。
+        而 <code>title</code> 来自首条用户消息的前缀，被
+        <code>truncateTitle</code> 截到 <b>24 字符</b>（<code>title.js:9</code>）。
+        <br /><br />
+        所以：
+        <b>搜索只能匹配 24 字以内的标题前缀，搜不到正文。</b>
+        这不是设计选择，是数据结构的约束。设计上必须如实呈现——搜索框的 placeholder
+        就写「搜索标题」，空结果时说明原因，不要假装它是全文搜索。
+      </div>
+      <div class="note">
+        这个约束反而把重心推到了别处：既然标题信息量低（24 字、还都是「帮我把这个页面的…」
+        这种开头），找一条历史真正靠的是<b>时间</b>和<b>规模</b>。所以本稿的主角是
+        <b>时间分组 + 消息数</b>，搜索只是配角。
+      </div>
+
+      <h2>1 · 三条改动</h2>
+      <table class="spec">
+        <tr>
+          <th style="width: 30px">#</th>
+          <th style="width: 140px">改什么</th>
+          <th>从 → 到</th>
+          <th style="width: 250px">理由</th>
+        </tr>
+        <tr>
+          <td>①</td>
+          <td>浮层 → 视图</td>
+          <td>
+            <code>max-h-[60vh]</code> 的浮层列表<br />
+            → 点 header 会话名，<b>正文区整块替换成历史视图</b>（搜索 + 时间分组 +
+            每行可删），composer 隐藏，header 变「历史 · 返回 · 新建」
+          </td>
+          <td>
+            浮层适合「临时选一个」，不适合「浏览 + 搜索 + 管理」。历史是后者。
+            320px 侧栏里「整块替换」本来就是很自然的交互（项目里 editState 已经在这么做）
+          </td>
+        </tr>
+        <tr>
+          <td>②</td>
+          <td>列表行补信息</td>
+          <td>
+            单行「标题 · 08-09 14:32」（<code>sessionOptionLabel</code>）<br />
+            → 两行：标题 + <b>相对时间 · N 条消息</b>；当前会话打 ✓；
+            删除键改成 <b>hover / 键盘 focus 才出现</b>
+          </td>
+          <td>
+            索引里本来就存了 <code>messageCount</code>，现在完全没用上。
+            24 字标题区分度低，「12 条消息 / 昨天」比「08-09」更能认出是哪次
+          </td>
+        </tr>
+        <tr>
+          <td>③</td>
+          <td>宽宿主分栏</td>
+          <td>
+            独立助手页也是浮层<br />
+            → 左 <b>240px 常驻列表</b> + 右对话区；侧栏宿主退化成 ① 的视图
+          </td>
+          <td>
+            独立助手页是整页 <code>w-full</code>，有横向空间；侧栏只有 320px。
+            形态由 <code>host.layout</code> 决定，<b>不是窗口断点</b>
+          </td>
+        </tr>
+      </table>
+
+      <h2>2 · 320px 侧栏下的历史视图</h2>
+      <div class="grid">
+        <!-- A 默认 -->
+        <div class="case">
+          <div class="cap"><b>A · 历史视图（默认）</b></div>
+          <div class="panel">
+            <div class="p-head">
+              <button class="btn ghost icon">‹</button>
+              <span style="font-size: 12.5px; font-weight: 600">历史会话</span>
+              <span class="spacer"></span>
+              <button class="btn icon" title="新会话">＋</button>
+            </div>
+            <div class="p-body">
+              <div class="search">
+                <span class="mini">⌕</span>
+                <input placeholder="搜索标题" value="" />
+              </div>
+              <div class="group">今天</div>
+              <div class="srow cur">
+                <span class="chk">✓</span>
+                <div class="main">
+                  <div class="t truncate">商品列表 · 比价</div>
+                  <div class="s">14:32 · 12 条消息</div>
+                </div>
+                <button class="del">🗑</button>
+              </div>
+              <div class="srow">
+                <span class="chk"></span>
+                <div class="main">
+                  <div class="t truncate">把这个流程改成每天跑一…</div>
+                  <div class="s">09:15 · 8 条消息</div>
+                </div>
+                <button class="del">🗑</button>
+              </div>
+              <div class="group">昨天</div>
+              <div class="srow">
+                <span class="chk"></span>
+                <div class="main">
+                  <div class="t truncate">帮我看看这个报错是什么…</div>
+                  <div class="s">昨天 18:40 · 23 条消息</div>
+                </div>
+                <button class="del">🗑</button>
+              </div>
+              <div class="srow">
+                <span class="chk"></span>
+                <div class="main">
+                  <div class="t truncate" style="color: var(--faint)">
+                    未命名会话
+                  </div>
+                  <div class="s">昨天 11:02 · 2 条消息</div>
+                </div>
+                <button class="del">🗑</button>
+              </div>
+              <div class="group">更早</div>
+              <div class="srow">
+                <span class="chk"></span>
+                <div class="main">
+                  <div class="t truncate">订单详情页要抓的字段有…</div>
+                  <div class="s">10-06 · 31 条消息</div>
+                </div>
+                <button class="del">🗑</button>
+              </div>
+              <div class="srow">
+                <span class="chk"></span>
+                <div class="main">
+                  <div class="t truncate">为什么这个块跑不通</div>
+                  <div class="s">09-28 · 15 条消息</div>
+                </div>
+                <button class="del">🗑</button>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            一屏可见约 <b>6 条</b>（540 − header 34 − 搜索 40 − 3 个分组标题 66，
+            每行 44px）。composer 让出约 <b>130px</b> 给列表 ——
+            这是视图切换的主要收益：从「60vh 浮层里的 12 条」变成「整个正文区的可滚列表」。
+          </div>
+        </div>
+
+        <!-- B 搜索 -->
+        <div class="case">
+          <div class="cap"><b>B · 搜索（只能搜标题）</b></div>
+          <div class="panel">
+            <div class="p-head">
+              <button class="btn ghost icon">‹</button>
+              <span style="font-size: 12.5px; font-weight: 600">历史会话</span>
+              <span class="spacer"></span>
+              <button class="btn icon">＋</button>
+            </div>
+            <div class="p-body" id="search-body">
+              <div class="search">
+                <span class="mini">⌕</span>
+                <input placeholder="搜索标题" value="比价" id="search-input" />
+              </div>
+              <div class="group">1 条匹配</div>
+              <div class="srow cur">
+                <span class="chk">✓</span>
+                <div class="main">
+                  <div class="t truncate">商品列表 · <span class="mark">比价</span></div>
+                  <div class="s">14:32 · 12 条消息</div>
+                </div>
+                <button class="del">🗑</button>
+              </div>
+              <div class="mini" style="padding: 10px 12px">
+                只能按标题搜索 —— 标题取自你的第一句话（最多 24 字），
+                正文没有进索引。
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            <b>命中要标出来</b>（<span class="mark">底色</span>），否则用户不知道为什么这条被留下了。
+            空结果时那句说明常驻在列表区，不是藏在 tooltip 里 —— 用户会以为搜索坏了。
+          </div>
+        </div>
+
+        <!-- C 删除确认 -->
+        <div class="case">
+          <div class="cap"><b>C · 删除（不用先切换）</b></div>
+          <div class="panel panel-host">
+            <div class="p-head">
+              <button class="btn ghost icon">‹</button>
+              <span style="font-size: 12.5px; font-weight: 600">历史会话</span>
+              <span class="spacer"></span>
+              <button class="btn icon">＋</button>
+            </div>
+            <div class="p-body">
+              <div class="search">
+                <span class="mini">⌕</span>
+                <input placeholder="搜索标题" />
+              </div>
+              <div class="group">昨天</div>
+              <div class="srow">
+                <span class="chk"></span>
+                <div class="main">
+                  <div class="t truncate">帮我看看这个报错是什么…</div>
+                  <div class="s">昨天 18:40 · 23 条消息</div>
+                </div>
+                <button class="del" style="opacity: 1">🗑</button>
+              </div>
+              <div class="srow">
+                <span class="chk"></span>
+                <div class="main">
+                  <div class="t truncate" style="color: var(--faint)">
+                    未命名会话
+                  </div>
+                  <div class="s">昨天 11:02 · 2 条消息</div>
+                </div>
+                <button class="del">🗑</button>
+              </div>
+            </div>
+            <div class="confirm" id="confirm-box" style="display: none">
+              <div class="q">删除这个会话？</div>
+              <div class="d">
+                将永久删除「帮我看看这个报错是什么…」及其中的全部对话，删除后无法恢复。
+              </div>
+              <div class="acts">
+                <button class="btn ghost">取消</button>
+                <button class="btn solid" style="background: var(--red-fg)">
+                  删除
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            沿用现有 <code>deleteConfirmTitle / deleteConfirmBody</code>（文案一个字不改）。
+            <b>每行自带删除</b>这个决定保留 —— 前人注释说得对：为了删一条旧会话
+            被迫先切过去，而切换会清空插话队列。
+          </div>
+        </div>
+
+        <!-- D 空态 -->
+        <div class="case">
+          <div class="cap"><b>D · 空态 / 忙碌态</b></div>
+          <div class="panel">
+            <div class="p-head">
+              <button class="btn ghost icon">‹</button>
+              <span style="font-size: 12.5px; font-weight: 600">历史会话</span>
+              <span class="spacer"></span>
+              <button class="btn icon">＋</button>
+            </div>
+            <div class="empty">还没有历史会话</div>
+          </div>
+          <div class="px">
+            空态复用 <code>session.empty</code>。
+            <b>忙碌态不禁用整个视图</b>：搜索和浏览照常，只把「选中」和「删除」
+            置灰 —— 现在是整个下拉 <code>disabled</code>，助手生成时用户连翻历史都不行，
+            只能干等。
+          </div>
+        </div>
+      </div>
+
+      <h2>3 · 列表行的信息密度</h2>
+      <div class="cmp">
+        <div>
+          <div class="cap"><span class="tag now">现状 · 单行</span></div>
+          <div class="panel" style="height: auto">
+            <div class="p-body" style="padding: 6px 0">
+              <div
+                class="srow"
+                style="align-items: center; margin: 0 6px 2px; background: var(--box-hover)"
+              >
+                <span class="mini">◷</span>
+                <span class="truncate" style="flex: 1; font-size: 12.5px"
+                  >商品列表 · 比价 · 10-09 14:32</span
+                >
+                <span style="font-size: 11px">✓</span>
+                <button class="del" style="opacity: 1; margin: 0">🗑</button>
+              </div>
+              <div class="srow" style="align-items: center; margin: 0 6px 2px">
+                <span class="mini">◷</span>
+                <span class="truncate" style="flex: 1; font-size: 12.5px"
+                  >把这个流程改成每天跑一… · 10-09 09:15</span
+                >
+                <button class="del" style="margin: 0">🗑</button>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            时间挤在标题后面，<b>先被 truncate 掉的就是它</b>（24 字标题 +
+            分隔符 + 时间，320px 下必然截断）。垃圾桶常驻：每行 28px ×
+            可见 12 行 = 336px 的常驻视觉噪音。
+          </div>
+        </div>
+        <div>
+          <div class="cap"><span class="tag new">建议 · 两行</span></div>
+          <div class="panel" style="height: auto">
+            <div class="p-body" style="padding: 6px 0">
+              <div
+                class="srow"
+                style="margin: 0 6px 2px; background: var(--box-hover)"
+              >
+                <span class="chk">✓</span>
+                <div class="main">
+                  <div class="t truncate">商品列表 · 比价</div>
+                  <div class="s">14:32 · 12 条消息</div>
+                </div>
+                <button class="del" style="opacity: 1">🗑</button>
+              </div>
+              <div class="srow" style="margin: 0 6px 2px">
+                <span class="chk"></span>
+                <div class="main">
+                  <div class="t truncate">把这个流程改成每天跑一…</div>
+                  <div class="s">09:15 · 8 条消息</div>
+                </div>
+                <button class="del">🗑</button>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            时间独占一行，永远看得见；<code>messageCount</code> 终于用上了
+            （它一直在索引里）。行高 30 → 44px，一条贵 14px，但一屏仍能看到 6 条。
+            删除键 <code>hover / focus-within</code> 才出现 ——
+            <b>键盘用户靠 focus-within 一样够得到</b>，触屏另说（见第 5 节风险）。
+          </div>
+        </div>
+      </div>
+
+      <h2>4 · 宽宿主（独立助手页）：左列表 + 右对话</h2>
+      <div class="grid">
+        <div class="case wide">
+          <div class="cap">
+            <b>E · 720px 分栏</b> 同一批组件，<code>host.layout === 'wide'</code>
+            时不走视图切换
+          </div>
+          <div class="panel wide" style="height: 460px">
+            <div class="split">
+              <div class="left">
+                <div class="search" style="margin: 8px">
+                  <span class="mini">⌕</span>
+                  <input placeholder="搜索标题" />
+                </div>
+                <div class="p-body" style="flex: 1; overflow: auto">
+                  <div class="group">今天</div>
+                  <div class="srow cur">
+                    <span class="chk">✓</span>
+                    <div class="main">
+                      <div class="t truncate">商品列表 · 比价</div>
+                      <div class="s">14:32 · 12 条消息</div>
+                    </div>
+                    <button class="del">🗑</button>
+                  </div>
+                  <div class="srow">
+                    <span class="chk"></span>
+                    <div class="main">
+                      <div class="t truncate">把这个流程改成每天跑一…</div>
+                      <div class="s">09:15 · 8 条消息</div>
+                    </div>
+                    <button class="del">🗑</button>
+                  </div>
+                  <div class="group">昨天</div>
+                  <div class="srow">
+                    <span class="chk"></span>
+                    <div class="main">
+                      <div class="t truncate">帮我看看这个报错是什么…</div>
+                      <div class="s">昨天 18:40 · 23 条消息</div>
+                    </div>
+                    <button class="del">🗑</button>
+                  </div>
+                  <div class="group">更早</div>
+                  <div class="srow">
+                    <span class="chk"></span>
+                    <div class="main">
+                      <div class="t truncate">订单详情页要抓的字段有…</div>
+                      <div class="s">10-06 · 31 条消息</div>
+                    </div>
+                    <button class="del">🗑</button>
+                  </div>
+                </div>
+              </div>
+              <div class="right">
+                <div class="p-head">
+                  <button
+                    class="btn ghost"
+                    style="flex: 1; justify-content: flex-start"
+                  >
+                    <span class="mini">◷</span>
+                    <span class="truncate">商品列表 · 比价</span>
+                  </button>
+                  <button class="btn icon">＋</button>
+                </div>
+                <div class="transcript">
+                  <div class="msg">
+                    <div class="who">你</div>
+                    <div class="bubble me">把这一页前 5 条商品的标题和价格列出来</div>
+                  </div>
+                  <div class="msg">
+                    <div class="who">助手</div>
+                    <div class="bubble">
+                      前 5 条：<br />1. xxx ¥129<br />2. xxx ¥89<br />3. xxx
+                      ¥259
+                    </div>
+                  </div>
+                </div>
+                <div class="p-foot">
+                  <div class="composer">
+                    <div class="c-chip">
+                      <span class="fav" style="background: #ff5000">淘</span>
+                      <span class="truncate" style="flex: 1"
+                        >商品列表 - 淘宝网</span
+                      >
+                      <span class="badge">自动</span>
+                    </div>
+                    <textarea class="c-ta" placeholder="问问这个页面…"></textarea>
+                    <div class="c-bar">
+                      <button class="c-at">@ 选页</button>
+                      <span class="spacer"></span>
+                      <span class="c-hint">Enter 发送 · Shift+Enter 换行</span>
+                      <button class="btn solid icon send">→</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            左栏 240px 常驻，<b>不用点开、不用切视图</b> —— 这是宽宿主该有的样子
+            （聊类产品都这样）。侧栏宿主 320px 放不下分栏（对话区只剩 80px），
+            所以退化成 ① 的视图切换。<b>判断依据是 host.layout，不是窗口宽度。</b>
+          </div>
+        </div>
+      </div>
+
+      <h2>5 · 交互细节与坑</h2>
+      <table class="spec">
+        <tr>
+          <th style="width: 130px">话题</th>
+          <th>规则</th>
+        </tr>
+        <tr>
+          <td>进入 / 返回</td>
+          <td>
+            点 header 的会话名进入历史视图；返回键回到对话。<b>切视图不卸载
+            transcript 组件</b> —— events 还在 host 上，回来不用重放。
+            进入历史时 composer 隐藏（不是 disabled）：这时候不该让人以为能打字。
+          </td>
+        </tr>
+        <tr>
+          <td>切走的代价</td>
+          <td>
+            <span class="mark">得说清</span>
+            <code>openSession</code> 里 <code>instructionQueue.length = 0</code>
+            —— 切会话会<b>丢掉还没送达的插话</b>。如果
+            <code>pendingInterjections &gt; 0</code>，选中一条时该提示一句，
+            不能默默扔掉。
+          </td>
+        </tr>
+        <tr>
+          <td>忙碌态</td>
+          <td>
+            搜索与浏览不限；「选中」和「删除」置灰，hover 显示
+            <code>session.busyHint</code>（助手正在生成，暂不可切换或删除会话）。
+            比现在整个下拉 disabled 好：生成时也能翻历史。
+          </td>
+        </tr>
+        <tr>
+          <td>删除</td>
+          <td>
+            保留「每行自带删除」，不用先切过去。确认弹窗沿用现有两句文案。
+            删的是<b>当前会话</b>时，删完回到空会话态（现有
+            <code>deleteAgentSession</code> 已处理）。
+          </td>
+        </tr>
+        <tr>
+          <td>时间分组</td>
+          <td>
+            今天（HH:mm）/ 昨天（昨天 HH:mm）/ 更早（MM-DD）。项目里
+            <b>没有相对时间文案也没有 dayjs</b>（我查过 locales，只有两处无关命中），
+            所以要新增纯函数 + 文案键 —— 见落地清单。
+          </td>
+        </tr>
+        <tr>
+          <td>会话归属</td>
+          <td>
+            侧栏宿主 <code>sessionWorkflowId</code> 有值 → 只列该工作流的会话；
+            独立助手页 <code>getWorkflowId() =&gt; null</code> →
+            全局列表。<b>这条不用改，但列表要让人看得出归属</b>：
+            独立页可在分组标题旁标「全部工作流」，侧栏不用标（本来就只有一个）。
+          </td>
+        </tr>
+        <tr>
+          <td>触屏</td>
+          <td>
+            <span class="mark">风险</span>
+            删除键 hover 才出现在触屏上够不到。两个选择：a) 触屏宿主（用
+            <code>(hover: none)</code> 媒体查询）常驻显示；b) 干脆常驻。
+            建议 a，桌面侧栏是主场景。
+          </td>
+        </tr>
+      </table>
+
+      <h2>6 · 一个意外的收益：视图化顺带修掉了测试盲区</h2>
+      <div class="note good">
+        <code>utils/sfc-render.mjs</code> 把 <code>agent-dropdown</code> 放在
+        GLOBAL_STUBS 里，<b>slot 不渲染</b> ——
+        也就是说，现在整个会话列表在渲染测试里是<b>看不见的</b>，
+        任何关于它的 UI 断言都得靠静态 grep。历史一旦从下拉 slot 里搬出来成为
+        独立的正文区组件，它在 <code>panelRender</code> 里就变成真实节点，
+        能断言「当前会话有 ✓」「空态出
+        <code>session.empty</code>」「搜索无结果出提示」。<b
+          >这是视图化最硬的一条工程理由，比「浮层不适合浏览」更实在。</b
+        >
+      </div>
+
+      <h2>7 · 落地清单</h2>
+      <h3>要动的文件</h3>
+      <ul class="tight">
+        <li>
+          <code>AgentSessionHistory.vue</code>（新增）—— 历史视图本体：搜索框 +
+          分组列表 + 空态，props 收 <code>sessions / currentSessionId / busy</code>，
+          emit <code>select / delete / new</code>。
+        </li>
+        <li>
+          <code>AgentSessionList.vue</code> —— 行改成两行密度 + hover 删除 +
+          当前 ✓；或由新组件取代，旧的留在下拉场景（若有）。
+        </li>
+        <li>
+          <code>AgentPanel.vue</code> —— 新增 <code>view</code> 状态
+          （<code>'chat' | 'history'</code>）：header 换标题与返回键、
+          正文区 <code>v-if</code> 切换、composer 在 history 下隐藏。
+        </li>
+        <li>
+          <code>src/agent/sessionGroups.js</code>（新增，纯函数 + 单测）——
+          <code>groupSessionsByDay(entries, now)</code>、
+          <code>filterSessionsByTitle(entries, q)</code>、
+          <code>relativeTime(ts, now)</code>。分组逻辑必须能被单测钉住
+          （跨天、跨年、空列表），写在 <code>.vue</code> 里一条都测不到。
+        </li>
+        <li>
+          <code>src/composable/agentHost.js</code> —— 加 <code>layout</code>
+          字段（<code>'narrow' | 'wide'</code>）；独立助手页传 wide。
+        </li>
+        <li>
+          locales zh/en —— 新增
+          <code>session.history</code>「历史会话」、
+          <code>session.searchPlaceholder</code>「搜索标题」、
+          <code>session.searchLimit</code>（正文搜索不到的说明）、
+          <code>session.groupToday / groupYesterday / groupEarlier</code>、
+          <code>session.turnCount</code>「{n} 条消息」、
+          <code>session.deleteOne</code>「删除这条会话」。
+          <b><code>sessionOptionLabel</code> 保留</b> —— header 的 chip 还在用它。
+        </li>
+        <li>
+          测试 —— <code>sessionGroups</code> 单测（分组/搜索/相对时间边界）；
+          <code>panelRender</code> 断言视图切换与列表渲染（现在终于看得见了）。
+        </li>
+      </ul>
+
+      <h3>可选：要不要让搜索能搜正文</h3>
+      <ul class="tight">
+        <li>
+          <b>A（推荐，零迁移）</b>：只搜标题，UI 上如实说明。24 字前缀 + 时间分组 +
+          消息数，够用。
+        </li>
+        <li>
+          <b>B（要动存储）</b>：给索引条目加 <code>firstUserText</code>（或
+          <code>searchText</code>），写入时截取首条用户消息前 100 字。
+          老条目没有这个字段 → 读取时退回 <code>title</code>，<b>不需要迁移脚本</b>，
+          只是老会话搜不到正文。代价是索引体积变大（每条 +100 字）。
+        </li>
+      </ul>
+
+      <h3>不在本版做</h3>
+      <ul class="tight">
+        <li>
+          <b>会话重命名</b> —— 24 字标题是 LLM 从首句生成的，用户改不了。
+          历史视图里加「重命名」是很自然的下一步，但要先有
+          <code>patchTitle</code> 之外的写入通道（它现在只服务 LLM 回写）。
+        </li>
+        <li>
+          <b>按工作流筛选</b>（独立页的全局列表）—— 侧栏宿主天然按工作流过滤，
+          独立页全局。要不要在独立页给个筛选器，取决于会话会不会跨工作流攒多，
+          现在数据不够，先不做。
+        </li>
+        <li>
+          <b>目标页那半</b> —— 已在
+          <code>docs/agent-ui-composer-redesign.html</code> 单独出稿，
+          与本稿正交。
+        </li>
+      </ul>
+    </div>
+
+    <script>
+      document.getElementById('btn-theme').onclick = function () {
+        document.body.classList.toggle('dark');
+      };
+
+      // 搜索演示：输入「比价」后只剩一条 + 说明；清空恢复
+      var input = document.getElementById('search-input');
+      var body = document.getElementById('search-body');
+      var original = body.innerHTML;
+      document.getElementById('btn-search').onclick = function () {
+        if (body.dataset.on === '1') {
+          body.innerHTML = original;
+          body.dataset.on = '0';
+          input = document.getElementById('search-input');
+          return;
+        }
+        body.dataset.on = '1';
+        body.innerHTML =
+          '<div class="search"><span class="mini">⌕</span><input placeholder="搜索标题" value="比价"></div>' +
+          '<div class="group">1 条匹配</div>' +
+          '<div class="srow cur"><span class="chk">✓</span><div class="main">' +
+          '<div class="t truncate">商品列表 · <span class="mark">比价</span></div>' +
+          '<div class="s">14:32 · 12 条消息</div></div>' +
+          '<button class="del">🗑</button></div>' +
+          '<div class="mini" style="padding:10px 12px">只能按标题搜索 —— 标题取自你的第一句话（最多 24 字），正文没有进索引。</div>';
+      };
+
+      // 删除确认演示
+      var box = document.getElementById('confirm-box');
+      document.getElementById('btn-del').onclick = function () {
+        box.style.display = box.style.display === 'none' ? 'block' : 'none';
+      };
+    </script>
+  </body>
+</html>

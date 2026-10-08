@@ -170,66 +170,119 @@
       }}
     </p>
 
-    <form class="flex items-end gap-2 p-2 pt-0" @submit.prevent="send">
-      <!-- T-12：原来 rows="3" 钉死高度，写长指令只能在小窗里滚。改 autoresize：
-           高度跟着内容长，到 max-h 封顶后内部滚动（面板只有 320px 宽，再高就把
-           对话正文挤没了）。min-h 是 CSS 兜底 —— calcHeight 写的是 px 高度，低于
-           min-h 时由 CSS 说了算，所以空草稿仍保持多行观感。
-           T-158：88 → 68（三行观感改两行）。autoresize 会让草稿长起来时照常
-           顶到 max-h-128，所以省下的是**短草稿时**白占的 20px，长文本行为不变。 -->
-      <ui-textarea
-        v-model="draft"
-        autoresize
-        class="min-h-[68px] max-h-[128px] flex-1 overflow-y-auto scroll scroll-xs"
-        :placeholder="t('workflow.agent.placeholder')"
-        @keydown="onDraftKeydown"
-      />
+    <form class="p-2 pt-0" @submit.prevent="send">
+      <div class="flex items-end gap-2">
+        <ui-textarea
+          v-model="draft"
+          autoresize
+          class="min-h-[68px] max-h-[128px] flex-1 overflow-y-auto scroll scroll-xs"
+          :placeholder="t('workflow.agent.placeholder')"
+          @keydown="onDraftKeydown"
+        />
+
+        <!--
+          发送 / 停止共用同一个图标按钮位（T-159 + 重设计）：
+          - 空闲：→ 发送（icon，40×40）
+          - 忙碌：■ 停止生成；**插话改由 Enter 提交** —— 输入框忙碌时仍可打字，
+            send() 本来就放行插话队列（P3），排队的条数由上方常驻提示行报。
+          原先忙碌时是「■ 停止 + 插话」两个按钮并排，8px gap 全从 textarea 身上扣，
+          320px 侧栏里 textarea 只剩 144px（headless Chromium 实测），而忙碌恰恰是
+          最要打字的时刻。合并成一个按钮位后，忙碌与空闲的 textarea 宽度一致。
+        -->
+        <ui-button
+          v-if="host.busy"
+          variant="default"
+          icon
+          type="button"
+          :title="t('workflow.agent.stop')"
+          :aria-label="t('workflow.agent.stop')"
+          @click="host.abort()"
+        >
+          <v-remixicon name="riStopLine" class="shrink-0" />
+        </ui-button>
+
+        <ui-button
+          v-else
+          variant="accent"
+          icon
+          type="submit"
+          :disabled="!draft.trim() || !configured"
+          :title="t('workflow.agent.send')"
+          :aria-label="t('workflow.agent.send')"
+        >
+          <v-remixicon name="riArrowRightLine" class="shrink-0" />
+        </ui-button>
+      </div>
 
       <!--
-        T-153：上下文水位圆环。
-        塞在按钮行里而不是另起一行 —— 它是「发送前」该看的信息（快满了就该开
-        新会话或等压缩），但常驻只占 14px 宽、**0px 高**。数字与用量收进 hover。
-        算不出水位时组件整个不渲染，连这 14px 都退回（见 AgentContextRing）。
+        元信息行（重设计 B 条）：水位与快捷键提示同属「输入区的元信息」，合成一行
+        放在输入框**下方**。贴长内容之前视线正落在这一行，是水位最该出现的时机。
+
+        左：圆环 + 常驻百分比（点开 = token 明细 + 新建会话，重设计 D 条）；
+        右：快捷键提示（忙碌时改说「Enter 插话」，因为这时 Enter 走的是插话队列）。
+
+        没配 API Key 时整行隐藏 —— 发送已禁用，水位此刻没有意义，省下约 22px
+        给正文（重设计里这行是新增的，不省就白丢了 T-158 攒下的空间）。
       -->
-      <agent-context-ring
-        :usage="host.usage"
-        :context-window="Number(host.config.contextWindow) || 0"
-      />
-      <!--
-        T-159：忙碌时这个按钮改成**纯图标**。
-        实测（320px 内容区，headless Chromium + 编译产物 CSS）：停止按钮带文字时
-        56px 宽，加上 8px gap 就是 64px 全从 textarea 身上扣 —— 忙碌态 textarea
-        从空闲的 208px 掉到 **144px**，而忙碌恰恰是最需要打字的时刻（要插话）。
-        改 icon-only（p-2，40×40）后回到 160px。
-
-        为什么只改这个、不继续压：图标尺寸（24）与面板其余图标一致，gap 也没动，
-        视觉节奏不变；再往下压的两种（图标 20 → 164、gap-1.5 → 170）留着没做，
-        收益递减且要牺牲一致性。
-
-        去掉文字会丢掉无障碍名称，所以 title 之外**必须**补 aria-label —— 图标按钮
-        没有文字，读屏只会念「按钮」。UiButton 会把 $attrs 透传到根元素，aria-label 落得上。
-      -->
-      <ui-button
-        v-if="host.busy"
-        variant="default"
-        icon
-        type="button"
-        :title="t('workflow.agent.stop')"
-        :aria-label="t('workflow.agent.stop')"
-        @click="host.abort()"
+      <div
+        v-if="configured"
+        class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5"
       >
-        <v-remixicon name="riStopLine" class="shrink-0" />
-      </ui-button>
+        <agent-dropdown
+          v-if="contextVisible"
+          v-model="contextOpen"
+          align="left"
+          side="top"
+          width="w-72"
+          class="shrink-0"
+        >
+          <template #trigger>
+            <agent-context-ring
+              :usage="host.usage"
+              :context-window="Number(host.config.contextWindow) || 0"
+            />
+          </template>
 
-      <ui-button
-        variant="accent"
-        type="submit"
-        :disabled="!draft.trim() || !configured"
-      >
-        {{
-          host.busy ? t('workflow.agent.interject') : t('workflow.agent.send')
-        }}
-      </ui-button>
+          <!-- 明细：水位 + 用量 + 「新建会话」。
+               两行文案复用 contextHint / usage 两个既有键（圆环的 title 也是它们），
+               不另造一套说法，免得同一个数字两处措辞不一致。 -->
+          <div class="p-2 text-xs text-gray-700 dark:text-gray-200">
+            <p>{{ contextHintLine }}</p>
+            <p class="mt-1">{{ usageLine }}</p>
+            <hr class="my-2 border-gray-200 dark:border-gray-700" />
+            <button
+              type="button"
+              class="hoverable flex w-full items-center gap-1.5 rounded px-1 py-1 text-left disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="host.busy"
+              :title="
+                host.busy ? t('workflow.agent.session.busyHint') : undefined
+              "
+              @click="startNewSession"
+            >
+              <v-remixicon name="riAddLine" class="shrink-0" />
+              <span class="min-w-0 flex-1">{{
+                t('workflow.agent.session.new')
+              }}</span>
+            </button>
+            <!-- 副注：host 上没有「原地清空上下文」的能力，最接近的是 newSession
+                 —— 它会开一条新会话、把当前这条留在历史里。不写成「清空上下文」
+                 是因为那不是它的真实行为（文案撒谎比功能少一个按钮更糟）。 -->
+            <p class="px-1 pt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+              {{ t('workflow.agent.contextNewNote') }}
+            </p>
+          </div>
+        </agent-dropdown>
+
+        <span
+          class="ml-auto shrink-0 text-[11px] text-gray-400 dark:text-gray-500"
+        >
+          {{
+            host.busy
+              ? t('workflow.agent.interjectHint')
+              : t('workflow.agent.inputHint')
+          }}
+        </span>
+      </div>
     </form>
   </div>
 </template>
@@ -239,6 +292,9 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { sessionOptionLabel } from '@/agent/sessions';
 import { suggestExamples } from '@/agent/examples';
+// 元信息行要问「水位算不算得出来」与格式化 token 数：判定与格式化都在纯模块里
+// （有单测），组件只消费结果 —— .vue 里写的分支一条都测不到。
+import { contextPercent as calcContextPercent, fmtTokens } from '@/agent/usage';
 import { configIO } from '@/agent';
 import {
   filterCommands,
@@ -274,6 +330,52 @@ const draft = ref('');
 // T-10：示例问法按本宿主开放的能力挑。点击只填入草稿、**不自动发送** ——
 // 示例是猜的，用户要先能改再决定发不发。
 const exampleList = computed(() => suggestExamples(props.host.groups));
+
+/**
+ * 元信息行的上下文水位。
+ *
+ * 判定本身在 `@/agent/usage`（那里有单测钉住分母缺失 / 已用为负 / 超过 100
+ * 三种边界），这里只问一句「算不算得出来」—— 算不出来就整行不显示，
+ * 而不是显示 0%（`usage.js` 的注释里有完整理由）。
+ */
+const contextPct = computed(() =>
+  calcContextPercent(
+    props.host.usage,
+    Number(props.host.config && props.host.config.contextWindow) || 0
+  )
+);
+const contextVisible = computed(() => contextPct.value !== null);
+const contextOpen = ref(false);
+
+/** 展开面板里的两行：水位（含估算说明）与 token 用量，文案键与圆环的 title 同源。 */
+const contextHintLine = computed(() =>
+  contextPct.value === null
+    ? ''
+    : t('workflow.agent.contextHint', {
+        pct: contextPct.value,
+        win: fmtTokens(Number(props.host.config.contextWindow) || 0),
+      })
+);
+const usageLine = computed(() =>
+  props.host.usage
+    ? t('workflow.agent.usage', {
+        in: fmtTokens(props.host.usage.input),
+        out: fmtTokens(props.host.usage.output),
+      })
+    : ''
+);
+
+/**
+ * 展开面板里的「新建会话」。
+ *
+ * host 上没有「原地清空当前会话上下文」的能力，最接近的就是 newSession —— 它开一条
+ * 新会话、把当前这条留在历史里。副注（contextNewNote）在 UI 上把这层差异说清，
+ * 所以按钮文案用 session.new 而不是编一个「清空上下文」。
+ */
+function startNewSession() {
+  contextOpen.value = false;
+  props.host.newSession();
+}
 
 // header 只剩这一个下拉（切换 / 用量 / 删除都在里面）
 const sessionMenuOpen = ref(false);

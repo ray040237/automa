@@ -1255,6 +1255,54 @@ test('T-153：圆环 tooltip 复用既有文案键，不留孤儿键', () => {
   );
 });
 
+test('T-153 重设计：新增的四个文案键要在两个 locale 里都有人引用', () => {
+  // 键名打错时 vue-i18n 会**静默回退成键名**（界面上显示一串
+  // `workflow.agent.xxx`），既不会报错也不会被 check:i18n 拦下 ——
+  // 所以「键存在」和「有人引用」这两件事都要钉住。
+  const ringSrc = read(
+    'src/components/newtab/workflow/agent/AgentContextRing.vue'
+  );
+  const panelSrc = read('src/components/newtab/workflow/agent/AgentPanel.vue');
+
+  const owners = {
+    contextCritical: ringSrc, // >=95% 行内那句
+    contextNewNote: panelSrc, // 展开面板里「新建会话」的副注
+    inputHint: panelSrc, // 元信息行右侧
+    interjectHint: panelSrc, // 忙碌态改说插话
+  };
+
+  for (const lang of ['zh', 'en']) {
+    const { agent } = JSON.parse(
+      read(`src/locales/${lang}/newtab.json`)
+    ).workflow;
+
+    for (const [key, src] of Object.entries(owners)) {
+      assert.ok(typeof agent[key] === 'string', `${lang} 缺 ${key}`);
+      assert.ok(
+        src.includes(`workflow.agent.${key}`),
+        `${key} 在 ${lang} 里存在却没人引用 —— 会变成孤儿键（T-109 踩过）`
+      );
+    }
+
+    // 插话按钮已合并进同一个按钮位（插话改由 Enter），interject 键随按钮一起
+    // 删掉了。留着键 = 孤儿，改回引用 = 界面上显示键名，两头都不许。
+    assert.equal(
+      agent.interject,
+      undefined,
+      `${lang} 的 interject 键应随插话按钮一起删除（插话语义现在由 ` +
+        'interjectHint 承担），留着就是没人用的孤儿键'
+    );
+  }
+
+  for (const src of [ringSrc, panelSrc]) {
+    assert.equal(
+      /workflow\.agent\.interject['"`]/.test(src),
+      false,
+      'interject 键已删除，引用它只会显示键名本身'
+    );
+  }
+});
+
 test('T-09：水位的 tooltip 必须写明是估算（分母是用户填的建议值）', () => {
   for (const lang of ['zh', 'en']) {
     const locale = JSON.parse(read(`src/locales/${lang}/newtab.json`));

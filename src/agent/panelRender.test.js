@@ -127,6 +127,55 @@ test('T-128：上下文水位圆环在有 usage 时渲染、分母缺失时整�
   );
 });
 
+test('T-153 重设计：水位三档 —— 常态灰 / >=80 提级 / >=95 红并附告急文字', async () => {
+  // 百分比现在是**常驻文字**（原先只在 hover 里），分档配色是唯一的强度信号，
+  // 而 .vue 里的分支静态守卫看不见 —— 只有渲染能验证「80 到底有没有提级」。
+  const at = (pct) =>
+    renderSfc(RING, {
+      props: {
+        usage: { input: Math.round((200000 * pct) / 100), output: 10 },
+        contextWindow: 200000,
+      },
+    });
+
+  const normal = await at(50);
+  assert.ok(
+    normal.includes('workflow.agent.contextShort'),
+    '百分比要常驻（重设计 B 条）—— 原先只有 hover 才看得到'
+  );
+  assert.ok(
+    normal.includes('text-gray-400'),
+    '常态档是灰：与右侧快捷键提示同级，不该抢注意力（重设计 A 条）'
+  );
+  assert.equal(
+    normal.includes('data-test="context-critical"'),
+    false,
+    '50% 不该出现告急文字 —— 平时零干扰是这个设计的前提'
+  );
+
+  const warn = await at(84);
+  assert.ok(
+    warn.includes('text-accent'),
+    '>=80% 要提到 accent（黑/白）+ 环加粗：项目不用琥珀，见组件里的注释（T-152）'
+  );
+  assert.equal(
+    warn.includes('data-test="context-critical"'),
+    false,
+    '80~95% 只提级、不告急 —— 两个档位要有区别，否则等于只有一档'
+  );
+
+  const critical = await at(96);
+  assert.ok(critical.includes('text-red-500'), '>=95% 要转红');
+  assert.ok(
+    critical.includes('data-test="context-critical"'),
+    '>=95% 必须行内附告急文字：只变色不说话，用户不知道该干什么'
+  );
+  assert.ok(
+    critical.includes('workflow.agent.contextCritical'),
+    '告急文字要走 contextCritical 文案键，不能把句子写死在模板里'
+  );
+});
+
 test('T-153：模型名仍在会话下拉里渲染（搬走水位时别把它一起丢了）', async () => {
   const html = await renderSfc(LIST, {
     props: {
@@ -179,44 +228,88 @@ test('T-128：常驻插话提示只在 busy 且队列非空时渲染（T-12）',
   );
 });
 
-test('T-159：忙碌态的停止按钮是纯图标（icon → p-2），且补了 aria-label', async () => {
-  // 为什么钉这条：停止按钮带文字时 56px 宽，加上 8px gap 全从 textarea 身上扣 ——
-  // 320px 侧栏里忙碌态 textarea 只剩 144px，而忙碌恰恰是最要打字的时刻。
-  // 改成 icon-only（40×40）后回到 160px（headless Chromium 实测）。
-  // 但**去掉文字会丢掉无障碍名称**，所以必须同时有 aria-label，
-  // 否则读屏念出来只是一个「按钮」。这两个断言是配套的，缺一不可。
+test('T-159 / 重设计：发送与停止共用同一个图标按钮位，两个状态都有 aria-label', async () => {
+  // 为什么钉这条：忙碌时原是「■ 停止 + 插话」两个按钮并排，8px gap 全从 textarea
+  // 身上扣 —— 320px 侧栏里忙碌态 textarea 只剩 144px（headless Chromium 实测），
+  // 而忙碌恰恰是最要打字的时刻。重设计把两个按钮合成**一个位置**：
+  // 空闲 → 发送、忙碌 → 停止；插话改由 Enter 提交（send() 本来就放行插话队列）。
   const busy = await renderSfc(PANEL, {
     props: { host: panelHost({ busy: true }) },
   });
-
   assert.ok(
     /aria-label="workflow\.agent\.stop"/.test(busy),
     '忙碌态停止按钮必须有 aria-label —— 图标按钮没有文字，读屏只能念「按钮」'
   );
   assert.ok(
     /title="workflow\.agent\.stop"/.test(busy),
-    '鼠标用户要在 hover 时看到「停止」'
+    '鼠标 hover 要看到「停止」'
   );
-  // 纯图标靠 UiButton 的 `icon` prop 触发 p-2（40×40）；若退回 py-2 px-4 就是 56px。
-  //
-  // 注意：utils/sfc-render.mjs 把子组件换成 `<i data-stub="ui-button" …>` 的桩，
-  // 真实 class 不落在 HTML 里，所以这里钉的是**导致 p-2 的那个 prop**，
-  // 而不是 p-2 本身 —— 桩把 props 原样输出成属性，正好看得见。
   assert.match(
     busy,
     /data-stub="ui-button"[^>]*\bicon\b/,
-    '停止按钮要走 icon-only 分支（UiButton 的 icon → p-2，40×40）；' +
-      '退回文字按钮的 py-2 px-4 会多占 16px'
+    '停止按钮要走 icon-only 分支（UiButton 的 icon → p-2，40×40）'
+  );
+  assert.equal(
+    /aria-label="workflow\.agent\.send"/.test(busy),
+    false,
+    '忙碌态没有「发送」可言 —— 同位置此时是停止'
   );
 
-  // 空闲态不该出现停止按钮（此时主按钮是「发送」）
   const idle = await renderSfc(PANEL, {
     props: { host: panelHost({ busy: false }) },
   });
+  assert.ok(
+    /aria-label="workflow\.agent\.send"/.test(idle),
+    '图标化的发送按钮同样要有 aria-label，不能只留一个箭头'
+  );
   assert.equal(
     /aria-label="workflow\.agent\.stop"/.test(idle),
     false,
-    '空闲态没有「停止」可言，按钮不该渲染'
+    '空闲态不该出现停止按钮'
+  );
+  // 两个状态都得是 icon —— 只要有一侧退回文字按钮，两侧宽度就不一致，
+  // 输入框会在忙碌/空闲切换时跳动。
+  assert.match(
+    idle,
+    /data-stub="ui-button"[^>]*\bicon\b/,
+    '发送按钮也要走 icon-only 分支，否则与忙碌态宽度不一致'
+  );
+});
+
+test('T-153 重设计：元信息行的快捷键提示，忙碌时改说「插话」', async () => {
+  const idle = await renderSfc(PANEL, {
+    props: { host: panelHost({ busy: false }) },
+  });
+  assert.ok(
+    idle.includes('workflow.agent.inputHint'),
+    '空闲态要写清 Enter 发送 / Shift+Enter 换行 —— 插话按钮去掉之后，' +
+      '这是「怎么把话送出去」的唯一说明'
+  );
+  assert.equal(
+    idle.includes('workflow.agent.interjectHint'),
+    false,
+    '空闲态不该说插话 —— 那时 Enter 走的是普通发送'
+  );
+
+  const busy = await renderSfc(PANEL, {
+    props: { host: panelHost({ busy: true }) },
+  });
+  assert.ok(
+    busy.includes('workflow.agent.interjectHint'),
+    '忙碌态 Enter 进的是插话队列，提示要照实说，不能沿用「发送」'
+  );
+
+  // 没配 API Key 时整行隐藏：发送已禁用，水位与快捷键此刻没有意义，
+  // 省下的约 22px 还给正文（这行是重设计新增的，不省就白丢了 T-158 攒的空间）。
+  const unconfigured = await renderSfc(PANEL, {
+    props: {
+      host: panelHost({ config: { model: 'm', contextWindow: 128000 } }),
+    },
+  });
+  assert.equal(
+    unconfigured.includes('workflow.agent.inputHint'),
+    false,
+    '未配置 API Key 时元信息行要整行隐藏'
   );
 });
 

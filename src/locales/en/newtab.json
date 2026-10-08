@@ -785,6 +785,8 @@
       "contextShort": "Context {pct}%",
       "contextHint":
         "About {pct}% of the context window used ({win}). The window size is the suggested value from settings — BYOK providers do not expose the real limit, so this is an estimate.",
+      "contextCritical": "Context nearly full — start a new chat",
+      "contextNewNote": "Starts a fresh context; the current chat stays in history",
       "notConfigured": "Configure your API key first",
       "error": "Something went wrong",
       "tool": {
@@ -824,7 +826,8 @@
         "canvasHint": "Changes the in-memory canvas only and never saves it — check it, then save yourself."
       },
       "goSettings": "Go to settings",
-      "interject": "Add",
+      "interjectHint": "Enter to interject · Shift+Enter for newline",
+      "inputHint": "Enter to send · Shift+Enter for newline",
       "stop": "Stop generating",
       "queued": "Queued",
       "queuedPending": "{n} interjection(s) queued — delivered before the next step",

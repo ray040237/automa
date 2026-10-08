@@ -1,0 +1,1571 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent 输入区重设计稿 · 上下文作为「附件」</title>
+    <style>
+      :root {
+        --bg: #f4f5f7;
+        --surface: #ffffff;
+        --panel: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --faint: #9ca3af;
+        --border: #e5e7eb;
+        --border-soft: #f3f4f6;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+        --box: rgba(0, 0, 0, 0.04);
+        --box-hover: rgba(0, 0, 0, 0.07);
+        --code-bg: #f3f4f6;
+        --red-bg: rgba(239, 68, 68, 0.1);
+        --red-br: rgba(239, 68, 68, 0.4);
+        --red-fg: #b91c1c;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.05);
+        --mark: #fef08a;
+        --mark-fg: #854d0e;
+      }
+      body.dark {
+        --bg: #17181c;
+        --surface: #1f2126;
+        --panel: #1f2126;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --faint: #6b7280;
+        --border: #374151;
+        --border-soft: #2b2f36;
+        --accent: #f4f4f5;
+        --accent-fg: #18181b;
+        --box: rgba(255, 255, 255, 0.06);
+        --box-hover: rgba(255, 255, 255, 0.1);
+        --code-bg: #2b2f36;
+        --red-fg: #f87171;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --mark: #713f12;
+        --mark-fg: #fde68a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 13px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", Roboto,
+          Helvetica, Arial, sans-serif;
+      }
+      .wrap {
+        max-width: 1480px;
+        margin: 0 auto;
+        padding: 28px 20px 80px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 34px 0 12px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--border);
+      }
+      h3 {
+        font-size: 13px;
+        margin: 18px 0 8px;
+      }
+      .lede {
+        color: var(--muted);
+        margin: 0 0 4px;
+        max-width: 960px;
+      }
+      code {
+        background: var(--code-bg);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin: 14px 0 6px;
+        flex-wrap: wrap;
+      }
+      .toolbar button {
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .toolbar button:hover {
+        background: var(--box);
+      }
+      .toolbar .sep {
+        width: 1px;
+        height: 20px;
+        background: var(--border);
+      }
+      .toolbar label {
+        font-size: 12px;
+        color: var(--muted);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        align-items: flex-start;
+      }
+      .case {
+        width: 320px;
+      }
+      .case.wide {
+        width: 720px;
+      }
+      .cap {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .cap b {
+        color: var(--text);
+        font-size: 12.5px;
+      }
+
+      /* ---------- 面板 ---------- */
+      .panel {
+        width: 320px;
+        height: 540px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .panel.wide {
+        width: 720px;
+      }
+      .p-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .p-transcript {
+        flex: 1;
+        overflow: auto;
+        padding: 10px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .p-foot {
+        border-top: 1px solid var(--border-soft);
+        padding: 8px;
+      }
+
+      /* ---------- 通用小件 ---------- */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+        border: 1px solid transparent;
+        background: var(--box);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .btn:hover {
+        background: var(--box-hover);
+      }
+      .btn.solid {
+        background: var(--accent);
+        color: var(--accent-fg);
+      }
+      .btn.icon {
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        justify-content: center;
+        flex: 0 0 32px;
+      }
+      .btn.icon.big {
+        width: 40px;
+        height: 40px;
+        flex: 0 0 40px;
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .fav {
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+        flex: 0 0 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        font-weight: 700;
+        color: #fff;
+      }
+      .badge {
+        font-size: 10px;
+        line-height: 1.5;
+        padding: 0 4px;
+        border-radius: 3px;
+        color: var(--muted);
+        flex: 0 0 auto;
+      }
+      .badge.on {
+        background: var(--box-hover);
+      }
+      .badge.red {
+        background: var(--red-bg);
+        color: var(--red-fg);
+      }
+      .mini {
+        font-size: 11px;
+        color: var(--faint);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      .spacer {
+        flex: 1 1 auto;
+      }
+
+      /* ---------- ① 现状输入区 ---------- */
+      .now-picker {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px;
+        margin: 0 8px 4px;
+        border-radius: 6px;
+        background: var(--box);
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .now-form {
+        padding: 8px;
+        padding-top: 0;
+      }
+      .now-line {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+      }
+      .now-ta {
+        flex: 1;
+        min-height: 68px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-size: 13px;
+        color: var(--faint);
+      }
+      .now-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 6px;
+        font-size: 11px;
+        color: var(--faint);
+        flex-wrap: wrap;
+      }
+
+      /* ---------- ② 新 composer ---------- */
+      .composer {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 8px;
+        background: var(--surface);
+      }
+      .composer.focus {
+        border-color: var(--accent);
+      }
+      .c-chip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        padding: 3px 4px;
+        border-radius: 5px;
+        background: var(--box);
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .c-chip:hover {
+        background: var(--box-hover);
+      }
+      .c-chip .x {
+        margin-left: auto;
+        flex: 0 0 16px;
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        color: var(--muted);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+      }
+      .c-chip .x:hover {
+        background: var(--box-hover);
+        color: var(--text);
+      }
+      .c-ta {
+        width: 100%;
+        min-height: 60px;
+        border: 0;
+        outline: none;
+        resize: none;
+        padding: 6px 4px;
+        font: inherit;
+        font-size: 13px;
+        color: var(--text);
+        background: transparent;
+        display: block;
+      }
+      .c-ta::placeholder {
+        color: var(--faint);
+      }
+      .c-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+      }
+      .c-at {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex: 0 0 auto;
+        height: 24px;
+        padding: 0 6px;
+        border-radius: 5px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted);
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .c-at:hover {
+        background: var(--box);
+        color: var(--text);
+      }
+      .c-send {
+        flex: 0 0 32px;
+      }
+      .c-hint {
+        font-size: 11px;
+        color: var(--faint);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+
+      /* 水位圆环 */
+      .ring {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex: 0 0 auto;
+        background: none;
+        border: none;
+        padding: 2px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .ring:hover {
+        background: var(--box);
+      }
+      .ring.warn {
+        color: var(--accent);
+        font-weight: 500;
+      }
+      .ring.crit {
+        color: var(--red-fg);
+        font-weight: 500;
+      }
+
+      /* ---------- 消息气泡 ---------- */
+      .msg {
+        font-size: 12.5px;
+      }
+      .msg .who {
+        font-size: 10px;
+        color: var(--faint);
+        margin-bottom: 2px;
+      }
+      .bubble {
+        background: var(--box);
+        border-radius: 8px;
+        padding: 7px 9px;
+      }
+      .bubble.me {
+        background: rgba(59, 130, 246, 0.15);
+      }
+      .tool-card {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 11.5px;
+        overflow: hidden;
+      }
+      .tool-card > .t {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 8px;
+        background: var(--box);
+      }
+      .tool-card > .b {
+        padding: 6px 8px;
+        color: var(--muted);
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 11px;
+        word-break: break-all;
+      }
+      .notice {
+        font-size: 11px;
+        color: var(--muted);
+        background: var(--box);
+        border-radius: 6px;
+        padding: 5px 8px;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      /* @ 菜单 */
+      .at-menu {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        margin-bottom: 6px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .at-menu .head {
+        font-size: 10px;
+        color: var(--faint);
+        padding: 5px 10px 3px;
+      }
+      .at-menu ul {
+        margin: 0;
+        padding: 4px;
+        list-style: none;
+        max-height: 150px;
+        overflow: auto;
+      }
+      .at-menu li {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 7px;
+        border-radius: 5px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .at-menu li.sel {
+        background: var(--box);
+        outline: 1px solid var(--border);
+      }
+      .at-menu li .u {
+        font-size: 10.5px;
+        color: var(--faint);
+        margin-left: auto;
+      }
+
+      /* ---------- 对照表 ---------- */
+      .cmp {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        align-items: stretch;
+      }
+      .cmp > div {
+        width: 320px;
+      }
+      .tag {
+        display: inline-block;
+        font-size: 10.5px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .tag.now {
+        background: var(--box);
+      }
+      .tag.new {
+        background: var(--accent);
+        color: var(--accent-fg);
+        border-color: var(--accent);
+      }
+      .px {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 6px;
+        border-top: 1px dashed var(--border);
+        padding-top: 5px;
+      }
+      .px b {
+        color: var(--text);
+      }
+
+      table.spec {
+        border-collapse: collapse;
+        font-size: 12px;
+        margin-top: 8px;
+      }
+      table.spec th,
+      table.spec td {
+        border: 1px solid var(--border);
+        padding: 5px 9px;
+        text-align: left;
+        vertical-align: top;
+      }
+      table.spec th {
+        background: var(--box);
+        font-weight: 600;
+      }
+      ul.tight {
+        margin: 6px 0;
+        padding-left: 20px;
+      }
+      ul.tight li {
+        margin: 3px 0;
+      }
+      .note {
+        border-left: 3px solid var(--border);
+        padding: 6px 10px;
+        color: var(--muted);
+        font-size: 12px;
+        margin: 10px 0;
+        background: var(--box);
+        border-radius: 0 6px 6px 0;
+      }
+      .note.warn {
+        border-left-color: var(--red-fg);
+      }
+      .mark {
+        background: var(--mark);
+        color: var(--mark-fg);
+        padding: 0 2px;
+        border-radius: 2px;
+      }
+      .kv {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .kv b {
+        color: var(--text);
+      }
+      .demo {
+        border: 1px dashed var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        align-items: flex-start;
+      }
+      input[type="range"] {
+        width: 180px;
+      }
+      .swatch {
+        width: 220px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Agent 输入区重设计稿 · 把「上下文」当成附件，而不是控件</h1>
+      <p class="lede">
+        依据上一轮对 Dia / Gemini in Chrome / Atlas / Nanobrowser / Monica
+        的调研，落地成三处改动。所有文案取自
+        <code>src/locales/zh/newtab.json → workflow.agent</code>，所有像素按侧栏
+        内容区真实可用宽度 <b>320px</b> 计算（侧栏下限 360 − padding 40）。
+      </p>
+
+      <div class="toolbar">
+        <button id="btn-theme">切换深色 / 浅色</button>
+        <div class="sep"></div>
+        <label
+          ><input type="checkbox" id="chk-wide" /> 宽宿主（独立助手页
+          720px）</label
+        >
+        <div class="sep"></div>
+        <label
+          >水位演示 <input type="range" id="rng" min="20" max="100" value="62"
+        /></label>
+        <span class="mini" id="rng-out">62%</span>
+      </div>
+
+      <h2>0 · 三条改动，一句话一条</h2>
+      <table class="spec">
+        <tr>
+          <th style="width: 30px">#</th>
+          <th style="width: 150px">改什么</th>
+          <th>从 → 到</th>
+          <th style="width: 230px">为什么（依据）</th>
+        </tr>
+        <tr>
+          <td>①</td>
+          <td>目标页进 composer</td>
+          <td>
+            面板底部常驻一行 32px 的独立 chip<br />
+            → composer 卡片内的<b>顶部附件行</b>，入口在底行左侧的
+            <b>@</b>
+          </td>
+          <td>
+            Dia（composer 内 @ 提及 tab）、Gemini（composer 左下角 + 选 tab，选中
+            变带 X 的 chip）——两家都把页面上下文当<b>附件</b>而非设置项
+          </td>
+        </tr>
+        <tr>
+          <td>②</td>
+          <td>pinned 给一个 X</td>
+          <td>
+            没有解除入口<br />
+            → <b>仅 pinned 时</b>出现 X，语义是「取消固定 → 回到自动跟随」
+          </td>
+          <td>
+            Gemini 的 chip 带 X。我们原先不做的理由成立（<code
+              >resolveTargetTab</code
+            >
+            永远解析得出目标，不存在「无目标」态）——但「解除固定」是另一个语义，不造新状态机
+          </td>
+        </tr>
+        <tr>
+          <td>③</td>
+          <td>水位只在要紧时出现</td>
+          <td>
+            圆环常驻 + ≥95% 追加整句<br />
+            → <b>&lt;80% 整段不渲染</b>；≥95% 只加短词「将满」，完整句留给点开的明细
+          </td>
+          <td>
+            Dia / Atlas / Gemini <b>全都不暴露</b> token 水位——只有 Cursor、Claude
+            Code 这类开发者工具才暴露。我们是 BYOK 侧栏，保留是对的，但要「平时不打扰」
+          </td>
+        </tr>
+      </table>
+
+      <h2>1 · 逐条对照：现状 → 建议</h2>
+
+      <h3>① 目标页：从「面板上的一行控件」到「输入区里的一个附件」</h3>
+      <div class="cmp">
+        <div>
+          <div class="cap"><span class="tag now">现状</span></div>
+          <div class="panel" style="height: auto; padding-bottom: 8px">
+            <div class="p-transcript" style="flex: none; min-height: 60px">
+              <div class="msg">
+                <div class="who">助手</div>
+                <div class="bubble">这一页有 24 条商品，我先把前 5 条读出来。</div>
+              </div>
+            </div>
+            <div class="now-picker">
+              <span class="fav" style="background: #ff5000">淘</span>
+              <span class="truncate" style="flex: 1"
+                >商品列表 - 淘宝网</span
+              >
+              <span class="badge on">固定</span>
+              <span class="mini">▾</span>
+            </div>
+            <div class="now-form">
+              <div class="now-line">
+                <div class="now-ta">问问这个页面…</div>
+                <button class="btn solid icon big">→</button>
+              </div>
+              <div class="now-meta">
+                <span class="ring warn">
+                  <svg width="14" height="14" viewBox="0 0 16 16">
+                    <circle
+                      cx="8"
+                      cy="8"
+                      r="6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      opacity="0.25"
+                    />
+                    <circle
+                      cx="8"
+                      cy="8"
+                      r="6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                      stroke-dasharray="37.7"
+                      stroke-dashoffset="6.03"
+                    />
+                  </svg>
+                  上下文 84%
+                </span>
+                <span class="spacer"></span>
+                <span>Enter 发送 · Shift+Enter 换行</span>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            输入区总高 <b>132px</b>。textarea 只有 <b>256px</b>（304 − 按钮 40 −
+            gap 8），而 chip 那行 <b>36px</b> 是面板里除正文外最贵的不动产 ——
+            它 90% 的时间只是在「显示当前值」。
+          </div>
+        </div>
+
+        <div>
+          <div class="cap"><span class="tag new">建议</span></div>
+          <div class="panel" style="height: auto; padding-bottom: 8px">
+            <div class="p-transcript" style="flex: none; min-height: 60px">
+              <div class="msg">
+                <div class="who">助手</div>
+                <div class="bubble">这一页有 24 条商品，我先把前 5 条读出来。</div>
+              </div>
+            </div>
+            <div class="p-foot">
+              <div class="composer focus">
+                <div class="c-chip" id="demo-chip">
+                  <span class="fav" style="background: #ff5000">淘</span>
+                  <span class="truncate" style="flex: 1"
+                    >商品列表 - 淘宝网</span
+                  >
+                  <span class="badge on" id="demo-badge">固定</span>
+                  <button class="x" id="demo-x" title="取消固定（回到自动跟随）">
+                    ✕
+                  </button>
+                </div>
+                <textarea class="c-ta" placeholder="问问这个页面…"></textarea>
+                <div class="c-bar">
+                  <button class="c-at" id="demo-at">@ 选页</button>
+                  <button class="ring warn" id="demo-ring-live">
+                    <svg width="14" height="14" viewBox="0 0 16 16">
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r="6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        opacity="0.25"
+                      />
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r="6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-dasharray="37.7"
+                        stroke-dashoffset="6.03"
+                        id="demo-ring-arc"
+                      />
+                    </svg>
+                    <span id="demo-ring-text">上下文 84%</span>
+                  </button>
+                  <span class="spacer"></span>
+                  <span class="c-hint" id="demo-hint">Enter 发送</span>
+                  <button class="btn solid icon c-send">→</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            输入区总高 <b>130px</b>（含卡片 padding），textarea 满宽
+            <b>288px</b> —— 比现状宽 <b>+32px</b>、矮 2px。chip 与输入框共用一个
+            边框，读起来是「我带着这一页在问」，而不是「面板上有两个控件」。
+          </div>
+        </div>
+      </div>
+      <div class="note">
+        <b>为什么不是把 chip 塞进 textarea 里做 inline 前缀</b>：320px 下
+        chip 会吃掉约 100px 输入宽度，剩 190px 反而比现状还窄。把 chip 放在卡片内
+        <b>独立一行</b>（Gemini / Dia 的做法），textarea 才能拿回全宽。
+      </div>
+
+      <h3>② 解除入口：只在「固定」时出现，语义是回到自动，不是变成无目标</h3>
+      <div class="cmp">
+        <div>
+          <div class="cap"><span class="tag now">现状 · 两种来源共用一行</span></div>
+          <div class="panel" style="height: auto">
+            <div class="p-foot">
+              <div class="c-chip" style="pointer-events: none">
+                <span class="fav" style="background: #1677ff">G</span>
+                <span class="truncate" style="flex: 1">订单详情</span>
+                <span class="badge">自动</span>
+              </div>
+              <div class="px">
+                自动跟随：<b>没有 X</b>。本来就没什么可解除的 ——
+                它是运行时解析出来的。
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="cap"><span class="tag new">建议 · pinned 才给 X</span></div>
+          <div class="panel" style="height: auto">
+            <div class="p-foot">
+              <div class="c-chip" style="pointer-events: none">
+                <span class="fav" style="background: #ff5000">淘</span>
+                <span class="truncate" style="flex: 1">商品列表 - 淘宝网</span>
+                <span class="badge on">固定</span>
+                <button class="x">✕</button>
+              </div>
+              <div class="px">
+                点 X → 从 <code>pins</code> 移除、chip 立刻变回
+                <span class="badge">自动</span> 并显示
+                <code>resolveTargetTab</code> 降级链解析出的那一页。<b
+                  >不会闪成空</b
+                >（因为不存在无目标态）。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>③ 水位：平时不出现，要紧时才说话</h3>
+      <div class="cmp">
+        <div>
+          <div class="cap"><span class="tag now">现状 · 常驻 + 告急整句</span></div>
+          <div class="panel" style="height: auto">
+            <div class="p-foot">
+              <div class="now-meta" style="margin: 0; flex-wrap: wrap">
+                <span class="ring crit">
+                  <svg width="14" height="14" viewBox="0 0 16 16">
+                    <circle
+                      cx="8"
+                      cy="8"
+                      r="6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      opacity="0.25"
+                    />
+                    <circle
+                      cx="8"
+                      cy="8"
+                      r="6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                      stroke-dasharray="37.7"
+                      stroke-dashoffset="1.13"
+                    />
+                  </svg>
+                  上下文 97%
+                </span>
+                <span style="color: var(--red-fg); font-size: 11px"
+                  >上下文将满，建议新建会话</span
+                >
+                <span class="spacer"></span>
+                <span>Enter 发送 · Shift+Enter 换行</span>
+              </div>
+              <div class="px">
+                元信息行因 <code>flex-wrap</code> 从 <b>24px</b> 撑到
+                <b>46px</b> —— 恰恰在最需要看正文的时候吃掉 22px。
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="cap"><span class="tag new">建议 · 阈值 + 短词</span></div>
+          <div class="panel" style="height: auto">
+            <div class="p-foot">
+              <div class="c-bar">
+                <button class="c-at">@ 选页</button>
+                <button class="ring crit">
+                  <svg width="14" height="14" viewBox="0 0 16 16">
+                    <circle
+                      cx="8"
+                      cy="8"
+                      r="6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="3"
+                      opacity="0.25"
+                    />
+                    <circle
+                      cx="8"
+                      cy="8"
+                      r="6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="3"
+                      stroke-linecap="round"
+                      stroke-dasharray="37.7"
+                      stroke-dashoffset="1.13"
+                    />
+                  </svg>
+                  97% · 将满
+                </button>
+                <span class="spacer"></span>
+                <span class="c-hint">Enter 发送</span>
+                <button class="btn solid icon c-send">→</button>
+              </div>
+              <div class="px">
+                单行不换行，恒 <b>32px</b>。完整那句（含估算说明与 token
+                用量）留在点开的明细里 —— 它本来就在那儿。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note">
+        <b>阈值是 80 / 95，但两档的收益不同</b>：&lt;80% 不渲染，收益是
+        <b>认知</b>（平时零干扰，与主流产品一致），不是省像素——底行由 @
+        按钮和发送键撑着，环不出现高度也一样。真正省下像素的是
+        <b>告急改短词</b>：避免换行，稳住 22px。
+      </div>
+
+      <h2>2 · 320px 侧栏下的完整面板</h2>
+      <div class="grid">
+        <!-- A 常态 -->
+        <div class="case">
+          <div class="cap"><b>A · 常态</b>（水位 62%，环不出现）</div>
+          <div class="panel">
+            <div class="p-head">
+              <button class="btn" style="flex: 1; justify-content: flex-start">
+                <span class="mini">◷</span>
+                <span class="truncate">商品列表 · 比价</span>
+              </button>
+              <button class="btn icon">＋</button>
+            </div>
+            <div class="p-transcript">
+              <div class="msg">
+                <div class="who">你</div>
+                <div class="bubble me">把这一页前 5 条商品的标题和价格列出来</div>
+              </div>
+              <div class="msg">
+                <div class="who">助手</div>
+                <div class="tool-card">
+                  <div class="t">
+                    <span>✓</span>
+                    <span class="truncate">read_page · 商品列表 - 淘宝网</span>
+                    <span class="spacer"></span>
+                    <span class="mini">1.2s</span>
+                  </div>
+                </div>
+              </div>
+              <div class="msg">
+                <div class="who">助手</div>
+                <div class="bubble">
+                  这一页有 24 条。前 5 条：<br />1. xxx ¥129<br />2. xxx
+                  ¥89<br />3. xxx ¥259<br />4. xxx ¥49<br />5. xxx ¥1,299
+                </div>
+              </div>
+            </div>
+            <div class="p-foot">
+              <div class="composer">
+                <div class="c-chip">
+                  <span class="fav" style="background: #ff5000">淘</span>
+                  <span class="truncate" style="flex: 1"
+                    >商品列表 - 淘宝网</span
+                  >
+                  <span class="badge">自动</span>
+                </div>
+                <textarea class="c-ta" placeholder="问问这个页面…"></textarea>
+                <div class="c-bar">
+                  <button class="c-at">@ 选页</button>
+                  <span class="spacer"></span>
+                  <span class="c-hint">Enter 发送</span>
+                  <button class="btn solid icon c-send">→</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            底行只有 @ 与发送 —— 车道很空。这正是对的状态：没有坏事要汇报时，
+            不该有东西占着视线。
+          </div>
+        </div>
+
+        <!-- B 水位 84 -->
+        <div class="case">
+          <div class="cap"><b>B · 水位 84%</b>（环出现，黑白提级）</div>
+          <div class="panel">
+            <div class="p-head">
+              <button class="btn" style="flex: 1; justify-content: flex-start">
+                <span class="mini">◷</span>
+                <span class="truncate">商品列表 · 比价</span>
+              </button>
+              <button class="btn icon">＋</button>
+            </div>
+            <div class="p-transcript">
+              <div class="msg">
+                <div class="who">助手</div>
+                <div class="bubble">
+                  第 6–12 条也读出来了。要我继续往下读，还是先对比价格？
+                </div>
+              </div>
+              <div class="msg">
+                <div class="who">你</div>
+                <div class="bubble me">继续，读到第 20 条</div>
+              </div>
+            </div>
+            <div class="p-foot">
+              <div class="composer">
+                <div class="c-chip">
+                  <span class="fav" style="background: #ff5000">淘</span>
+                  <span class="truncate" style="flex: 1"
+                    >商品列表 - 淘宝网</span
+                  >
+                  <span class="badge">自动</span>
+                </div>
+                <textarea class="c-ta" placeholder="问问这个页面…"></textarea>
+                <div class="c-bar">
+                  <button class="c-at">@ 选页</button>
+                  <button class="ring warn">
+                    <svg width="14" height="14" viewBox="0 0 16 16">
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r="6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        opacity="0.25"
+                      />
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r="6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-dasharray="37.7"
+                        stroke-dashoffset="6.03"
+                      />
+                    </svg>
+                    上下文 84%
+                  </button>
+                  <span class="spacer"></span>
+                  <button class="btn solid icon c-send">→</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            环出现时把 hint 让出去（<code>min-w-0</code> +
+            truncate）：<b>数字比快捷键提示重要</b>。hint 在窄宿主用短版
+            <code>inputHintShort</code>。
+          </div>
+        </div>
+
+        <!-- C 告急 -->
+        <div class="case">
+          <div class="cap"><b>C · 水位 97%</b>（红 + 短词，不换行）</div>
+          <div class="panel">
+            <div class="p-head">
+              <button class="btn" style="flex: 1; justify-content: flex-start">
+                <span class="mini">◷</span>
+                <span class="truncate">商品列表 · 比价</span>
+              </button>
+              <button class="btn icon">＋</button>
+            </div>
+            <div class="p-transcript">
+              <div class="msg">
+                <div class="who">助手</div>
+                <div class="bubble">
+                  读到第 18 条了。再往下会挤掉前面的内容，要不要我先把结果汇总一次？
+                </div>
+              </div>
+            </div>
+            <div class="p-foot">
+              <div class="composer">
+                <div class="c-chip">
+                  <span class="fav" style="background: #ff5000">淘</span>
+                  <span class="truncate" style="flex: 1"
+                    >商品列表 - 淘宝网</span
+                  >
+                  <span class="badge">自动</span>
+                </div>
+                <textarea class="c-ta" placeholder="问问这个页面…"></textarea>
+                <div class="c-bar">
+                  <button class="c-at">@ 选页</button>
+                  <button class="ring crit">
+                    <svg width="14" height="14" viewBox="0 0 16 16">
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r="6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="3"
+                        opacity="0.25"
+                      />
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r="6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="3"
+                        stroke-linecap="round"
+                        stroke-dasharray="37.7"
+                        stroke-dashoffset="1.13"
+                      />
+                    </svg>
+                    97% · 将满
+                  </button>
+                  <span class="spacer"></span>
+                  <button class="btn solid icon c-send">→</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            点环 → 明细（复用现有 <code>AgentDropdown side="top"</code>）：
+            估算说明 + token 用量 + 「新会话」，副注「上下文从零开始，当前会话保留在历史里」。
+          </div>
+        </div>
+
+        <!-- D @ 菜单 -->
+        <div class="case">
+          <div class="cap"><b>D · 输入 @ 弹列表</b>（文档流内，不浮层）</div>
+          <div class="panel">
+            <div class="p-head">
+              <button class="btn" style="flex: 1; justify-content: flex-start">
+                <span class="mini">◷</span>
+                <span class="truncate">商品列表 · 比价</span>
+              </button>
+              <button class="btn icon">＋</button>
+            </div>
+            <div class="p-transcript">
+              <div class="msg">
+                <div class="who">助手</div>
+                <div class="bubble">这一页有 24 条商品。</div>
+              </div>
+            </div>
+            <div class="p-foot">
+              <div class="at-menu">
+                <div class="head">选择目标页 · ↑↓ 移动 · Enter 选中 · Esc 关闭</div>
+                <ul>
+                  <li class="sel">
+                    <span class="fav" style="background: #ff5000">淘</span>
+                    <span class="truncate">商品列表 - 淘宝网</span>
+                    <span class="u">当前</span>
+                  </li>
+                  <li>
+                    <span class="fav" style="background: #1677ff">G</span>
+                    <span class="truncate">订单详情 - 商家后台</span>
+                    <span class="u">窗口 1</span>
+                  </li>
+                  <li>
+                    <span class="fav" style="background: #111">D</span>
+                    <span class="truncate">Docs · 比价口径说明</span>
+                    <span class="u">窗口 1</span>
+                  </li>
+                  <li>
+                    <span class="fav" style="background: #0a0">扣</span>
+                    <span class="truncate">扣子 - AI 工作流</span>
+                    <span class="u">窗口 2</span>
+                  </li>
+                </ul>
+              </div>
+              <div class="composer focus">
+                <div class="c-chip">
+                  <span class="fav" style="background: #ff5000">淘</span>
+                  <span class="truncate" style="flex: 1"
+                    >商品列表 - 淘宝网</span
+                  >
+                  <span class="badge">自动</span>
+                </div>
+                <textarea class="c-ta">帮我对一下 @</textarea>
+                <div class="c-bar">
+                  <button class="c-at" style="border-color: var(--accent)"
+                    >@ 选页</button
+                  >
+                  <span class="spacer"></span>
+                  <span class="c-hint">Enter 发送</span>
+                  <button class="btn solid icon c-send">→</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            菜单在 composer <b>上方</b>、文档流内（与
+            <code>/</code> 菜单同一立场，不盖正文、面板矮时压缩的是
+            transcript）。键盘导航整套复用 <code>onDraftKeydown</code> 已有的
+            ↑↓ / Enter / Esc。
+          </div>
+        </div>
+      </div>
+
+      <h2>3 · 宽宿主（独立助手页）下同一套组件</h2>
+      <div class="grid">
+        <div class="case wide">
+          <div class="cap">
+            <b>E · 720px</b> 同一份 <code>AgentPanel</code>，靠宿主声明形态 layout，
+            不是靠窗口断点
+          </div>
+          <div class="panel wide" style="height: 420px">
+            <div class="p-head">
+              <button class="btn" style="flex: 1; justify-content: flex-start">
+                <span class="mini">◷</span>
+                <span class="truncate">商品列表 · 比价</span>
+              </button>
+              <button class="btn icon">＋</button>
+            </div>
+            <div class="p-transcript">
+              <div class="msg">
+                <div class="who">助手</div>
+                <div class="bubble">这一页有 24 条商品，我先读前 5 条。</div>
+              </div>
+              <div class="msg">
+                <div class="who">助手</div>
+                <div class="tool-card">
+                  <div class="t">
+                    <span>✓</span>
+                    <span class="truncate">read_page · 商品列表 - 淘宝网</span>
+                    <span class="spacer"></span>
+                    <span class="mini">1.2s</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="p-foot">
+              <div class="composer">
+                <div class="c-chip" style="width: fit-content; max-width: 60%">
+                  <span class="fav" style="background: #ff5000">淘</span>
+                  <span class="truncate">商品列表 - 淘宝网</span>
+                  <span class="mini truncate" style="max-width: 260px"
+                    >https://s.taobao.com/search?q=...</span
+                  >
+                  <span class="badge on">固定</span>
+                  <button class="x">✕</button>
+                </div>
+                <textarea class="c-ta" placeholder="问问这个页面…"></textarea>
+                <div class="c-bar">
+                  <button class="c-at">@ 选页</button>
+                  <button class="ring warn">
+                    <svg width="14" height="14" viewBox="0 0 16 16">
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r="6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        opacity="0.25"
+                      />
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r="6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-dasharray="37.7"
+                        stroke-dashoffset="6.03"
+                      />
+                    </svg>
+                    上下文已用约 84%（窗口 128k）
+                  </button>
+                  <span class="spacer"></span>
+                  <span class="c-hint">Enter 发送 · Shift+Enter 换行</span>
+                  <button class="btn solid icon c-send">→</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="px">
+            宽宿主下三处自然舒展：chip 补出完整 URL、水位用完整句
+            <code>contextHint</code>、hint 用长版。这些是
+            <b>同一批组件按 layout 取值</b>，不是两套实现。
+          </div>
+        </div>
+      </div>
+      <div class="note warn">
+        <b>不能用 Tailwind 的 <code>md:</code> 断点判断宿主形态。</b>
+        侧栏可以拖宽（<code>[id].vue:431</code> 下限 360、只能拖宽），独立页的窗口也能拖很窄
+        —— 面板宽度取决于<b>宿主</b>而不是窗口。正确做法是
+        <code>AgentPanel</code> 收的 <code>host</code> 对象里加一个
+        <code>layout</code> 字段（'narrow' | 'wide'），或走容器查询。
+      </div>
+
+      <h2>4 · 交互细节，先把坑说死</h2>
+      <table class="spec">
+        <tr>
+          <th style="width: 130px">话题</th>
+          <th>规则</th>
+        </tr>
+        <tr>
+          <td>@ 的触发</td>
+          <td>
+            光标前一个字符是行首或空格时才触发。选中后<b>消费掉这个 token</b>
+            （把 <code>@查询词</code> 从 draft 里删掉）+ 把该页设为 pinned ——
+            这跟 <code>/</code> 不同：<code>/</code> 是整框替换成模板正文，
+            <code>@</code> 是「改目标页」这个副作用。
+          </td>
+        </tr>
+        <tr>
+          <td>与 / 互斥</td>
+          <td>
+            <code>/</code> 优先。它是「整框以 / 开头」的<b>整框态</b>，语义比词内
+            @ 强；且 <code>/</code> 菜单里第一项就是命令，用户看到的是命令列表而不是 tab 列表。
+          </td>
+        </tr>
+        <tr>
+          <td>中文输入法</td>
+          <td>
+            <span class="mark">真实的坑</span>
+            中文输入法下 <code>@</code> 常处于候选组词状态。菜单要等
+            <code>compositionend</code>（或用 <code>e.isComposing</code> 直接跳过）
+            再判定，否则打字过程中菜单会闪。
+          </td>
+        </tr>
+        <tr>
+          <td>X 解除</td>
+          <td>
+            只在 <code>pinned</code> 时渲染。点击 → host 把该 tabId 从
+            <code>pins</code> 移除、清
+            <code>focusedTabId</code>；<code>tab.js</code> 的降级链
+            （pinned → lastAccessed → 当前窗口 → 其他窗口）已经覆盖「pinned
+            不存在」的情况，chip 不会闪空。
+          </td>
+        </tr>
+        <tr>
+          <td>chip 标题截断</td>
+          <td>
+            320px 下：favicon 16 + gap 6 + 标题 + badge（自动/固定 约 30）+ X（仅
+            pinned 16）+ padding 8 → 标题约 <b>180px ≈ 15 个中文字</b>（12px）。
+            落地时按实测调，别让 badge 被挤掉 —— badge 是这行唯一说清「这是不是你选的」的东西。
+          </td>
+        </tr>
+        <tr>
+          <td>失效态</td>
+          <td>
+            <code>state</code> 为 closed / drift 时，chip 行整体转红底 +
+            「目标页已关闭」+「重新选择」（与现在一致），X 隐藏 ——
+            这时候该做的是重选，不是解除。
+          </td>
+        </tr>
+        <tr>
+          <td>忙碌态</td>
+          <td>
+            底行发送键换成 ■ 停止；chip 仍可点（换目标页不影响正在跑的那一轮，
+            和现在一致）；水位明细里的「新会话」照旧 disabled。
+          </td>
+        </tr>
+      </table>
+
+      <h2>5 · 像素账与落地清单</h2>
+      <table class="spec">
+        <tr>
+          <th style="width: 170px">项</th>
+          <th style="width: 90px">现状</th>
+          <th style="width: 90px">建议后</th>
+          <th>说明</th>
+        </tr>
+        <tr>
+          <td>输入区总高</td>
+          <td>132px</td>
+          <td>130px</td>
+          <td>chip 从独立一行并入卡片；底行由 32px 的按钮撑着</td>
+        </tr>
+        <tr>
+          <td>textarea 宽度</td>
+          <td>256px</td>
+          <td>288px</td>
+          <td>+32px。发送键移到底行，不再并排抢宽</td>
+        </tr>
+        <tr>
+          <td>告急态元信息行</td>
+          <td>46px</td>
+          <td>32px</td>
+          <td>整句 → 短词「将满」，不再触发 flex-wrap</td>
+        </tr>
+        <tr>
+          <td>常态水位占用</td>
+          <td>约 60px 宽</td>
+          <td>0</td>
+          <td>&lt;80% 不渲染（收益是认知，不是像素）</td>
+        </tr>
+        <tr>
+          <td>横向溢出</td>
+          <td>0</td>
+          <td>0</td>
+          <td>底行三个元素都 shrink-0 + spacer，hint 用 truncate 兜底</td>
+        </tr>
+      </table>
+
+      <h3>要动的文件</h3>
+      <ul class="tight">
+        <li>
+          <code>AgentPanel.vue</code> —— form 重构成 composer 卡片（chip 行 /
+          textarea / 底行）；元信息行并入底行；新增
+          <code>atMenuOpen</code> 与 <code>parseAtDraft</code>，与
+          <code>slashMenuOpen</code> 互斥。
+        </li>
+        <li>
+          <code>AgentTabPicker.vue</code> —— 出紧凑 chip 变体（进卡片的那版）；
+          <code>pinned</code> 时渲染 X，新增 <code>emit('unpin')</code>。
+        </li>
+        <li>
+          <code>src/agent/at.js</code>（新增）—— <code>parseAtDraft</code> /
+          <code>filterTabs</code> 纯函数，仿
+          <code>customizations.js</code> 那样带单测；<b>.vue 里的分支一条都测不到</b>。
+        </li>
+        <li>
+          <code>src/agent/index.js</code> —— 新增
+          <code>unpinTab()</code>（从 <code>pins</code> 移除当前 focus、重置
+          <code>focusedTabId</code>），约 10 行。
+        </li>
+        <li>
+          <code>AgentContextRing.vue</code> —— 加
+          <code>compact</code> 态（只出「97% · 将满」）；是否渲染由父级按
+          <code>percent &gt;= 80 || open</code> gate。
+        </li>
+        <li>
+          <code>locales zh/en</code> —— 新增
+          <code>pickTab.unpin</code>「取消固定（回到自动跟随）」、
+          <code>pickTab.attach</code>「@ 选择目标页」、
+          <code>inputHintShort</code>「Enter 发送」、
+          <code>contextCriticalShort</code>「将满」。<code>contextCritical</code>
+          保留（明细里还在用，删了就是孤儿键）。
+        </li>
+        <li>
+          测试 —— <code>panelRender</code> / <code>panelUi</code> 补：chip 在
+          composer 内、X 仅 pinned 出现、&lt;80% 无环、&gt;=95% 有短词。
+        </li>
+      </ul>
+
+      <h3>还没解决、但别在这版里做</h3>
+      <ul class="tight">
+        <li>
+          <b>琥珀一处三义</b>（未配置横幅 / advisory notice / 确认门）—— 挂着的
+          T-152，跟本稿正交，别顺手改。
+        </li>
+        <li>
+          <b>确认门缺「我自己来」</b>—— Atlas 的 take over 是第三档控制权，
+          属于功能增量，不是 UI 改造。
+        </li>
+        <li>
+          <b>Inside 形态</b>（选中页面文字就地问助手）—— 我们缺整个形态，
+          但要写 content script，是独立工作量。
+        </li>
+        <li>
+          <b>多页上下文</b>—— Dia 的 pile 交互留着，等真支持多页那天直接用；
+          现在 BYOK + 320px 撑不起「全挂」。
+        </li>
+      </ul>
+    </div>
+
+    <script>
+      var body = document.body;
+      document.getElementById('btn-theme').onclick = function () {
+        body.classList.toggle('dark');
+      };
+
+      document.getElementById('chk-wide').onchange = function (e) {
+        var wide = e.target.checked;
+        document.querySelectorAll('.panel').forEach(function (p) {
+          p.classList.toggle('wide', wide);
+        });
+        document.querySelectorAll('.case').forEach(function (c) {
+          c.classList.toggle('wide', wide);
+        });
+      };
+
+      // 水位演示：改圆环弧度 / 文案 / 档位，并演示「<80% 整段不渲染」
+      var C = 37.7;
+      var rng = document.getElementById('rng');
+      var out = document.getElementById('rng-out');
+      var ring = document.getElementById('demo-ring-live');
+      var arc = document.getElementById('demo-ring-arc');
+      var txt = document.getElementById('demo-ring-text');
+      var hint = document.getElementById('demo-hint');
+
+      function render(pct) {
+        out.textContent = pct + '%';
+        if (pct < 80) {
+          ring.style.display = 'none';
+          hint.style.opacity = '1';
+          return;
+        }
+        ring.style.display = 'inline-flex';
+        arc.setAttribute('stroke-dashoffset', (C * (1 - pct / 100)).toFixed(2));
+        arc.setAttribute('stroke-width', pct >= 95 ? '3' : '2.5');
+        var circles = ring.querySelectorAll('circle');
+        circles[0].setAttribute('stroke-width', pct >= 95 ? '3' : '2.5');
+        ring.classList.toggle('warn', pct >= 80 && pct < 95);
+        ring.classList.toggle('crit', pct >= 95);
+        txt.textContent = pct >= 95 ? pct + '% · 将满' : '上下文 ' + pct + '%';
+        hint.style.opacity = pct >= 80 ? '0.55' : '1';
+      }
+      rng.oninput = function () {
+        render(Number(rng.value));
+      };
+      render(62);
+
+      // 点 X：固定 → 自动（演示「不会闪成空」）
+      var badge = document.getElementById('demo-badge');
+      var x = document.getElementById('demo-x');
+      x.onclick = function () {
+        badge.textContent = '自动';
+        badge.classList.remove('on');
+        x.style.display = 'none';
+      };
+
+      // 点 @ 选页：切换菜单显隐（演示位置）
+      var at = document.getElementById('demo-at');
+      at.onclick = function () {
+        var wrap = document.querySelector('.cmp .panel .p-foot');
+        var menu = wrap.querySelector('.at-menu-demo');
+        if (menu) {
+          menu.remove();
+          return;
+        }
+        var m = document.createElement('div');
+        m.className = 'at-menu at-menu-demo';
+        m.style.marginTop = '0';
+        m.style.marginBottom = '6px';
+        m.innerHTML =
+          '<div class="head">选择目标页 · ↑↓ 移动 · Enter 选中 · Esc 关闭</div>' +
+          '<ul>' +
+          '<li class="sel"><span class="fav" style="background:#ff5000">淘</span><span class="truncate">商品列表 - 淘宝网</span><span class="u">当前</span></li>' +
+          '<li><span class="fav" style="background:#1677ff">G</span><span class="truncate">订单详情 - 商家后台</span><span class="u">窗口 1</span></li>' +
+          '<li><span class="fav" style="background:#111">D</span><span class="truncate">Docs · 比价口径说明</span><span class="u">窗口 1</span></li>' +
+          '</ul>';
+        wrap.insertBefore(m, wrap.firstChild);
+      };
+    </script>
+  </body>
+</html>

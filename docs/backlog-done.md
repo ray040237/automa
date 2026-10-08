@@ -2934,6 +2934,54 @@ tests 639 / suites 37 / pass 638 / fail 0 / skipped 1
 顺带重构：把面板用例里的 `host` 工厂提到模块级 `panelHost`，三处调用统一。
 状态：已完成（2026-10-08）
 
+## T-162 — 用量元信息行（用户重设计落地）：百分比常驻、阈值 80/95、明细点击展开
+
+登记日期：2026-10-08
+来源：2026-10-08 会话，用户基于真实 UI 出的重设计稿 + A~E 五条放置逻辑；
+方案 `docs/agent-context-meta-row.html`
+现象（重设计要解决的）：T-153 落地后水位是一个 14px 圆环塞在按钮行里，百分比**只有 hover
+才看得到**；而「要不要按发送」正取决于它。用户重设计把它挪到输入区**下方**的元信息行最左、
+与「Enter 发送 · Shift+Enter 换行」同属一行，并给出五条理由：A 它是状态不是按钮（无填充
+无悬停底，不与发送键争注意力）；B 贴长内容前视线正落在底行；C 阈值变色，平时零干扰、
+≥95% 才附文字；D token 明细与「清空上下文」收进点击展开；E 不放顶部会话栏（导航区会稀释
+「我在哪个对话」）。
+证据：读代码 + 真 Chromium 实测（headless + `build/newtab.css` 复刻页，
+`.scratch/t153-meta.html`）。
+落地的五处：
+① **元信息行**（新增，form 拆两层）：左=圆环+常驻百分比，右=快捷键提示；未配 API Key 时
+整行隐藏（发送已禁用，水位此刻无意义，省约 24px 给正文）。实测行高 24px。
+② **圆环改造**：百分比常驻（复用 `contextShort`，它本就是「上下文 {pct}%」，不新增键）；
+阈值 70/90 → **80/95**；三态改「灰 → accent 黑/白+环加粗 → 红」，≥95% 行内附
+`contextCritical`。**中间档刻意不引入琥珀** —— 琥珀在本面板已被 notice / 确认门 / 未配置
+横幅三种语义共用（T-152），再多一处会继续稀释警示力。
+③ **发送/停止合并成一个按钮位**：空闲 →（icon），忙碌 ■ 停止；**插话改由 Enter 提交**
+（`send()` 本来就放行插话队列 P3）。原先忙碌时两按钮并排把 textarea 压到 144px，
+实测现在忙碌=空闲=**250px**（横向溢出 0，是「挤」不是「撑破」）。
+④ **快捷键提示**：`inputHint` / 忙碌时 `interjectHint`（照实说「Enter 插话」）。
+⑤ **点击展开面板**（复用 `AgentDropdown`，`side="top"`）：水位+用量两行（复用
+`contextHint`/`usage`）+ 「新建会话」+ 副注 `contextNewNote`。
+**「清空上下文」的处理**：host 上没有原地清空的能力，最接近的是 `newSession`。按钮文案就用
+`session.new`、副注写明「上下文从零开始，当前会话保留在历史里」—— 不编一个「清空上下文」
+去描述它做不到的行为。
+**删键**：`workflow.agent.interject` 随插话按钮一起删除（插话语义转由 `interjectHint`
+承担），避免留孤儿键。新增 4 键：`contextCritical` / `contextNewNote` / `inputHint` /
+`interjectHint`（zh+en）。
+**一个技术约束**：`agent-dropdown` 在 `utils/sfc-render.mjs` 的 `GLOBAL_STUBS` 里，
+**slot 内容不渲染** —— 所以下拉必须由 `AgentPanel` 承载、圆环保持独立组件，否则渲染断言
+会对圆环整体失明。
+测试：新增三档阈值的渲染用例（50/84/96 三档，断言 `text-gray-400` / `text-accent` /
+`text-red-500` + `data-test="context-critical"`）；重写 T-159 用例（两个状态都钉
+`icon` prop 与 aria-label，并断言忙碌态无 send、空闲态无 stop）；新增元信息行提示用例
+（空闲 inputHint / 忙碌 interjectHint / 未配置整行隐藏）；新增静态守卫钉 4 个新键
+「存在且被引用」+ `interject` 已删除（键名打错时 vue-i18n 会静默回退成键名）。
+变异验证 4 处全中：阈值 95→99、80→90、去掉发送按钮 `icon`、去掉元信息行 `v-if="configured"`
+各产生 1 个 fail，均已还原。
+验收：npm test 692 项 / 691 pass / 0 fail / 0 cancelled；lint 0 error；check:i18n passed；
+build exit 0 且产物含 4 个新键、无 `interject` 残留。
+**未做**：输入框仍保留 autoresize 多行（T-12 的理由：写长指令不该在小窗里滚），只未改形态；
+用户稿里左侧的「+」按钮语义不明，默认不做。
+状态：已完成（2026-10-08）
+
 
 
 

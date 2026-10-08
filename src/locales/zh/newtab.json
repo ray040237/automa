@@ -785,6 +785,8 @@
       "contextShort": "上下文 {pct}%",
       "contextHint":
         "上下文已用约 {pct}%（窗口 {win}）。窗口大小是设置页里的建议值，BYOK 下协议不暴露真实窗口，所以这是估算。",
+      "contextCritical": "上下文将满，建议新建会话",
+      "contextNewNote": "上下文从零开始，当前会话保留在历史里",
       "notConfigured": "请先配置 API Key",
       "error": "出了点问题",
       "tool": {
@@ -824,7 +826,8 @@
         "canvasHint": "只改内存画布，不会保存；你检查后再自己点保存。"
       },
       "goSettings": "去设置页填写",
-      "interject": "插话",
+      "interjectHint": "Enter 插话 · Shift+Enter 换行",
+      "inputHint": "Enter 发送 · Shift+Enter 换行",
       "stop": "停止生成",
       "queued": "已排队",
       "queuedPending": "已入队 {n} 条插话，下一步开工前送达",
