@@ -32,20 +32,6 @@
 
 ### 改进
 
-## T-150 — 目标页 chip 的「自动」徽标对非技术用户语义不清
-
-登记日期：2026-10-07
-来源：2026-10-07 会话；用户指出初版 UI 评价误读截图后，读 `AgentTabPicker.vue:44-49` 与 `CONTEXT.md` 目标页/pin 概念
-现象：chip 上显示「自动」徽标（= targetTab 解析模式：auto 运行时自动选当前页 / pinned 用户固定）。普通用户看不懂「自动」指什么，易误以为是数据来源或抓取模式（初版评价即因此误读）。
-证据：推断，未实测（读代码：`AgentTabPicker.vue` 里 `pinned ? pickTab.pinned : pickTab.auto`；`CONTEXT.md` 明定 targetTab 由 pinned→lastAccessed→当前窗口→其他窗口解析，无「无目标」态）。
-影响：非技术用户不理解助手正读哪一页、为何有的页可固定有的不能；最坏把「自动」当成某个可切换的功能开关。
-建议：
-① 文案（零风险，必做）：`pickTab.auto`「自动」→「跟随当前页」；`pickTab.pinned`「固定」→「已固定」。键位 `src/locales/zh|en/newtab.json:775-776`。
-② tooltip（零风险）：徽标 span 加 `:title` 解释 auto=助手自动选当前页 / pinned=你已锁定此页（当前整个 chip 只有 `pickTab.title` 一个 title，不解释 auto 含义；`AgentTabPicker.vue:39-49`）。
-③ 样式（零风险）：auto 用中性灰、pinned 用 accent 高亮，让「已固定」更显眼（当前两态同色 `bg-gray-500/15`，看不出区别）。
-④ 解除固定入口（有逻辑，需评审）：`AgentTabList.vue` 下拉点选即 `onPickTab`→`targetPinned=true`，且**无退回 auto 的路径**——一旦手选就永久 pinned（pin 跨轮持久化于会话 pins，`targetState.js` 的 initialPinsFromTab/upsertPin）。建议下拉加「解除固定 / 跟随当前页」项，调用 host.unpin() 置 `targetPinned=false`（pin 持久化由 CONTEXT「resolveTargetTab 永远解析出一个页」保证退回安全）。代价：新增 host 方法 + runtime 清 pins 接口，牵连会话持久化，单独评审。
-状态：待审核
-
 ## T-151 — 输入框 placeholder 在独立助手页误导（两宿主共用同一文案）
 
 登记日期：2026-10-07
@@ -55,26 +41,6 @@
 影响：基本无——原担心的「误导」不成立。
 建议：降级为「可选文案软优化」或直接驳回。若做，独立页文案改更泛（如「问我任何事」），需 host 暴露标志位区分两宿主（composable 层注入）。非缺陷，是否保留由用户定。
 状态：待审核（建议驳回或降级）
-
-## T-152 — 琥珀/黄色被三种语义共用，警示退化（确认门 ≈ notice ≈ 未配置横幅）
-
-登记日期：2026-10-07
-来源：2026-10-07 会话（用户追问「UI 上有没有可以改进的地方」）；读 `AgentConfirmCard.vue:2-4`、`AgentTranscript.vue:79-81`、`AgentPanel.vue:88-89`
-现象：三类语义完全不同的卡片用了几乎相同的琥珀/黄配色——notice（advisory 善意提醒）`bg-amber-500/10`、确认门（必须由用户裁决的写操作）`border-amber-300 bg-amber-500/10`、未配置 API Key（功能不可用的阻塞态）`border-yellow-300 bg-yellow-500/10`。视觉上无法区分「提醒」「要你裁决」「不可用」。
-证据：读代码实测（上述三处 class 逐字比对）。与 T-04「error 曾与 notice 共用琥珀、已改红」是同一类问题，只是确认门与配置横幅当年漏网。
-影响：用户把「需要我点允许/拒绝的写操作」看成普通提示而随手放行（最坏：误批 `test_js` / 画布写入）；把「功能不可用」看成轻提醒而反复发消息。
-建议：notice 退中性灰（advisory）；确认门升主色 accent + 明确双按钮（需你行动）；未配置改红色（阻塞，发送已禁用则明说）。纯 class 调整，零逻辑风险。
-状态：待审核
-
-## T-154 — 思考过程卡与压缩摘要卡视觉完全相同，无法区分
-
-登记日期：2026-10-07
-来源：2026-10-07 会话；读 `AgentTranscript.vue:41-69` 与 `:149-173`
-现象：`thinking` 折叠卡与 `compaction` 折叠卡的结构、配色（`rounded border-gray-200 bg-gray-50 dark:bg-gray-800/40`）、展开箭头完全一致。但前者是「模型怎么想」，后者是「上面若干轮被压成了一段历史摘要」——语义不同却长得一样。
-证据：读代码实测（两处 class 逐字比对）。
-影响：长会话里用户看到两张一样的折叠卡，分不清哪张是可忽略的思考过程、哪张是已被压缩的历史（后者意味着原始内容不再进 transcript，见 CONTEXT「压缩摘要」条）。
-建议：压缩摘要卡换档案类图标 + 微蓝边框/色调，与思考卡区分。零逻辑风险，纯 class。
-状态：待审核
 
 ## T-155 — 下拉缺 a11y 语义与键盘导航
 
@@ -97,16 +63,6 @@
 注：属「推断未实测用户反馈」——代码层溢出无提示是事实，但用户是否因此困惑未做可用性验证。
 状态：待审核
 
-
-## T-160 — disabled 的发送按钮说不出「为什么点不动」
-
-登记日期：2026-10-07
-来源：2026-10-07 会话；读 `AgentPanel.vue:183-191`，对照 `AgentSessionList.vue:17-18` 的既有经验
-现象：发送按钮 `:disabled="!draft.trim() || !configured"` 且**没有任何 title**。未配 Key 时用户 hover 按钮得不到解释（横幅在别处，未必被看到）。
-证据：读代码实测（`:183-191` 无 title 属性）。项目自己在 `AgentSessionList.vue:17-18` 注释里明确写过「disabled 按钮在部分浏览器不派发鼠标事件，title 只挂在按钮上有时弹不出来；容器不是 disabled，稳」——同一面板里这条经验没贯彻到发送按钮（T-11 只在会话列表与新建按钮上贯彻了）。
-影响：与 T-11 同一类问题——用户看到「有按钮但不给理由」。没配 Key 时尤其，因为按钮禁用的原因不在按钮上。
-建议：照抄 T-11 做法，把 `:title` 挂到**非 disabled 的包裹层**，文案按原因分两种（没草稿 / 没配 Key）。纯属性，但要区分两种原因，属小逻辑，需评审。
-状态：待审核
 
 ### 新功能（要讨论场景，审得慢）
 

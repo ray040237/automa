@@ -21,7 +21,11 @@
         <button
           type="button"
           class="hoverable flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
-          :title="t('workflow.agent.pickTab.title')"
+          :title="
+            pinned
+              ? t('workflow.agent.pickTab.pinnedHint')
+              : t('workflow.agent.pickTab.autoHint')
+          "
         >
           <img
             v-if="faviconUrl && !faviconBroken"
@@ -43,6 +47,24 @@
             {{ label }}
           </span>
 
+          <!--
+            T-173（原 T-150）：徽标不再两态都渲染。
+
+            原先 auto 态也挂一个「自动」徽标，问题是这个词对普通用户没有落点 ——
+            它指的是「运行时解析模式」，但用户会读成「数据来源」「抓取模式」，
+            甚至以为是个可切换的开关（初版 UI 评审就是这么误读的）。
+            T-150 原本的建议是把文案改成「跟随当前页」，但那会让徽标从约 30px
+            涨到 50px，在 320px 侧栏里挤掉标题 —— 而标题正是被 truncate 截得
+            最狠的地方。
+
+            改为：**默认态不贴标签**。跟随当前页是常态，常态不需要标注；
+            只有用户显式做过的动作（固定了某一页）才值得一个徽标。
+            这样既消灭了「自动」这个看不懂的词，也让 pinned 一眼可见
+            （原先两态同色 bg-gray-500/15，看不出区别）。
+            两态的含义改由上面那个动态 title 说明 —— hover 整条 chip 都能看到。
+
+            注意 v-else-if 而不是 v-else：auto 态这一格现在是空的。
+          -->
           <span
             v-if="stale"
             class="shrink-0 rounded bg-red-500/15 px-1 text-[10px] text-red-600 dark:text-red-400"
@@ -50,15 +72,10 @@
             {{ staleText }}
           </span>
           <span
-            v-else
-            class="shrink-0 rounded px-1 text-[10px] text-gray-500 dark:text-gray-400"
-            :class="pinned ? 'bg-gray-500/15' : ''"
+            v-else-if="pinned"
+            class="shrink-0 rounded bg-accent/15 px-1 text-[10px] text-accent"
           >
-            {{
-              pinned
-                ? t('workflow.agent.pickTab.pinned')
-                : t('workflow.agent.pickTab.auto')
-            }}
+            {{ t('workflow.agent.pickTab.pinned') }}
           </span>
 
           <span

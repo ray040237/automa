@@ -1,6 +1,18 @@
 <template>
+  <!--
+    T-172：确认门从琥珀升到 **accent**。
+
+    它和 notice（advisory 提醒）、未配置横幅（阻塞）、工具被拒（状态）原先
+    共用同一个琥珀色，于是「有个写操作等你裁决」看起来和「一句善意提醒」
+    一样重 —— 最坏的后果是用户把 test_js / 画布写入当普通提示随手放行。
+
+    accent 在本仓就是 --color-accent: 24 24 27（浅色）/ 244 244 245（深色），
+    也就是近黑与近白 —— 不加新色相，只是把「整个面板里唯一的那块深色边框」
+    留给需要用户裁决的东西。配合已有的双按钮（拒绝 default / 允许 accent）
+    和 riAlertLine，三重信号指向同一个意思：这里要你做决定。
+  -->
   <div
-    class="rounded border border-amber-300 bg-amber-500/10 p-3 dark:border-amber-700"
+    class="rounded border border-accent/40 bg-accent/5 p-3 dark:border-accent/40"
   >
     <div class="mb-1 flex items-center gap-2 text-sm font-medium">
       <v-remixicon name="riAlertLine" />

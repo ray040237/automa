@@ -66,6 +66,11 @@ const prettyArgs = computed(() => {
 });
 
 // 被拒绝和出错必须一眼能分出来：前者不是模型的错，后者模型还能自纠
+//
+// T-172 之后，琥珀在本面板里**只剩这一个语义**「工具被你拒绝了」：
+// notice 退了中性灰、确认门升了 accent、未配置横幅改了红。
+// 所以这里的琥珀不再是「三种警示里的一种」，它就是「拒绝」的专用色 ——
+// 改它之前先想清楚它会被谁撞上。
 const STATUS_STYLE = {
   [TOOL_STATUS.OK]: 'bg-green-500/15 text-green-700 dark:text-green-400',
   [TOOL_STATUS.ERROR]: 'bg-red-500/15 text-red-600 dark:text-red-400',

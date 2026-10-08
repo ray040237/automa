@@ -3009,3 +3009,56 @@ build exit 0 且产物含 4 个新键、无 `interject` 残留。
 
 
 
+
+
+### T-150 — 目标页 chip 的「自动」徽标对非技术用户语义不清
+
+类型：改进
+登记日期：2026-10-07
+现象：chip 上显示「自动」徽标（= targetTab 的解析模式 auto/pinned）。普通用户看不懂「自动」指什么，易误以为是数据来源或抓取模式（初版 UI 评价即因此误读）。
+结论：**偏离原建议**。原建议①是把文案改成「跟随当前页」，但实测那会让徽标从约 30px 涨到 50px —— 在 320px 侧栏里挤掉标题，而标题正是被 truncate 截得最狠的地方。
+改为 **auto 态干脆不渲染徽标**：跟随当前页是常态，常态不需要贴标签；只有用户显式做过的动作才值得一个徽标。这同时解决了「看不懂自动是什么」（词消失了）和「两态同色看不出区别」（auto 无徽标、pinned 有 accent 高亮）。
+两态含义改由 chip 的动态 title 说明（`pickTab.autoHint` / `pickTab.pinnedHint`）。建议④（解除固定入口）在 T-164 已完成：`host.unpinTab()` + 仅 pinned 且未失效时出现的 ✕。
+证据：`AgentTabPicker.vue` 的 `v-else` 徽标分支 → `v-else-if="pinned"`；`bg-gray-500/15`（两态同灰）→ `bg-accent/15 text-accent`。
+验收：`pickTab.auto` / `pickTab.title` 已删除（不留死键），新增 `pickTab.autoHint` / `pickTab.pinnedHint` 且 zh/en 齐备；守卫 `src/agent/affordance.test.js` 5 条全绿，变异 12/12 全中。
+状态：已完成（2026-10-09）
+
+
+### T-152 — 琥珀/黄色被多种语义共用，警示退化
+
+类型：改进
+登记日期：2026-10-07
+现象：登记时写的是「三种语义共用琥珀」—— notice（advisory）、确认门（写操作待裁决）、未配置横幅（阻塞）。复核实测时数出**四种**：还漏了工具「被拒绝」的状态色（`AgentToolStep.vue` 的 `TOOL_STATUS.REJECTED`）。视觉上无法区分「提醒」「要你裁决」「不可用」「你拒了」。
+结论：按语义拆解，两处用已有色阶、两处改色相：
+- notice（advisory）→ **中性灰 + 左侧竖线**。advisory 不需要颜色，只需要一个「这是旁注不是正文」的形态；竖线比色块安静。用 `border-l-2` 而非整圈边框，避免与 thinking 折叠卡（全边框 + 箭头）撞形状。
+- 确认门 → **accent**。本仓 `--color-accent: 24 24 27`（浅）/ `244 244 245`（深），即近黑与近白 —— **不加新色相**，只是把「整个面板里唯一那块深色边框」留给需要用户裁决的东西。配合已有的双按钮与 `riAlertLine`，三重信号指向同一意思。
+- 未配置横幅 → **红**。它是阻塞态（功能不可用），黄会让人以为「将就着也能用」。改红后与 error 同族（都表示「这事现在不成」）。
+- 工具被拒 → **保留琥珀**。收敛后琥珀在本面板只剩这一个语义（「你拒了这次操作」），反而变清晰了。副作用写在 `AgentToolStep.vue` 的注释里。
+为什么这项拖了这么久才做：根因不是「当初没改」，而是**当年没有守卫**。T-04 修掉了「error 与 notice 共用琥珀」，但确认门和横幅漏网；漏网之后没有东西拦着，于是「被拒绝」又加了第四处。
+验收：新增 `src/agent/semanticColor.test.js`，一条断言「琥珀/黄在整个 agent 组件目录里只允许出现在 REJECTED 一处」，另一条断言四张卡按「gray / accent / red / amber」分配且两两不同。变异 14/14 全中 —— 其中一条是**专为证明配色断言独立承重**而设：把 notice 改成绿色（不触发琥珀断言，只触发配色断言）。
+状态：已完成（2026-10-09）
+
+
+### T-154 — 思考过程卡与压缩摘要卡视觉完全相同，无法区分
+
+类型：改进
+登记日期：2026-10-07
+现象：`thinking` 折叠卡与 `compaction` 折叠卡的 class **逐字相同**（`rounded border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/40`），展开箭头也都在左侧。但前者是「模型怎么想」（可直接忽略），后者是「上面若干轮已被压成一段摘要、原文不再进 transcript」（用户**必须**知道，否则无法理解助手为什么忘了前面的内容）。
+结论：三处区分，**全部零色彩成本**（刻意不引入新色相，与 T-152 同一原则）：
+① 虚线边框（`border-dashed`）—— 形状上就和实线的 thinking 卡不同，这是最一眼可见的区别；
+② 灰底深一档（`bg-gray-50` → `bg-gray-100`）；
+③ 前置档案图标 `riHistoryLine`（在白名单 `src/lib/vRemixicon.js` 内 —— 本仓没有 `riArchiveLine`）+ 展开箭头用 `ml-auto` 移到右侧。
+验收：守卫钉住上述四点，并断言两张卡的 class 字符串不得再逐字相同（那正是本条的原始症状）。变异 4（去虚线）/ 5（去图标）/ 12（去深灰）/ 14（去箭头右移）分别命中不同断言。
+状态：已完成（2026-10-09）
+
+
+### T-160 — disabled 的发送按钮说不出「为什么点不动」
+
+类型：改进
+登记日期：2026-10-07
+现象：发送按钮 `:disabled="!draft.trim() || !configured"`，title 恒为「发送」。disabled 之后这句仍在说功能名，用户看到的是「有按钮但不给理由」（与 T-11 同一类问题，T-11 只在会话列表与新建按钮上贯彻了）。
+结论：复核时发现比登记时更严重 —— `UiButton` 在 disabled 时还带 `pointer-events-none`（见 `src/components/ui/UiButton.vue` 的 class 绑定），元素**完全不接收**鼠标事件，挂在它身上的 title 根本不可能弹出来。所以照 T-11 的做法，把 title 挂到**非 disabled 的包裹层**（`<span class="flex shrink-0" data-test="send-wrap">`）。
+原因分两种：没配 Key（`sendBlockedNoKey`，「先到设置里配置 API Key 才能发送」——要去改环境）/ 空草稿（`sendBlockedEmpty`，「先输入内容再发送」——只是还没打字）。
+顺手把禁用条件提成 `canSend` computed：原先内联的 `!draft.trim() || !configured` 散在模板里，改动时容易漂移（比如漏掉 configured）。
+验收：`src/agent/affordance.test.js` 钉住 —— 包裹层存在且带 `:title`、ui-button 自身不得再挂 title、三种情形都有对应文案、`canSend` 的定义形式。变异 9（title 移回按钮）/ 10（canSend 只看草稿）均命中。
+状态：已完成（2026-10-09）

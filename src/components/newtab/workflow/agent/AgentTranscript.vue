@@ -74,10 +74,16 @@
           :step="item.step"
         />
 
-        <!-- 预检/插队这类 advisory 提示：琥珀色，权重刻意压低 -->
+        <!-- 预检/插队这类 advisory 提示（system-notice）。
+             T-172：从琥珀退到**中性灰 + 左侧竖线**。原先它和确认门、未配置横幅、
+             工具被拒共用琥珀 —— 四种语义一个颜色，「一句善意提醒」看起来和
+             「有个写操作等你裁决」一样重。advisory 不需要颜色，只需要一个
+             「这是旁注、不是正文」的形态；竖线比色块更安静。
+             用 border-l-2 而不是整圈边框：整圈会和 thinking 折叠卡（全边框、
+             有展开箭头）撞形状。 -->
         <div
           v-else-if="item.type === 'notice'"
-          class="rounded bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400"
+          class="rounded border-l-2 border-gray-300 bg-gray-500/5 px-3 py-2 text-xs text-gray-600 dark:border-gray-600 dark:bg-gray-500/10 dark:text-gray-300"
         >
           {{ item.text }}
         </div>
@@ -148,7 +154,7 @@
              「上面那些消息」的摘要，展开看内容的人是少数 -->
         <div
           v-else-if="item.type === 'compaction'"
-          class="rounded border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/40"
+          class="rounded border border-dashed border-gray-300 bg-gray-100 dark:border-gray-600 dark:bg-gray-800/60"
         >
           <button
             type="button"
@@ -156,17 +162,27 @@
             :aria-expanded="item.open"
             @click="item.open = !item.open"
           >
-            <v-remixicon
-              :name="item.open ? 'riArrowDropDownLine' : 'riArrowRightLine'"
-              class="shrink-0"
-            />
+            <!-- T-154：压缩摘要卡原先与 thinking 卡 class 逐字相同
+                 （实线边框 + bg-gray-50 + 左侧展开箭头），但两者语义完全不同 ——
+                 前者是「模型怎么想」可直接忽略，后者是「上面若干轮已被压成一段
+                 摘要、原文不再进 transcript」，是用户**必须**知道的事
+                 （判断助手为什么忘了前面的内容）。
+                 三处区分，全部零色彩成本（不引入新的色相）：
+                 ① 虚线边框 —— 形状上就和实线的 thinking 卡不同；
+                 ② 灰底深一档（bg-gray-50 → bg-gray-100）；
+                 ③ 前置档案图标 + 箭头移到右侧（thinking 卡是左箭头、无前置图标）。 -->
+            <v-remixicon name="riHistoryLine" class="shrink-0" />
             <span class="shrink-0">{{
               t('workflow.agent.compacted', { n: item.turns })
             }}</span>
+            <v-remixicon
+              :name="item.open ? 'riArrowDropDownLine' : 'riArrowRightLine'"
+              class="ml-auto shrink-0"
+            />
           </button>
           <div
             v-if="item.open"
-            class="border-t border-gray-200 px-3 py-2 text-gray-600 dark:border-gray-700 dark:text-gray-300"
+            class="border-t border-dashed border-gray-300 px-3 py-2 text-gray-600 dark:border-gray-600 dark:text-gray-300"
           >
             <agent-markdown :raw="item.raw" />
           </div>

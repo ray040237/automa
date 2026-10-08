@@ -161,10 +161,12 @@
         <!-- T-158：横幅压成一行（p-3 text-sm → px-2 py-1.5 text-xs，省约 16px）。
          它只需要说清「发送已禁用、去哪配」—— 发送按钮本身就 disabled 了，
          不需要用一整块的篇幅去重复这件事。
-         注：配色仍是黄（T-152 的「黄/琥珀三义共用」尚未批准，此处不动颜色）。 -->
+         T-172：配色从黄改红。它是**阻塞态**（功能不可用），不是一个提醒 ——
+         黄在这里会让人以为「将就着也能用」。改红后与 error 同族（都表示
+         「这事现在不成」），琥珀则收敛为单一语义「工具被你拒绝了」。 -->
         <div
           v-if="!configured"
-          class="border-b border-yellow-300 bg-yellow-500/10 px-2 py-1.5 text-xs text-yellow-800 dark:text-yellow-300"
+          class="border-b border-red-300 bg-red-500/10 px-2 py-1.5 text-xs text-red-700 dark:border-red-700 dark:text-red-400"
         >
           <button type="button" class="underline" @click="goSettings">
             {{ t('workflow.agent.goSettings') }}
@@ -409,17 +411,28 @@
                 <v-remixicon name="riStopLine" class="shrink-0" />
               </ui-button>
 
-              <ui-button
+              <!--
+                T-160：title 挂在**外层 span** 上，不是按钮上。
+                按钮 disabled 时带 pointer-events-none，鼠标事件根本不落到它身上，
+                挂在它上面的 title 永远弹不出来（T-11 已在会话列表里踩过这条）。
+                span 不是 disabled 元素，事件正常，title 才说得出原因。
+              -->
+              <span
                 v-else
-                variant="accent"
-                icon
-                type="submit"
-                :disabled="!draft.trim() || !configured"
-                :title="t('workflow.agent.send')"
-                :aria-label="t('workflow.agent.send')"
+                class="flex shrink-0"
+                :title="sendTitle"
+                data-test="send-wrap"
               >
-                <v-remixicon name="riArrowRightLine" class="shrink-0" />
-              </ui-button>
+                <ui-button
+                  variant="accent"
+                  icon
+                  type="submit"
+                  :disabled="!canSend"
+                  :aria-label="t('workflow.agent.send')"
+                >
+                  <v-remixicon name="riArrowRightLine" class="shrink-0" />
+                </ui-button>
+              </span>
             </div>
           </div>
         </form>
@@ -574,6 +587,27 @@ const inHistory = computed(() => !wide.value && view.value === 'history');
 const configured = computed(() =>
   Boolean(props.host.config && props.host.config.apiKey)
 );
+
+/**
+ * T-160：发送按钮为什么点不动，要说得出原因。
+ *
+ * 原先按钮上挂着恒定的 title「发送」—— disabled 之后这句仍然在说功能名，
+ * 用户看到的是「有按钮但不给理由」（和 T-11 同一类问题：T-11 只在会话列表与
+ * 新建按钮上贯彻了，发送按钮漏了）。
+ *
+ * 更要命的是 UiButton 在 disabled 时还加了 `pointer-events-none`
+ * （见 `src/components/ui/UiButton.vue` 的 class 绑定）—— 元素**完全不接收**
+ * 鼠标事件，title 根本不可能弹出来。所以必须照 T-11 的做法，把 title 挂到
+ * **非 disabled 的包裹层**（AgentSessionList.vue:17-18 的注释里有这条经验的原文）。
+ *
+ * 两种原因分开说：没配 Key 是环境问题（要去设置），空草稿只是还没打字。
+ */
+const canSend = computed(() => Boolean(draft.value.trim()) && configured.value);
+const sendTitle = computed(() => {
+  if (!configured.value) return t('workflow.agent.sendBlockedNoKey');
+  if (!draft.value.trim()) return t('workflow.agent.sendBlockedEmpty');
+  return t('workflow.agent.send');
+});
 
 /**
  * header 上那个 chip 显示什么。
