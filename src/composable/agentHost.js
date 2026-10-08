@@ -302,6 +302,33 @@ export function useAgentHost(deps) {
     agent.targetState = tab ? 'ok' : 'none';
   }
 
+  /**
+   * 取消固定目标页（T-164）。
+   *
+   * 立刻按降级链重新解析一次 —— chip 不能闪成空：用户按 X 之后看到的应当是
+   * 「自动 + 解析出来的那一页」，而不是先空一下再填上。unpinTab 返回 false
+   * 说明本来就是自动态，这时不用（也不该）重解析：解析结果不会变，白白多一次
+   * tabs 查询。
+   */
+  async function onUnpinTab() {
+    if (!agent.runtime) return;
+    if (!agent.runtime.unpinTab()) return;
+
+    agent.targetPinned = false;
+
+    let windowId;
+    try {
+      const currentWindow = await browser.windows.getCurrent();
+      windowId = currentWindow ? currentWindow.id : undefined;
+    } catch (err) {
+      windowId = undefined;
+    }
+
+    const next = await resolveTarget({ windowId });
+    agent.targetTab = next;
+    agent.targetState = next ? 'ok' : 'none';
+  }
+
   function goToAgentSettings() {
     router.push({ path: '/settings', hash: '#agent' });
   }
@@ -518,6 +545,8 @@ export function useAgentHost(deps) {
     send,
     abort,
     pickTab: onPickTab,
+    // T-164：解除固定 —— 回到自动跟随，不是变成无目标
+    unpinTab: onUnpinTab,
     answerConfirm,
     // 面板的标签页选择数据源（T-90：从两宿主各自的直连 import 收归 seam）
     listTabs,

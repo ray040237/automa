@@ -93,7 +93,9 @@ test('T-128：上下文水位圆环在有 usage 时渲染、分母缺失时整�
   // T-153：水位从会话下拉搬到了输入区的圆环（AgentContextRing），渲染断言
   // 跟着搬 —— 否则守卫盯的还是旧位置，搬走之后它就永远绿了。
   const withUsage = await renderSfc(RING, {
-    props: { usage: { input: 64000, output: 800 }, contextWindow: 128000 },
+    // T-163：取 90% 而不是 50% —— 低于 CONTEXT_WARN_AT(80) 时环整段不渲染，
+    // 用 50% 测「有 usage 就该渲染」会红，而且它测的其实已经不是这档的语义了。
+    props: { usage: { input: 115200, output: 800 }, contextWindow: 128000 },
   });
   assert.ok(
     withUsage.includes('data-test="context-meter"'),
@@ -127,9 +129,9 @@ test('T-128：上下文水位圆环在有 usage 时渲染、分母缺失时整�
   );
 });
 
-test('T-153 重设计：水位三档 —— 常态灰 / >=80 提级 / >=95 红并附告急文字', async () => {
-  // 百分比现在是**常驻文字**（原先只在 hover 里），分档配色是唯一的强度信号，
-  // 而 .vue 里的分支静态守卫看不见 —— 只有渲染能验证「80 到底有没有提级」。
+test('T-163：水位阈值显示 —— <80% 整段不渲染 / >=80 提级 / >=95 红并附短词', async () => {
+  // 三档全部靠渲染验证：分档是 computed 里的分支，静态守卫看不见，而
+  // 「62% 到底还出不出来」正是这次改动要钉住的事。
   const at = (pct) =>
     renderSfc(RING, {
       props: {
@@ -138,22 +140,33 @@ test('T-153 重设计：水位三档 —— 常态灰 / >=80 提级 / >=95 红�
       },
     });
 
-  const normal = await at(50);
-  assert.ok(
-    normal.includes('workflow.agent.contextShort'),
-    '百分比要常驻（重设计 B 条）—— 原先只有 hover 才看得到'
-  );
-  assert.ok(
-    normal.includes('text-gray-400'),
-    '常态档是灰：与右侧快捷键提示同级，不该抢注意力（重设计 A 条）'
-  );
+  // —— 常态：<80% 整段不出现 ——
+  const quiet = await at(62);
   assert.equal(
-    normal.includes('data-test="context-critical"'),
+    quiet.includes('data-test="context-meter"'),
     false,
-    '50% 不该出现告急文字 —— 平时零干扰是这个设计的前提'
+    '62% 时水位整段不该出现 —— 一个常年显示「上下文 62%」的环不提示任何可行动的事（T-163）'
   );
 
+  // 阈值两侧各测一次，否则「80」这个数本身没被钉住
+  const justUnder = await at(79);
+  assert.equal(
+    justUnder.includes('data-test="context-meter"'),
+    false,
+    '79% 仍不该出现 —— 阈值是 80，差一个点就得有区别'
+  );
+  const justAt = await at(80);
+  assert.ok(
+    justAt.includes('data-test="context-meter"'),
+    '80% 要开始出现 —— 提示档的下边界'
+  );
+
+  // —— 提示档：提级但不告急 ——
   const warn = await at(84);
+  assert.ok(
+    warn.includes('workflow.agent.contextShort'),
+    '百分比要常驻（重设计 B 条）—— 原先只有 hover 才看得到'
+  );
   assert.ok(
     warn.includes('text-accent'),
     '>=80% 要提到 accent（黑/白）+ 环加粗：项目不用琥珀，见组件里的注释（T-152）'
@@ -164,6 +177,7 @@ test('T-153 重设计：水位三档 —— 常态灰 / >=80 提级 / >=95 红�
     '80~95% 只提级、不告急 —— 两个档位要有区别，否则等于只有一档'
   );
 
+  // —— 告急档：红 + 短词 ——
   const critical = await at(96);
   assert.ok(critical.includes('text-red-500'), '>=95% 要转红');
   assert.ok(
@@ -171,8 +185,15 @@ test('T-153 重设计：水位三档 —— 常态灰 / >=80 提级 / >=95 红�
     '>=95% 必须行内附告急文字：只变色不说话，用户不知道该干什么'
   );
   assert.ok(
-    critical.includes('workflow.agent.contextCritical'),
-    '告急文字要走 contextCritical 文案键，不能把句子写死在模板里'
+    critical.includes('workflow.agent.contextCriticalShort'),
+    '行内挂的是**短词**键 —— 整句 14 个字会把底行挤换行（实测 24px → 46px）'
+  );
+  // 注意：必须带 (?!Short) —— contextCriticalShort 含 contextCritical 前缀，
+  // 直接 includes 会被短词那条命中，这条断言就永远绿了。
+  assert.equal(
+    /workflow\.agent\.contextCritical(?!Short)/.test(critical),
+    false,
+    '完整那句不该出现在行内 —— 它归点开的明细（AgentPanel 的 dropdown）'
   );
 });
 

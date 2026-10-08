@@ -776,8 +776,10 @@
         "auto": "auto",
         "staleClosed": "Target page closed",
         "staleDrift": "Target page navigated away",
-        "reselect": "Re-select",
-        "faviconAlt": "Site icon"
+      "reselect": "Re-select",
+      "unpin": "Unpin — back to auto",
+      "attach": "@ Pick a page",
+      "faviconAlt": "Site icon"
       },
       "copy": "Copy",
       "copied": "Copied",
@@ -786,6 +788,7 @@
       "contextHint":
         "About {pct}% of the context window used ({win}). The window size is the suggested value from settings — BYOK providers do not expose the real limit, so this is an estimate.",
       "contextCritical": "Context nearly full — start a new chat",
+      "contextCriticalShort": "nearly full",
       "contextNewNote": "Starts a fresh context; the current chat stays in history",
       "notConfigured": "Configure your API key first",
       "error": "Something went wrong",

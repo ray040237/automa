@@ -133,6 +133,42 @@ describe('createAgentRuntime', () => {
     }
   });
 
+  test('T-164：unpinTab 清的是 pin，不是目标页 —— 解除固定后仍解析得出一页', () => {
+    const src = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+    const rt = createAgentRuntime(deps());
+
+    rt.pickTab({ id: 7, url: 'https://a.com/x', title: 'A' });
+    assert.equal(
+      rt.unpinTab(),
+      true,
+      '手选过就有 pin，解除应返回 true —— 宿主据此重新解析一次目标页'
+    );
+
+    // 解除的是「固定」这个来源，不是目标页本身 —— 「无目标」不是运行时支持的状态
+    assert.ok(
+      rt.getTargetTab(),
+      '解除固定不该让目标页变空：resolveTargetTab 的降级链永远解析得出一个'
+    );
+
+    assert.equal(
+      rt.unpinTab(),
+      false,
+      '本来就是自动态时返回 false —— 宿主据此跳过一次不会改变结果的多余 tabs 查询'
+    );
+
+    // 「清空整份 pins」只能靠源码钉：runtime 不对外暴露 pins（getter 挂在
+    // toolCtx 上），而**只摘当前一个**正是要防的写法 —— pins 里还可能躺着
+    // open_url 追加的页，留一个的话下一轮 resolveTarget 仍会命中它，
+    // 用户看到的是「按了 X 没反应」。
+    const at = src.indexOf('unpinTab()');
+    assert.ok(at > 0, 'index.js 里要有 unpinTab');
+    assert.match(
+      src.slice(at, at + 400),
+      /pins = \[\]/,
+      'unpinTab 必须清空整份 pins，而不是只摘当前这一个'
+    );
+  });
+
   test('T-66：坏地址必须在 apiKey 检查之后、buildModel 之前拦住', async () => {
     const src = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
     const start = src.indexOf('const send = async ({');

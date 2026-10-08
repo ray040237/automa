@@ -116,20 +116,49 @@
     />
 
     <!--
-      chip：助手正在读哪一页。
-      放在输入区顶上而不是 header，是因为这里正是「我正要问这个页面」这个决定发生的地方
-      —— Cursor 的 Listening pill 与 VS Code 的 chat-input 配置行都是这个位置。
-      它紧贴输入框，中间不留缝，读起来是输入区的一部分而不是浮在上面的控件。
+      T-166：@ 菜单（选目标页）。与 / 菜单同一立场 —— 文档流内、输入框上方，
+      不盖正文（T-06），面板高度不够时压缩的是 transcript。键盘导航整套复用
+      onDraftKeydown 已有的 ↑↓ / Enter / Esc。
+
+      目标页的**常驻 chip 不在这一行了**：它搬进了下面的 composer 卡片顶上
+      （见 §form），从「面板底部又一行控件」变成「输入区里的一个附件」——
+      Dia 的 composer 内 @ 与 Gemini 的 composer 左下角 + 都是这个结构。
     -->
-    <agent-tab-picker
-      class="mx-2 mb-1"
-      :target-tab="host.targetTab"
-      :state="host.targetState"
-      :pinned="host.targetPinned"
-      :list-tabs="host.listTabs"
-      @pick="host.pickTab($event)"
-      @no-target="host.noTarget()"
-    />
+    <div
+      v-if="atMenuOpen"
+      class="mx-2 mb-1 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
+      data-test="at-menu"
+    >
+      <ul class="scroll max-h-48 overflow-y-auto py-1">
+        <li v-for="(tab, i) in matchedTabs" :key="tab.id">
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm"
+            :class="i === atHighlight ? 'bg-box-transparent' : ''"
+            @click="pickAtTab(tab)"
+            @mousemove="atIndex = i"
+          >
+            <img
+              v-if="tab.favIconUrl"
+              :src="tab.favIconUrl"
+              class="h-4 w-4 shrink-0 rounded-sm"
+              :alt="t('workflow.agent.pickTab.faviconAlt')"
+            />
+            <v-remixicon
+              v-else
+              name="riEarthLine"
+              class="shrink-0 text-gray-400"
+            />
+            <span class="min-w-0 flex-1 truncate">{{
+              tab.title || tab.url
+            }}</span>
+            <span class="shrink-0 text-[10px] text-gray-400">
+              {{ t('workflow.agent.pickTab.window', { n: tab.windowId }) }}
+            </span>
+          </button>
+        </li>
+      </ul>
+    </div>
 
     <!-- / 模板菜单（T-81a）：draft 以 / 开头时出现。放文档流里不盖正文，
          与确认卡同一立场（T-06）。回车/点击选中后整框替换为模板正文。 -->
@@ -171,16 +200,117 @@
     </p>
 
     <form class="p-2 pt-0" @submit.prevent="send">
-      <div class="flex items-end gap-2">
+      <!--
+        T-166：composer 卡片。chip、输入框、底行共用一个边框 —— 目标页从「面板
+        底部常驻的一行控件」变成「输入区里的一个附件」。省掉 chip 那一行约 30px，
+        textarea 也从 256px 拿回全宽 288px（原结构里发送按钮与它并排抢宽）。
+      -->
+      <div
+        class="rounded-lg border border-gray-200 px-2 py-1.5 dark:border-gray-700"
+      >
+        <agent-tab-picker
+          class="mb-1"
+          :target-tab="host.targetTab"
+          :state="host.targetState"
+          :pinned="host.targetPinned"
+          :list-tabs="host.listTabs"
+          @pick="host.pickTab($event)"
+          @unpin="host.unpinTab()"
+          @no-target="host.noTarget()"
+        />
+
         <ui-textarea
+          ref="draftEl"
           v-model="draft"
           autoresize
-          class="min-h-[68px] max-h-[128px] flex-1 overflow-y-auto scroll scroll-xs"
+          class="w-full min-h-[60px] max-h-[128px] overflow-y-auto scroll scroll-xs border-0 bg-transparent px-1 py-1"
           :placeholder="t('workflow.agent.placeholder')"
           @keydown="onDraftKeydown"
         />
 
         <!--
+          底行（T-166）：@ 入口 + 水位 + 快捷键提示 + 发送。
+
+          水位只在 >=80% 时出现（T-163），平时这一行只有 @ 与发送 —— 车道很空
+          正是对的状态：没有坏事要汇报的时候，不该有东西占着视线。
+        -->
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="shrink-0 rounded border border-gray-200 px-1.5 text-[11px] text-gray-500 hover:bg-box-transparent dark:border-gray-700 dark:text-gray-400"
+            :title="t('workflow.agent.pickTab.attach')"
+            :aria-label="t('workflow.agent.pickTab.attach')"
+            data-test="at-trigger"
+            @click="startAtMenu"
+          >
+            @
+          </button>
+
+          <agent-dropdown
+            v-if="contextVisible"
+            v-model="contextOpen"
+            align="left"
+            side="top"
+            width="w-72"
+            class="shrink-0"
+          >
+            <template #trigger>
+              <agent-context-ring
+                :usage="host.usage"
+                :context-window="Number(host.config.contextWindow) || 0"
+              />
+            </template>
+
+            <!-- 明细：水位 + 用量 + 「新建会话」。两行文案复用 contextHint /
+               usage 两个既有键（圆环的 title 也是它们），不另造一套说法。 -->
+            <div class="p-2 text-xs text-gray-700 dark:text-gray-200">
+              <p>{{ contextHintLine }}</p>
+              <p class="mt-1">{{ usageLine }}</p>
+              <!-- T-163：完整那句「上下文将满，建议新建会话」从行内搬到这里 ——
+                 行内改挂两个字的短词，整句会把底行挤换行。 -->
+              <p
+                v-if="contextCritical"
+                class="mt-1 text-red-500 dark:text-red-400"
+              >
+                {{ t('workflow.agent.contextCritical') }}
+              </p>
+              <hr class="my-2 border-gray-200 dark:border-gray-700" />
+              <button
+                type="button"
+                class="hoverable flex w-full items-center gap-1.5 rounded px-1 py-1 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="host.busy"
+                :title="
+                  host.busy ? t('workflow.agent.session.busyHint') : undefined
+                "
+                @click="startNewSession"
+              >
+                <v-remixicon name="riAddLine" class="shrink-0" />
+                <span class="min-w-0 flex-1">{{
+                  t('workflow.agent.session.new')
+                }}</span>
+              </button>
+              <p
+                class="px-1 pt-0.5 text-[11px] text-gray-500 dark:text-gray-400"
+              >
+                {{ t('workflow.agent.contextNewNote') }}
+              </p>
+            </div>
+          </agent-dropdown>
+
+          <!-- T-166：这一句从「元信息行」搬到了底行。没配 API Key 时照样隐藏 ——
+             发送已禁用，教人按 Enter 没有意义（重设计里省下的那 22px 就是它）。 -->
+          <span
+            v-if="configured"
+            class="ml-auto min-w-0 truncate text-[11px] text-gray-400 dark:text-gray-500"
+          >
+            {{
+              host.busy
+                ? t('workflow.agent.interjectHint')
+                : t('workflow.agent.inputHint')
+            }}
+          </span>
+
+          <!--
           发送 / 停止共用同一个图标按钮位（T-159 + 重设计）：
           - 空闲：→ 发送（icon，40×40）
           - 忙碌：■ 停止生成；**插话改由 Enter 提交** —— 输入框忙碌时仍可打字，
@@ -189,99 +319,30 @@
           320px 侧栏里 textarea 只剩 144px（headless Chromium 实测），而忙碌恰恰是
           最要打字的时刻。合并成一个按钮位后，忙碌与空闲的 textarea 宽度一致。
         -->
-        <ui-button
-          v-if="host.busy"
-          variant="default"
-          icon
-          type="button"
-          :title="t('workflow.agent.stop')"
-          :aria-label="t('workflow.agent.stop')"
-          @click="host.abort()"
-        >
-          <v-remixicon name="riStopLine" class="shrink-0" />
-        </ui-button>
+          <ui-button
+            v-if="host.busy"
+            variant="default"
+            icon
+            type="button"
+            :title="t('workflow.agent.stop')"
+            :aria-label="t('workflow.agent.stop')"
+            @click="host.abort()"
+          >
+            <v-remixicon name="riStopLine" class="shrink-0" />
+          </ui-button>
 
-        <ui-button
-          v-else
-          variant="accent"
-          icon
-          type="submit"
-          :disabled="!draft.trim() || !configured"
-          :title="t('workflow.agent.send')"
-          :aria-label="t('workflow.agent.send')"
-        >
-          <v-remixicon name="riArrowRightLine" class="shrink-0" />
-        </ui-button>
-      </div>
-
-      <!--
-        元信息行（重设计 B 条）：水位与快捷键提示同属「输入区的元信息」，合成一行
-        放在输入框**下方**。贴长内容之前视线正落在这一行，是水位最该出现的时机。
-
-        左：圆环 + 常驻百分比（点开 = token 明细 + 新建会话，重设计 D 条）；
-        右：快捷键提示（忙碌时改说「Enter 插话」，因为这时 Enter 走的是插话队列）。
-
-        没配 API Key 时整行隐藏 —— 发送已禁用，水位此刻没有意义，省下约 22px
-        给正文（重设计里这行是新增的，不省就白丢了 T-158 攒下的空间）。
-      -->
-      <div
-        v-if="configured"
-        class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5"
-      >
-        <agent-dropdown
-          v-if="contextVisible"
-          v-model="contextOpen"
-          align="left"
-          side="top"
-          width="w-72"
-          class="shrink-0"
-        >
-          <template #trigger>
-            <agent-context-ring
-              :usage="host.usage"
-              :context-window="Number(host.config.contextWindow) || 0"
-            />
-          </template>
-
-          <!-- 明细：水位 + 用量 + 「新建会话」。
-               两行文案复用 contextHint / usage 两个既有键（圆环的 title 也是它们），
-               不另造一套说法，免得同一个数字两处措辞不一致。 -->
-          <div class="p-2 text-xs text-gray-700 dark:text-gray-200">
-            <p>{{ contextHintLine }}</p>
-            <p class="mt-1">{{ usageLine }}</p>
-            <hr class="my-2 border-gray-200 dark:border-gray-700" />
-            <button
-              type="button"
-              class="hoverable flex w-full items-center gap-1.5 rounded px-1 py-1 text-left disabled:cursor-not-allowed disabled:opacity-50"
-              :disabled="host.busy"
-              :title="
-                host.busy ? t('workflow.agent.session.busyHint') : undefined
-              "
-              @click="startNewSession"
-            >
-              <v-remixicon name="riAddLine" class="shrink-0" />
-              <span class="min-w-0 flex-1">{{
-                t('workflow.agent.session.new')
-              }}</span>
-            </button>
-            <!-- 副注：host 上没有「原地清空上下文」的能力，最接近的是 newSession
-                 —— 它会开一条新会话、把当前这条留在历史里。不写成「清空上下文」
-                 是因为那不是它的真实行为（文案撒谎比功能少一个按钮更糟）。 -->
-            <p class="px-1 pt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-              {{ t('workflow.agent.contextNewNote') }}
-            </p>
-          </div>
-        </agent-dropdown>
-
-        <span
-          class="ml-auto shrink-0 text-[11px] text-gray-400 dark:text-gray-500"
-        >
-          {{
-            host.busy
-              ? t('workflow.agent.interjectHint')
-              : t('workflow.agent.inputHint')
-          }}
-        </span>
+          <ui-button
+            v-else
+            variant="accent"
+            icon
+            type="submit"
+            :disabled="!draft.trim() || !configured"
+            :title="t('workflow.agent.send')"
+            :aria-label="t('workflow.agent.send')"
+          >
+            <v-remixicon name="riArrowRightLine" class="shrink-0" />
+          </ui-button>
+        </div>
       </div>
     </form>
   </div>
@@ -294,13 +355,24 @@ import { sessionOptionLabel } from '@/agent/sessions';
 import { suggestExamples } from '@/agent/examples';
 // 元信息行要问「水位算不算得出来」与格式化 token 数：判定与格式化都在纯模块里
 // （有单测），组件只消费结果 —— .vue 里写的分支一条都测不到。
-import { contextPercent as calcContextPercent, fmtTokens } from '@/agent/usage';
+import {
+  CONTEXT_CRITICAL_AT,
+  CONTEXT_WARN_AT,
+  contextPercent as calcContextPercent,
+  fmtTokens,
+} from '@/agent/usage';
 import { configIO } from '@/agent';
 import {
   filterCommands,
   loadCommands,
   parseSlashDraft,
 } from '@/agent/customizations';
+import {
+  filterTabs,
+  parseAtDraft,
+  stripAtToken,
+  tabPickPayload,
+} from '@/agent/at';
 import AgentTranscript from './AgentTranscript.vue';
 import AgentTabPicker from './AgentTabPicker.vue';
 import AgentSessionList from './AgentSessionList.vue';
@@ -344,7 +416,22 @@ const contextPct = computed(() =>
     Number(props.host.config && props.host.config.contextWindow) || 0
   )
 );
-const contextVisible = computed(() => contextPct.value !== null);
+
+/**
+ * 环要不要出现（T-163）：算得出来 **且** 到了提示档。
+ *
+ * 与 AgentContextRing 内部的 visible 是同一个条件（同一份常量），各挡一次是
+ * 有意的：这里挡的是「别渲染一个空的 dropdown」—— 环整段不渲染时 trigger 位
+ * 置会剩一个空按钮；组件里那道挡的是「环自己出不出来」，也是渲染测试唯一能
+ * 够到的地方（`agent-dropdown` 在 sfc-render 里是 slot 不渲染的桩，环挂在它
+ * 的 trigger slot 里，从面板这一层根本断言不到）。
+ */
+const contextVisible = computed(
+  () => contextPct.value !== null && contextPct.value >= CONTEXT_WARN_AT
+);
+const contextCritical = computed(
+  () => contextPct.value !== null && contextPct.value >= CONTEXT_CRITICAL_AT
+);
 const contextOpen = ref(false);
 
 /** 展开面板里的两行：水位（含估算说明）与 token 用量，文案键与圆环的 title 同源。 */
@@ -497,16 +584,124 @@ function pickCommand(c) {
   slashDismissed.value = true; // 正文本身以 / 开头时不能让菜单又弹回来
 }
 
+// —— @ 目标页菜单（T-166）——
+// 解析、过滤、载荷形状全在 @/agent/at（纯函数，有单测）；这里只做接线。
+
+const draftEl = ref(null);
+const atGroups = ref([]);
+const atIndex = ref(0);
+// 与 slashDismissed 同一件事：Esc 关掉之后，到 draft 离开触发态之前不再自动弹
+const atDismissed = ref(false);
+
+/**
+ * 光标处的 @ token。**不传 caret**（按草稿末尾算）：边打边筛的场景里光标本来
+ * 就在末尾，而跟踪 selectionStart 要在 textarea 上挂额外的事件监听；
+ * parseAtDraft 的 caret 参数留着，等真要做「光标停在句中」那天直接用。
+ */
+const atToken = computed(() => parseAtDraft(draft.value));
+const atActive = computed(() => atToken.value !== null);
+
+// 展平成一维才能用 ↑↓ 高亮；windowId 由分组补上（列表项自己有时不带）
+const matchedTabs = computed(() =>
+  filterTabs(atGroups.value, atToken.value ? atToken.value.query : '').flatMap(
+    (g) => (g.tabs || []).map((tab) => tabPickPayload(tab, g.windowId))
+  )
+);
+const atHighlight = computed(() =>
+  Math.min(atIndex.value, matchedTabs.value.length - 1)
+);
+
+/**
+ * 开合条件。
+ *
+ * `/` 优先：它是「整框以 / 开头」的**整框态**，语义强于词内的 @。两者在形状上
+ * 本就不重叠（`/@` 里 @ 的前面是 `/` 不是空白，parseAtDraft 不认它），这里再
+ * 显式挡一次，免得以后改任一侧的判定时撞车。
+ */
+const atMenuOpen = computed(
+  () =>
+    atActive.value &&
+    !atDismissed.value &&
+    !slashMenuOpen.value &&
+    matchedTabs.value.length > 0
+);
+
+/** 进入触发态才拉一次 —— 与标签页下拉同一立场：打开时才读，列表随时会变。 */
+watch(atActive, (on) => {
+  if (!on) return;
+
+  atDismissed.value = false;
+  atIndex.value = 0;
+
+  Promise.resolve()
+    .then(() => props.host.listTabs())
+    .then((list) => {
+      atGroups.value = Array.isArray(list) ? list : [];
+    })
+    .catch(() => {
+      // 读不出来就当没有可选项：菜单本来就有「为空不弹」这条
+      atGroups.value = [];
+    });
+});
+
+/** 底行那个 @ 按钮：把把手补进草稿，焦点交回输入框 —— 接下来就是打字筛选。 */
+function startAtMenu() {
+  const needSpace = draft.value.length > 0 && !/\s$/.test(draft.value);
+  draft.value += needSpace ? ' @' : '@';
+  atDismissed.value = false;
+
+  const el = draftEl.value && draftEl.value.textarea;
+  if (el && el.focus) el.focus();
+}
+
+/**
+ * 选中目标页。
+ *
+ * 与 `/` 不同：@ 的副作用是**改目标页**，正文里那个 `@淘宝` 只是输入时的把手，
+ * 摘掉再发 —— 留着会把一串「@淘宝」一起送进模型。
+ */
+function pickAtTab(tab) {
+  if (!tab) return;
+
+  props.host.pickTab(tab);
+  draft.value = stripAtToken(draft.value, atToken.value);
+  atDismissed.value = true;
+}
+
 /**
  * 输入框键盘路由。菜单开着时 ↑↓ 移高亮、回车选中、Esc 关闭；
  * 没开时回车 = 发送（与原 @keydown.enter.exact.prevent 等价：
  * 带修饰键的回车留给换行/浏览器默认行为）。
  */
 function onDraftKeydown(e) {
+  // 输入法组合期间的按键不是最终文本：中文输入法下 `@` 可能还停在候选状态，
+  // 这时就判定会让菜单闪一下再消失 —— compositionend 才是文本落定的时刻。
+  if (e.isComposing) return;
+
   const plainEnter =
     e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
 
+  // / 优先（T-166 的互斥规则）：整框态强于词内的 @
   if (!slashMenuOpen.value) {
+    if (atMenuOpen.value) {
+      const n = matchedTabs.value.length;
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const dir = e.key === 'ArrowDown' ? 1 : -1;
+
+        atIndex.value = (atHighlight.value + dir + n) % n;
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        atDismissed.value = true;
+      } else if (plainEnter) {
+        e.preventDefault();
+        pickAtTab(matchedTabs.value[atHighlight.value]);
+      }
+
+      return;
+    }
+
     if (plainEnter) {
       e.preventDefault();
       send();

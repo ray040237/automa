@@ -14,6 +14,19 @@ export function fmtTokens(n) {
 }
 
 /**
+ * 水位分档阈值（T-163）。
+ *
+ * 放在这里而不是 `.vue` 里，是因为**两处要用同一个数**：环自己要按它决定
+ * 渲不渲染、父组件要按它决定要不要套那个 dropdown。常量留在组件里就只能
+ * 在两处各写一遍 80，改一处忘一处。
+ *
+ * 80 起提示、95 起告急。比早期的 70/90 更晚 —— 实测反馈是「平时零干扰」比
+ * 「早预警」更值钱，水面下那 10 个点不足以打断输入。
+ */
+export const CONTEXT_WARN_AT = 80;
+export const CONTEXT_CRITICAL_AT = 95;
+
+/**
  * 上下文水位百分比（T-09③）。
  *
  * 分母是 `config.contextWindow` —— `config.js:38-42` 明说它是**建议值**（BYOK 场景

@@ -776,8 +776,10 @@
         "auto": "自动",
         "staleClosed": "目标页已关闭",
         "staleDrift": "目标页已跳到别的页面",
-        "reselect": "重新选择",
-        "faviconAlt": "站点图标"
+      "reselect": "重新选择",
+      "unpin": "取消固定（回到自动跟随）",
+      "attach": "@ 选择目标页",
+      "faviconAlt": "站点图标"
       },
       "copy": "复制",
       "copied": "已复制",
@@ -786,6 +788,7 @@
       "contextHint":
         "上下文已用约 {pct}%（窗口 {win}）。窗口大小是设置页里的建议值，BYOK 下协议不暴露真实窗口，所以这是估算。",
       "contextCritical": "上下文将满，建议新建会话",
+      "contextCriticalShort": "将满",
       "contextNewNote": "上下文从零开始，当前会话保留在历史里",
       "notConfigured": "请先配置 API Key",
       "error": "出了点问题",

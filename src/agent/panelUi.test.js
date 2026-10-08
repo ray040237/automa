@@ -99,13 +99,17 @@ test('布局守卫：会话管理在 header，目标页 chip 在输入区上方'
   assert.doesNotMatch(src, /session\.more/, 'header 不该再有「更多」溢出菜单');
   assert.doesNotMatch(src, /riMore2Fill/, 'header 不该再有「更多」按钮');
 
-  // chip 必须在输入 form 之前 —— 即贴着输入区，而不是漂在面板顶上
+  // T-166：chip 搬进了 composer 卡片 —— 现在是「表单内、输入框之前」，
+  // 而不再是「表单之前的一行」。它仍紧贴输入框（中间只隔 mb-1），
+  // 但归属变成了输入区的一部分：目标页是**这条消息的附件**，不是面板上
+  // 又一个控件。守卫跟着改判据，否则会把这次改动误判成回归。
   const chipAt = src.indexOf('<agent-tab-picker');
   const formAt = src.indexOf('<form');
+  const taAt = src.indexOf('<ui-textarea');
   assert.ok(chipAt > 0, '必须有目标页 chip');
   assert.ok(
-    chipAt < formAt,
-    '目标页 chip 必须排在输入 form 之前（贴着输入区），否则它又变成 header 那一行'
+    chipAt > formAt && chipAt < taAt,
+    '目标页 chip 必须在 form 内、且在输入框之前 —— 它是 composer 的顶行，不是表单外的独立一行'
   );
 });
 
@@ -1255,7 +1259,112 @@ test('T-153：圆环 tooltip 复用既有文案键，不留孤儿键', () => {
   );
 });
 
-test('T-153 重设计：新增的四个文案键要在两个 locale 里都有人引用', () => {
+test('T-164：目标页的解除键只在「用户固定且未失效」时出现', () => {
+  // X 挂在 agent-dropdown 的 trigger slot 里，而 slot 在渲染桩里根本不渲染
+  // （utils/sfc-render.mjs 的 GLOBAL_STUBS），所以这一条只能靠源码守卫 ——
+  // 与同文件其它静态守卫同一档，不是偷懒。
+  const picker = read(
+    'src/components/newtab/workflow/agent/AgentTabPicker.vue'
+  );
+  const panel = read('src/components/newtab/workflow/agent/AgentPanel.vue');
+
+  assert.match(
+    picker,
+    /v-if="showUnpin"/,
+    '解除键要由 showUnpin 控制 —— 不能无条件渲染（自动态没有可解除的东西）'
+  );
+  assert.match(
+    picker,
+    /showUnpin = computed\([\s\S]{0,80}?props\.pinned && !stale/,
+    'showUnpin 必须是 pinned && !stale：失效态该做的是重选，不是解除'
+  );
+  assert.match(
+    picker,
+    /@click\.stop/,
+    '点解除必须 stopPropagation —— dropdown 靠父 div 的 @click 开合，不拦会顺手把列表也打开'
+  );
+  assert.match(
+    picker,
+    /data-test="unpin-target"/,
+    '解除键要有 data-test —— 后续补交互测试（test:dom）时靠它定位'
+  );
+  assert.match(
+    panel,
+    /@unpin="host\.unpinTab\(\)"/,
+    '面板要把解除事件接到 host.unpinTab'
+  );
+
+  // 文案键：拼错会静默回退成键名，check:i18n 查不出来
+  for (const lang of ['zh', 'en']) {
+    const { agent } = JSON.parse(
+      read(`src/locales/${lang}/newtab.json`)
+    ).workflow;
+
+    assert.equal(
+      typeof agent.pickTab.unpin,
+      'string',
+      `${lang} 缺 workflow.agent.pickTab.unpin`
+    );
+  }
+});
+
+test('T-166：@ 菜单挂在 composer 上方，与 / 互斥，且不把 @token 发给模型', () => {
+  const src = read('src/components/newtab/workflow/agent/AgentPanel.vue');
+
+  // 菜单在文档流内、输入框上方（与 / 菜单同一立场，T-06：不盖正文）
+  assert.match(src, /v-if="atMenuOpen"/, '要有 @ 菜单的开合条件');
+  assert.match(
+    src,
+    /data-test="at-menu"/,
+    '菜单要有 data-test —— 后续补交互测试时靠它定位'
+  );
+  assert.match(
+    src,
+    /data-test="at-trigger"/,
+    '底行的 @ 入口要有 data-test'
+  );
+
+  // 互斥：/ 是整框态，优先于词内的 @
+  assert.match(
+    src,
+    /!slashMenuOpen\.value/,
+    'atMenuOpen 必须排除 slashMenuOpen —— 两个菜单同时开，Enter 归谁就说不清了'
+  );
+
+  // 输入法：组合期间的按键不是最终文本，中文输入法下 @ 还在候选状态就判定会闪
+  assert.match(
+    src,
+    /e\.isComposing/,
+    '键盘路由必须先看 isComposing —— 中文输入法下菜单会闪一下再消失'
+  );
+
+  // 选中后摘掉把手：留着会把「@淘宝」一起送进模型
+  assert.match(
+    src,
+    /stripAtToken\(draft\.value, atToken\.value\)/,
+    '选中目标页后要把 @token 从草稿里摘掉 —— 它是输入时的把手，不是要说的话'
+  );
+  assert.match(
+    src,
+    /host\.pickTab\(tab\)/,
+    '选中的副作用是改目标页'
+  );
+
+  // 文案键
+  for (const lang of ['zh', 'en']) {
+    const { agent } = JSON.parse(
+      read(`src/locales/${lang}/newtab.json`)
+    ).workflow;
+
+    assert.equal(
+      typeof agent.pickTab.attach,
+      'string',
+      `${lang} 缺 workflow.agent.pickTab.attach`
+    );
+  }
+});
+
+test('T-163：新增的五个文案键要在两个 locale 里都有人引用', () => {
   // 键名打错时 vue-i18n 会**静默回退成键名**（界面上显示一串
   // `workflow.agent.xxx`），既不会报错也不会被 check:i18n 拦下 ——
   // 所以「键存在」和「有人引用」这两件事都要钉住。
@@ -1265,7 +1374,10 @@ test('T-153 重设计：新增的四个文案键要在两个 locale 里都有人
   const panelSrc = read('src/components/newtab/workflow/agent/AgentPanel.vue');
 
   const owners = {
-    contextCritical: ringSrc, // >=95% 行内那句
+    // T-163：整句搬去点开的明细，行内只留两个字的短词 ——
+    // 14 个字的整句会把底行挤换行（实测元信息行 24px → 46px）。
+    contextCritical: panelSrc,
+    contextCriticalShort: ringSrc,
     contextNewNote: panelSrc, // 展开面板里「新建会话」的副注
     inputHint: panelSrc, // 元信息行右侧
     interjectHint: panelSrc, // 忙碌态改说插话

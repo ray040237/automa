@@ -3,60 +3,86 @@
   <agent-dropdown v-model="open" align="left" side="top" width="w-72">
     <template #trigger>
       <!--
+        T-164：chip 拆成「主体 + 解除」两个**并排的兄弟 button**（不嵌套 ——
+        嵌套 button 是无效 HTML）。点解除必须 `@click.stop`：dropdown 是靠
+        trigger 外面那个 div 的 @click 开合的，不拦掉冒泡会顺手把列表也打开。
+
+        解除键只在 **pinned 且未失效** 时出现：
+        - 自动跟随的页没什么可解除的（它是运行时解析出来的，不是用户选的）；
+        - 失效态（页关了 / 漂到别的 origin）该做的是**重选**，不是解除。
+
         失效态（T-08）：页被关掉或跳去了别的 origin 时，这一行不再假装正常。
-        「重新选择」就是同一个 trigger —— 点哪都开列表，不另套一个按钮
-        （按钮套在 dropdown 的 trigger 里是无效 HTML）。
+        「重新选择」就是同一个 trigger —— 点哪都开列表，不另套一个按钮。
       -->
-      <button
-        type="button"
-        class="flex max-w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
-        :class="
-          stale
-            ? 'bg-red-500/10 hover:bg-opacity-20'
-            : 'bg-box-transparent hover:bg-opacity-10'
-        "
-        :title="t('workflow.agent.pickTab.title')"
+      <div
+        class="flex max-w-full items-center rounded-md"
+        :class="stale ? 'bg-red-500/10' : 'bg-box-transparent'"
       >
-        <img
-          v-if="faviconUrl && !faviconBroken"
-          :src="faviconUrl"
-          class="h-4 w-4 shrink-0 rounded-sm"
-          :alt="t('workflow.agent.pickTab.faviconAlt')"
-          @error="faviconBroken = true"
-        />
-        <v-remixicon v-else name="riEarthLine" class="shrink-0 text-gray-400" />
-
-        <span class="truncate text-xs" :class="{ 'text-gray-400': !targetTab }">
-          {{ label }}
-        </span>
-
-        <span
-          v-if="stale"
-          class="shrink-0 rounded bg-red-500/15 px-1 text-[10px] text-red-600 dark:text-red-400"
+        <button
+          type="button"
+          class="hoverable flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
+          :title="t('workflow.agent.pickTab.title')"
         >
-          {{ staleText }}
-        </span>
-        <span
-          v-else
-          class="shrink-0 rounded px-1 text-[10px] text-gray-500 dark:text-gray-400"
-          :class="pinned ? 'bg-gray-500/15' : ''"
-        >
-          {{
-            pinned
-              ? t('workflow.agent.pickTab.pinned')
-              : t('workflow.agent.pickTab.auto')
-          }}
-        </span>
+          <img
+            v-if="faviconUrl && !faviconBroken"
+            :src="faviconUrl"
+            class="h-4 w-4 shrink-0 rounded-sm"
+            :alt="t('workflow.agent.pickTab.faviconAlt')"
+            @error="faviconBroken = true"
+          />
+          <v-remixicon
+            v-else
+            name="riEarthLine"
+            class="shrink-0 text-gray-400"
+          />
 
-        <span
-          v-if="stale"
-          class="shrink-0 text-[10px] text-red-600 underline dark:text-red-400"
-        >
-          {{ t('workflow.agent.pickTab.reselect') }}
-        </span>
+          <span
+            class="truncate text-xs"
+            :class="{ 'text-gray-400': !targetTab }"
+          >
+            {{ label }}
+          </span>
 
-        <v-remixicon name="riArrowDownSLine" class="shrink-0 text-gray-400" />
-      </button>
+          <span
+            v-if="stale"
+            class="shrink-0 rounded bg-red-500/15 px-1 text-[10px] text-red-600 dark:text-red-400"
+          >
+            {{ staleText }}
+          </span>
+          <span
+            v-else
+            class="shrink-0 rounded px-1 text-[10px] text-gray-500 dark:text-gray-400"
+            :class="pinned ? 'bg-gray-500/15' : ''"
+          >
+            {{
+              pinned
+                ? t('workflow.agent.pickTab.pinned')
+                : t('workflow.agent.pickTab.auto')
+            }}
+          </span>
+
+          <span
+            v-if="stale"
+            class="shrink-0 text-[10px] text-red-600 underline dark:text-red-400"
+          >
+            {{ t('workflow.agent.pickTab.reselect') }}
+          </span>
+
+          <v-remixicon name="riArrowDownSLine" class="shrink-0 text-gray-400" />
+        </button>
+
+        <button
+          v-if="showUnpin"
+          type="button"
+          class="mr-1 shrink-0 rounded p-1 text-gray-500 hover:bg-red-500/10 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400"
+          :title="t('workflow.agent.pickTab.unpin')"
+          :aria-label="t('workflow.agent.pickTab.unpin')"
+          data-test="unpin-target"
+          @click.stop="emit('unpin')"
+        >
+          <v-remixicon name="riCloseLine" class="shrink-0" />
+        </button>
+      </div>
     </template>
 
     <agent-tab-list
@@ -85,9 +111,12 @@ import AgentTabList from './AgentTabList.vue';
  * 的按钮、在输入区点开会把面板撑开（tippy 把内容挂到 body 上定位，脱离本列）。
  * 现在改用本文件夹里的 AgentDropdown（留在本列、absolute）。
  *
- * chip 不做「✕ 解除」：`resolveTargetTab` 永远会解析出一个目标页
- * （pinned → lastAccessed → 当前窗口 → 其他窗口），没有「无目标」这个状态可表达，
- * 硬塞一个解除按钮会造出运行时不支持的假状态。
+ * T-164：chip 现在有「✕ 解除」，但**只在 pinned 时**。早先完全不做的理由依然
+ * 成立 —— `resolveTargetTab` 永远会解析出一个目标页（pinned → lastAccessed →
+ * 当前窗口 → 其他窗口），「无目标」不是一个运行时支持的状态，硬造一个解除入口
+ * 等于让 UI 显示一个假状态。解除键的真实语义是 **取消固定 → 回到自动跟随**：
+ * 目标页照样有，只是不再由用户指定。所以它不能出现在自动态（没什么可解除的），
+ * 也不能出现在失效态（那时候该做的是重选）。
  */
 const props = defineProps({
   targetTab: { type: Object, default: null },
@@ -99,7 +128,7 @@ const props = defineProps({
   pinned: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['pick', 'no-target']);
+const emit = defineEmits(['pick', 'no-target', 'unpin']);
 
 const { t } = useI18n();
 
@@ -130,6 +159,9 @@ watch(
 const stale = computed(
   () => props.state === 'closed' || props.state === 'drift'
 );
+
+/** T-164：解除键只在「用户固定的、且还活着」时出现 —— 理由见顶部注释。 */
+const showUnpin = computed(() => props.pinned && !stale.value);
 const staleText = computed(() =>
   props.state === 'closed'
     ? t('workflow.agent.pickTab.staleClosed')

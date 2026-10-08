@@ -750,6 +750,29 @@ export function createAgentRuntime(deps) {
       return targetTab;
     },
 
+    /**
+     * 解除固定（T-164）。
+     *
+     * 语义是「**取消固定 → 回到自动跟随**」，不是「变成无目标」——
+     * `resolveTargetTab` 永远解析得出一个目标（pinned → lastAccessed → 当前窗口
+     * → 其他窗口），「无目标」不是一个运行时支持的状态，UI 上造出它只会显示一个
+     * 假状态。所以这里只摘 pin、清焦点，targetTab 由宿主重新解析（要读 tabs API，
+     * 是异步的，不该在这里做）。
+     *
+     * 清空整份 pins 而不是只摘当前这一个：pins 里还可能躺着模型 open_url 追加的
+     * 页，只摘一个的话下一轮解析仍会命中 pins[0]，用户看到的是「按了 X 没反应」。
+     * 「回到自动跟随」这个语义本来就要求没有 pin 参与解析。
+     *
+     * @returns {boolean} 之前确实有 pin（false = 本来就是自动态，无需重解析）
+     */
+    unpinTab() {
+      const had = pins.length > 0;
+      pins = [];
+      focusedTabId = null;
+
+      return had;
+    },
+
     /** 打开已有会话：读回历史并按 pin 恢复目标页。 */
     async openSession(id) {
       currentSessionId = id || null;
