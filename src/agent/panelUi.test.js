@@ -1357,6 +1357,85 @@ test('T-166：@ 菜单挂在 composer 上方，与 / 互斥，且不把 @token �
   }
 });
 
+test('T-169：宽窄形态由宿主声明（host.layout），不许用视口断点判', () => {
+  const panel = stripComments(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
+  );
+  const host = stripComments(read('src/composable/agentHost.js'));
+
+  // ① 开关读的是 host.layout —— 不是 window.innerWidth / matchMedia / 断点
+  assert.match(
+    panel,
+    /props\.host\.layout === 'wide'/,
+    '形态必须由 host.layout 判定（宿主声明的事实），不是组件自己量宽度'
+  );
+  assert.doesNotMatch(
+    panel,
+    /innerWidth|matchMedia|ResizeObserver/,
+    '面板不许自己量视口/容器宽度 —— 量出来的是窗口，而形态取决于宿主'
+  );
+  assert.doesNotMatch(
+    panel,
+    /(?:^|[\s"'])(?:sm|md|lg|xl|2xl):/,
+    '不许用 Tailwind 响应式断点判形态：侧栏能拖宽（下限 360、只能拖宽），独立助手页的窗口也能拖窄 —— 断点会在拖宽的侧栏上错误地长出左栏'
+  );
+
+  // ② 两个分支各自的挂载点都在
+  assert.match(
+    panel,
+    /v-if="wide"/,
+    '左栏必须挂在 v-if="wide" 上（窄宿主 320px 里切 240px 给列表，对话区只剩 80px）'
+  );
+  assert.match(panel, /data-test="session-side"/, '左栏要有 data-test');
+  assert.match(
+    panel,
+    /data-test="open-history"/,
+    '窄宿主的「进历史」chip 要留着 —— 它那条路还没被左栏取代'
+  );
+
+  // ③ 左栏里挂的得是历史列表本身（渲染桩是通用桩，认不出组件名，只能守源码）
+  const sideAt = panel.indexOf('data-test="session-side"');
+  assert.ok(sideAt > 0, '没找到左栏，守卫本身失效');
+  const rightAt = panel.indexOf('class="flex min-w-0 flex-1 flex-col"');
+  assert.ok(rightAt > sideAt, '没找到右栏起点，守卫本身失效');
+  assert.match(
+    panel.slice(sideAt, rightAt),
+    /<agent-session-list/,
+    '左栏里必须挂 agent-session-list（只留一个空壳标题等于没做）'
+  );
+
+  // ④ 宽宿主的正文区永远是对话：chip 不出现、composer 不隐藏
+  assert.match(
+    panel,
+    /!wide && view === 'chat'/,
+    '「进历史」chip 只在窄宿主出现 —— 宽宿主点它等于跳到一个已经显示在屏幕上的列表'
+  );
+  assert.match(
+    panel,
+    /inHistory = computed\([\s\S]{0,80}?!wide\.value/,
+    'inHistory 必须在宽宿主恒为 false —— 正文区永远是对话，composer 永远在'
+  );
+
+  // ⑤ host 侧：宿主没声明时按 narrow 兜底
+  assert.match(
+    host,
+    /layout: deps\.layout === 'wide' \? 'wide' : 'narrow'/,
+    'layout 必须由宿主声明，缺省按 narrow（更保守：不占常驻横向空间）'
+  );
+
+  // ⑥ 两个宿主都要显式声明，且不许靠缺省
+  assert.match(
+    stripComments(read('src/newtab/pages/Agent.vue')),
+    /layout: 'wide'/,
+    "独立助手页必须显式声明 layout: 'wide'"
+  );
+  assert.match(
+    stripComments(read('src/newtab/pages/workflows/[id].vue')),
+    /layout: 'narrow'/,
+    "编辑器侧栏必须显式声明 layout: 'narrow'"
+  );
+});
+
 test('T-163：新增的五个文案键要在两个 locale 里都有人引用', () => {
   // 键名打错时 vue-i18n 会**静默回退成键名**（界面上显示一串
   // `workflow.agent.xxx`），既不会报错也不会被 check:i18n 拦下 ——

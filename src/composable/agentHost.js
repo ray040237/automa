@@ -108,6 +108,15 @@ export function useAgentHost(deps) {
     // targetPinned 表示这一页是**用户手选固定**的（false = 运行时自动解析出来的）。
     targetState: 'none',
     targetPinned: false,
+    /**
+     * T-169：宿主形态。'narrow'（320px 侧栏，历史走**视图切换**）｜
+     * 'wide'（独立助手页，历史是**左栏常驻**）。
+     *
+     * 必须由宿主声明，**不许用窗口宽度断点判**：侧栏能拖宽（`[id].vue:431`
+     * 下限 360、只能拖宽），独立助手页的窗口也能拖很窄 —— 面板宽度取决于宿主，
+     * 不取决于视口。写 `md:` 断点会在「拖宽的侧栏」上错误地切成左栏布局。
+     */
+    layout: deps.layout === 'wide' ? 'wide' : 'narrow',
     busy: false,
     runtime: null,
     sessions: [],

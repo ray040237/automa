@@ -265,6 +265,66 @@ test('T-168：会话历史列表渲染 —— 时间分组 / 消息数 / 空态 
   );
 });
 
+test('T-169：宿主形态 —— 宽宿主左栏常驻历史，窄宿主走视图切换', async () => {
+  // 形态是 computed 里的分支（`wide` / `inHistory`），静态守卫看不见 ——
+  // 「把左栏包进 v-if=false」在源码文本上一个字没少，守卫照样绿。
+  const sessions = [
+    { id: 'a', title: '一条历史', lastAccessedAt: Date.now(), messageCount: 2 },
+  ];
+
+  const wide = await renderSfc(PANEL, {
+    props: { host: panelHost({ layout: 'wide', sessions }) },
+  });
+  assert.ok(
+    wide.includes('data-test="session-side"'),
+    '宽宿主（独立助手页）要有常驻左栏 —— 历史不该藏在一次点击后面'
+  );
+  assert.ok(
+    wide.includes('workflow.agent.session.history'),
+    '左栏要有「历史」这一栏的标题（列表组件本身在 sfc-render 里是通用桩，认不出来）'
+  );
+  assert.ok(
+    wide.includes('data-test="at-trigger"'),
+    '宽宿主 composer 必须一直在 —— 历史占的是左栏，不是正文区'
+  );
+  assert.equal(
+    wide.includes('data-test="open-history"'),
+    false,
+    '宽宿主不该再有「进历史」chip：列表已经在屏幕上了，这个按钮等于跳到一个已经可见的东西'
+  );
+
+  const narrow = await renderSfc(PANEL, {
+    props: { host: panelHost({ sessions }) },
+  });
+  assert.ok(
+    narrow.includes('data-test="open-history"'),
+    '窄宿主（320px 侧栏）要有「进历史」chip —— 历史走视图切换'
+  );
+  assert.equal(
+    narrow.includes('data-test="session-side"'),
+    false,
+    '窄宿主不能有左栏：320px 里再切 240px 给列表，对话区只剩 80px'
+  );
+  assert.equal(
+    narrow.includes('data-stub="agent-session-list"') ||
+      narrow.includes('workflow.agent.session.history'),
+    false,
+    '窄宿主默认停在对话视图 —— 历史要用户点进去才出现'
+  );
+
+  // 宿主没声明 layout 时按 narrow 兜底（更保守：不占常驻横向空间）。
+  // 这一条同时钉住「默认不是 wide」—— 万一以后 reactive 里写成默认 wide，
+  // 所有没声明的宿主都会凭空长出左栏。
+  const undeclared = await renderSfc(PANEL, {
+    props: { host: panelHost({ layout: undefined, sessions }) },
+  });
+  assert.equal(
+    undeclared.includes('data-test="session-side"'),
+    false,
+    'layout 没声明时必须按 narrow 兜底'
+  );
+});
+
 test('T-153：模型名仍在会话列表里渲染（搬走水位时别把它一起丢了）', async () => {
   const html = await renderSfc(LIST, {
     props: {

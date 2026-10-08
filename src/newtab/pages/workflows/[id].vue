@@ -608,6 +608,9 @@ const workflow = computed(() => {
  * onCanvasChanged 只标「未保存」：保存永远是用户自己的动作（G5）。
  */
 const agentHost = useAgentHost({
+  // T-169：宿主形态。侧栏是窄宿主 —— 历史走「视图切换」（点头部芯片把
+  // 消息区整块换成历史列表），不占常驻横向空间。
+  layout: 'narrow',
   // T-135：haveEditAccess 是异步加载的响应式权限，setup 期求值会把它冻结成
   // 快照（团队用户页面刚打开时多半还没就绪 → 助手永久缺 canvas 组）。
   // 传 getter，runtime 每次 send 求值，权限变化下一轮生效。

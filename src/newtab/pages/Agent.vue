@@ -18,6 +18,10 @@ import { useAgentHost } from '@/composable/agentHost';
  * 要「打开某个工作流来编辑」走的是编辑器侧栏那个宿主，接线同样在 useAgentHost。
  */
 const agent = useAgentHost({
+  // T-169：宿主形态。独立助手页是宽宿主 —— 左侧 240px 常驻历史列表，
+  // 右侧对话区，不做视图切换（侧栏那种「把消息区整块换成历史」在宽屏上
+  // 是浪费：右边会空掉一大块）。
+  layout: 'wide',
   // 没有画布：canvas 组工具不注册，提示词的事实表同步裁剪
   enabledGroups: ['page', 'context', 'tab'],
   // 助手页会话是全局的，不绑定工作流
