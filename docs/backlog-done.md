@@ -3148,3 +3148,17 @@ build exit 0 且产物含 4 个新键、无 `interject` 残留。
 结论：T-150 改为 auto 态不渲染徽标（默认跟随是常态不需贴标签），两态含义改由动态 title 说明，删 `pickTab.auto`/`pickTab.title`。T-160 把 title 移到非 disabled 包裹层 `<span data-test="send-wrap">`，禁用原因分两种（没配 Key / 空草稿），禁用条件提成 `canSend` computed 防漂移。上述点由 `affordance.test.js` 守卫。
 验收：随 48b96c77 落地（见 T-172 验收数字）。
 状态：已清（2026-10-08）
+
+### T-174 — 工具卡窄形态横向溢出 + 体量收敛
+
+类型：bug（回归/布局）
+登记日期：2026-10-09
+来源：会话 2026-10-09，commit bbe54bd2；用户实测（320px 侧栏）：展开工具卡后观察值里的长无空格串把卡片撑得比面板还宽，正文区出现左右滚动条；展开体量过大。
+现象：`list_tabs` 之类工具的观察值里有 `file:///…` 本地路径、`https://…` 长 URL、长 tabId，都是无空格长串。展开后整列横向溢出，出现左右滚动条。
+根因（缺一不可）：① 工具卡在 transcript 的 flex 列里带 `self-start`（非 stretch），按 `fit-content` 定宽，下界是内容的 **min-content**；② `overflow-wrap: break-word`（Tailwind `break-words`）**不参与 min-content 计算** —— 只断行、不缩小长串的 min-content → 长串把**卡片本身**撑得比面板宽，叶子上的 `overflow-x-auto` 救不了（被撑宽的是容器，不是叶子）。体量：折叠行 `py-2`、展开体 `max-h-80`(320px) 占面板一半以上。
+结论：`AgentToolStep.vue` —— 卡片根加 `max-w-full min-w-0`；两个 `<pre>` 去掉 `overflow-x-auto`/`break-words`，改 `[overflow-wrap:anywhere]`（参与 min-content，长串就地折断）；展开体 `max-h-80 overflow-auto` → `max-h-56 overflow-y-auto overflow-x-hidden`（只纵向滚动，横向溢出必须靠断行解决）；折叠行 `py-2` → `py-1.5`。同型长串隐患一并收口（`AgentTranscript.vue`）：用户气泡加 `max-w-full`、气泡与错误卡正文加 `[overflow-wrap:anywhere]`；工具卡**保留** `self-start` 紧凑形态（短则紧凑、长则换行、永不超过面板）。
+顺带修正：composer 输入框的 `rounded-none` 统一为 `!rounded-none`，与同元素既有 `!bg-transparent !px-1 !py-1` 一致（`cssSpecificity` 守卫 T-171 提示）。**另记**：该守卫 `lost: at(passed) > at(base)` 方向存疑（CSS 同优先级后来者赢，方向相反；本次实测 `.rounded-lg` 在 `.rounded-none` 之前，后者实际获胜），反向会暴露两处真实既有 bug（`TriggerElementOptions.vue` / `EditorLocalActions.vue` `<ui-input class="block">` 被自带 `inline-block` 吃掉），另立一项再议。
+守卫：新增 `src/agent/toolStepLayout.test.js`（源码级钉根节点 `max-w-full/min-w-0`、pre 用 anywhere 且不再 `overflow-x-auto`/`break-words`、展开体 `max-h-56`+`overflow-y-auto`+`overflow-x-hidden`、用户气泡/错误卡 anywhere、工具卡仍 `self-start`，并核对上述类真产出到构建 CSS，无构建则 skip）；`panelRender.test.js` 加渲染断言（根节点带 `max-w-full/min-w-0`）；`panelUi.test.js` 的 T-171 输入框断言跟随改为 `!rounded-none`。
+设计稿：`docs/agent-ui-toolstep.html`（320px 前后对照 + 四条规则 + 顺带修正记录）。
+验收：build 100% 通过（max-w-full/min-w-0/max-h-56/overflow-x-hidden/!rounded-none/overflow-wrap:anywhere 均进 CSS）；npm test 740/739 pass 0 fail 1 skipped；lint 0 error（10 个既有 no-console warning）；check:i18n passed。
+状态：已清（2026-10-09）
