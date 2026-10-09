@@ -98,6 +98,29 @@
 
 ### 新功能（要讨论场景，审得慢）
 
+## T-199 — 把独立助手页从主面板标签页迁移到浏览器原生侧边栏（chrome.sidePanel）
+
+登记日期：2026-10-10
+来源：2026-10-10 会话讨论两个助手宿主形态；用户原话「把宽形态的这个助手对话取消掉，把它挪到应用的侧边栏上。本身这个对话无法操作工作流，所以在功能上无需和工作流的这个界面并存，只需要住进浏览器和页面交互的需求」。
+现象（现状）：独立助手页是主面板的一个标签页（路由 `/workflows/agent`，`layout: 'wide'`），全局会话、无 canvas 组。它的工具集（page / context / tab 三组）全部面向「当前浏览器的页面」，与 Automa 主面板本身无关。用户必须先把主面板切到这一页，才能问「这个页面结构是什么 / selector 怎么写」，切回来又得再切一次 —— 而这个场景的主场恰恰是「正在看某个网页」。
+证据（**代码事实已实测**，非推断）：
+- 数据层天然跨页：会话存储走 `browser.storage.local`（`src/agent/index.js:920-927` 的 `sessionIO`），配置（model/apiKey）同源（`:909-916` 的 `configIO`）。`browser.storage.local` 是**扩展级**存储，任何扩展页面（含未来的 sidepanel 页）都能直接读，不需要主面板先打开，也不需要跨页消息通道。这是本方案最大的有利条件 —— 用户最初担心的「侧栏要读主面板数据是不是得先开主面板」不成立。
+- runtime 与宿主无关：`agentHost.js:3-9` 顶部注释已写死「两个宿主面对的是同一个 runtime 契约和同一块面板……宿主本身除了接线没有别的逻辑」。`src/agent/` 下全部逻辑（`createAgentRuntime`、工具集、prompt、SSE、confirm 门、untrusted 包裹）零改动即可服务第三个宿主。
+- 侧栏宿主现行宽度：`sidebarCss.width` 默认 360、下限 360（`[id].vue:467-468,493`），可用内容宽度 320px（360 − padding 40）。**这与 chrome.sidePanel 的实际可用宽度量级一致**，故「窄形态 UI 与侧边栏 UI 可以大致相同」的判断成立（待 demo 视觉验证）。
+- chrome.sidePanel 宽度不可由扩展控制：官方 issue GoogleChrome/chrome-extensions-samples#1011 答复「currently not supported」，宽度由浏览器管理（默认约 320px，用户可拖宽，重开重置）。**侧栏页不能假设自己有多宽**，只能按「约 320–400px」设计。
+影响：
+- 正面：两个入口收敛为一个浏览器级入口；页面交互场景零切换成本；主面板标签体系中的助手单例/keep-alive/`localStorage['tabs']` 持久化整套机制可以卸掉。
+- 代价（必须一并决策，不能只看好处）：
+  ① **失去 wide 形态**：侧栏 ~400px 塞不下「240px 常驻历史 + 对话」的横向布局，必须退回窄宿主的 `view` 切换（chat ↔ history）。大屏用户的常驻历史列表体验消失。
+  ② **主面板标签体系整块退出**：`router.js:61` 的 agent 路由、`Agent.vue`、`Workflows.vue:58` 的 `openAgentTab()` 入口、`:199-202` 的旧数据 `/agent → /workflows/agent` 迁移代码，全部要拆。
+  ③ **Firefox 需另写 `sidebar_action`**：`chrome.sidePanel` 是 Chrome 114+ 专有；现有 `manifest.firefox.json` 是 MV2，Firefox 的侧边栏是另一套 API。要么双平台各写一套，要么 Firefox 上继续保留现行主面板标签页 —— 后者会让「取消宽形态」在 Firefox 不成立，需接受平台形态不一致。
+  ④ **多宿主困惑以新形式回归**：编辑器侧栏宿主仍在（有 canvas），浏览器侧栏宿主为全局会话。若两者会话范围不一致（一个按 workflowId 过滤、一个全局），T-182 记的「为什么这里会话多那里少」会重新出现。
+建议：分两步走，先探针后实施。
+- 第一步（探针，低成本）：做一个 sidepanel demo 页面（纯静态 HTML，可直接在浏览器打开预览），用真实的面板视觉规格（320–400px 宽）复刻窄形态布局，验证「窄 UI = 侧栏 UI」这条判断是否成立、以及窄布局在 320px 下的可读性。**demo 不等于实现**，只用于视觉裁决。
+- 第二步（实施，需先批准）：新建 `sidepanel.html` + sidepanel 入口 bundle + sidepanel 页面组件（接线照搬 `Agent.vue` 的 `useAgentHost({layout:'narrow', enabledGroups:['page','context','tab'], getWorkflowId:()=>null, getVariables:async()=>({bound:false}), getWorkflowContext:()=>null})`）；manifest 加 `sidePanel` 权限与 `side_panel.default_path` + `setPanelBehavior({openPanelOnActionClick})`；Firefox 侧另行决策；最后拆掉旧独立页。
+注：本条与 ADR 0001 的「已知欠账」直接相关 —— ADR 0001 记的收敛路径是「做一个『在助手里打开某工作流』的挂载机制后放宽 enabledGroups」，本条走的是另一条收敛路径（把无画布的那个宿主搬出主面板，让两个宿主职责彻底分离：**侧栏宿主 = 工作流内、有画布、按 workflowId；浏览器侧栏宿主 = 全局、无工作流、面向网页**）。两条路径不冲突，但若本条实施，ADR 0001 需新增一条 ADR 或补记。
+状态：待审核
+
 ---
 ## 已批准（待排期）
 

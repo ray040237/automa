@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>助手侧边栏迁移 · 形态 Demo（T-199）</title>
+    <style>
+      :root {
+        --bg: #eef0f3;
+        --surface: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --faint: #9ca3af;
+        --border: #e5e7eb;
+        --border-soft: #f3f4f6;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+        --box: rgba(0, 0, 0, 0.04);
+        --box-hover: rgba(0, 0, 0, 0.07);
+        --user-bg: rgba(24, 24, 27, 0.06);
+        --red-bg: rgba(239, 68, 68, 0.1);
+        --red-br: rgba(239, 68, 68, 0.4);
+        --red-fg: #b91c1c;
+        --amber-bg: rgba(245, 158, 11, 0.12);
+        --amber-fg: #b45309;
+        --green-fg: #15803d;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 6px 24px rgba(0, 0, 0, 0.07);
+        --chrome: #f1f3f4;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 13px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", Roboto,
+          Helvetica, Arial, sans-serif;
+      }
+      .wrap {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px 24px 72px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 6px;
+        font-weight: 600;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 34px 0 14px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--border);
+        font-weight: 600;
+      }
+      .lede {
+        color: var(--muted);
+        max-width: 880px;
+        margin: 0 0 6px;
+      }
+      .note {
+        color: var(--faint);
+        font-size: 12px;
+        max-width: 880px;
+      }
+      code {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+
+      /* ---- 浏览器窗口模拟 ---- */
+      .stage-row {
+        display: flex;
+        gap: 22px;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        margin-top: 8px;
+      }
+      .stage {
+        flex: 1 1 480px;
+        min-width: 480px;
+      }
+      .stage-label {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin: 0 0 8px;
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .stage-label .dim {
+        font-weight: 400;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .browser {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        background: var(--surface);
+      }
+      .browser-top {
+        height: 38px;
+        background: var(--chrome);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+      }
+      .dots {
+        display: flex;
+        gap: 6px;
+      }
+      .dots i {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #d1d5db;
+        display: block;
+      }
+      .addr {
+        flex: 1;
+        height: 22px;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .browser-body {
+        display: flex;
+        height: 560px;
+      }
+      .webpage {
+        flex: 1;
+        background: repeating-linear-gradient(
+          135deg,
+          #f8fafc,
+          #f8fafc 12px,
+          #f1f5f9 12px,
+          #f1f5f9 24px
+        );
+        padding: 16px;
+        overflow: hidden;
+      }
+      .webpage .bar {
+        height: 12px;
+        border-radius: 6px;
+        background: #e2e8f0;
+        margin-bottom: 10px;
+      }
+      .webpage .bar.w1 { width: 70%; }
+      .webpage .bar.w2 { width: 45%; }
+      .webpage .bar.w3 { width: 88%; }
+      .webpage .tag {
+        font-size: 11px;
+        color: #94a3b8;
+        margin-bottom: 14px;
+      }
+
+      /* ---- 侧边栏本体 ---- */
+      .sidepanel {
+        border-left: 1px solid var(--border);
+        background: var(--surface);
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+        position: relative;
+      }
+      .sidepanel.w320 { width: 320px; }
+      .sidepanel.w400 { width: 400px; }
+      .sp-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 16px;
+        flex-shrink: 0;
+      }
+      .chip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        flex: 1;
+        padding: 6px 8px;
+        border-radius: 6px;
+        background: var(--box);
+        cursor: pointer;
+      }
+      .chip .txt {
+        font-size: 12px;
+        min-width: 0;
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .chip .ico {
+        flex-shrink: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .icon-btn {
+        flex-shrink: 0;
+        width: 30px;
+        height: 30px;
+        border-radius: 6px;
+        background: var(--box);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: var(--text);
+        font-size: 15px;
+      }
+
+      .transcript {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px 16px 4px;
+      }
+      .msg-user {
+        background: var(--user-bg);
+        border-radius: 10px;
+        padding: 8px 10px;
+        margin: 0 0 12px auto;
+        max-width: 88%;
+        width: fit-content;
+        font-size: 12px;
+      }
+      .msg-ai {
+        font-size: 12px;
+        margin: 0 0 6px;
+      }
+      .msg-ai p { margin: 0 0 8px; }
+      .tool-step {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin: 0 0 12px;
+        overflow: hidden;
+      }
+      .tool-step .ts-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px;
+        background: var(--border-soft);
+        font-size: 11px;
+      }
+      .ts-head .name {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 11px;
+      }
+      .ts-head .status {
+        margin-left: auto;
+        color: var(--green-fg);
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .ts-body {
+        padding: 6px 8px;
+        font-size: 11px;
+        color: var(--muted);
+        font-family: ui-monospace, Menlo, monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* 空态 */
+      .empty {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 10px;
+        padding: 0 4px;
+      }
+      .empty .title {
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .badge {
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: var(--box);
+        color: var(--muted);
+      }
+      .example {
+        text-align: left;
+        font-size: 12px;
+        padding: 7px 10px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        cursor: pointer;
+        color: var(--text);
+      }
+      .example:hover { background: var(--border-soft); }
+
+      /* 历史视图 */
+      .history { padding: 4px 16px; }
+      .hist-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .hist-head .back {
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: var(--muted);
+      }
+      .hist-head .back:hover { background: var(--box); }
+      .hist-head .h-title { font-size: 13px; font-weight: 500; }
+      .sess {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .sess:hover { background: var(--box); }
+      .sess.active { background: var(--box); }
+      .sess .s-main { min-width: 0; flex: 1; }
+      .sess .s-title {
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .sess .s-meta {
+        font-size: 10px;
+        color: var(--faint);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .sess .del { color: var(--faint); font-size: 13px; flex-shrink: 0; }
+
+      /* composer */
+      .composer {
+        flex-shrink: 0;
+        padding: 0 16px 10px;
+      }
+      .composer-card {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 8px;
+        background: var(--surface);
+      }
+      .target-chip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 8px;
+        border-radius: 6px;
+        background: var(--box);
+        margin-bottom: 4px;
+        cursor: pointer;
+      }
+      .target-chip .fav {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        background: #cbd5e1;
+        flex-shrink: 0;
+      }
+      .target-chip .t-txt {
+        font-size: 11px;
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .target-chip .pin {
+        font-size: 10px;
+        padding: 0 4px;
+        border-radius: 4px;
+        background: rgba(24, 24, 27, 0.12);
+        color: var(--text);
+        flex-shrink: 0;
+      }
+      .composer textarea {
+        width: 100%;
+        border: 0;
+        resize: none;
+        font: inherit;
+        font-size: 12px;
+        padding: 8px 4px;
+        min-height: 60px;
+        background: transparent;
+        color: var(--text);
+        outline: none;
+      }
+      .composer-bottom {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 2px 2px 0;
+      }
+      .ring {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 2px solid var(--border);
+        border-top-color: var(--text);
+        flex-shrink: 0;
+      }
+      .hint {
+        margin-left: auto;
+        font-size: 10px;
+        color: var(--faint);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .send {
+        flex-shrink: 0;
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        background: var(--accent);
+        color: var(--accent-fg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      /* 确认卡 */
+      .confirm {
+        margin: 0 16px 10px;
+        border: 1px solid var(--amber-br, #fcd34d);
+        background: var(--amber-bg);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 11px;
+      }
+      .confirm .c-title {
+        font-weight: 600;
+        color: var(--amber-fg);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .confirm .c-hint { color: var(--muted); margin: 4px 0 8px; font-size: 11px; }
+      .confirm .c-actions { display: flex; gap: 6px; }
+      .confirm button {
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        cursor: pointer;
+        color: var(--text);
+      }
+      .confirm button.primary {
+        background: var(--accent);
+        color: var(--accent-fg);
+        border-color: var(--accent);
+      }
+
+      /* 标注 */
+      .annot {
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+      .annot b { color: var(--text); font-weight: 600; }
+      .guard {
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 6px;
+        border-radius: 4px;
+        background: var(--red-bg);
+        color: var(--red-fg);
+        border: 1px solid var(--red-br);
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 12px;
+        margin-top: 10px;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 7px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th { background: var(--border-soft); font-weight: 600; }
+      .ok { color: var(--green-fg); }
+      .no { color: var(--red-fg); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>助手侧边栏迁移 · 形态 Demo</h1>
+      <p class="lede">
+        对应登记项 <code>T-199</code>。用于验证一条判断：
+        <b>「窄形态助手 UI 与浏览器侧边栏 UI 可以大致相同」</b>。
+      </p>
+      <p class="note">
+        下方把工作流编辑器侧栏里那套窄形态面板，原样放进浏览器侧边栏的模拟窗口，并排两档宽度
+        （320px / 400px，覆盖 chrome.sidePanel 的实际可用范围）。视觉规格取自
+        <code>AgentPanel.vue</code> / <code>AgentTabPicker.vue</code> / <code>AgentSessionList.vue</code>
+        的真实类名与尺寸，不是臆想稿。
+      </p>
+
+      <h2>① 并排对比：同一套窄布局，两种侧栏宽度</h2>
+      <div class="stage-row">
+        <!-- 320 -->
+        <div class="stage">
+          <div class="stage-label">
+            浏览器侧边栏 · 320px
+            <span class="dim">chrome.sidePanel 默认量级</span>
+          </div>
+          <div class="browser">
+            <div class="browser-top">
+              <div class="dots"><i></i><i></i><i></i></div>
+              <div class="addr">shop.example.com/product/8821</div>
+            </div>
+            <div class="browser-body">
+              <div class="webpage">
+                <div class="tag">（当前网页）</div>
+                <div class="bar w1"></div>
+                <div class="bar w3"></div>
+                <div class="bar w2"></div>
+                <div class="bar w3"></div>
+                <div class="bar w2"></div>
+                <div class="bar w1"></div>
+              </div>
+              <div class="sidepanel w320">
+                <div class="sp-head">
+                  <div class="chip">
+                    <span class="ico">◷</span>
+                    <span class="txt">新会话</span>
+                    <span class="ico">›</span>
+                  </div>
+                  <div class="icon-btn">＋</div>
+                </div>
+                <div class="transcript">
+                  <div class="msg-user">帮我看看这个商品页的结构</div>
+                  <div class="msg-ai">
+                    <p>这一页是标准电商详情页：顶部商品图 + 右侧价格与购买区，下方是详情与评价。</p>
+                  </div>
+                  <div class="tool-step">
+                    <div class="ts-head">
+                      <span class="ico">▤</span>
+                      <span class="name">read_page</span>
+                      <span class="search" style="color:var(--muted)"></span>
+                      <span class="status">✓ 完成</span>
+                    </div>
+                    <div class="ts-body">已读取 1 个页面 · 3.2K 字符</div>
+                  </div>
+                  <div class="msg-ai">
+                    <p>价格在选择器 <code>.price--main</code> 里，商品名在 <code>h1.product-title</code>。</p>
+                  </div>
+                </div>
+                <div class="composer">
+                  <div class="composer-card">
+                    <div class="target-chip">
+                      <span class="fav"></span>
+                      <span class="t-txt">shop.example.com/product/8821</span>
+                      <span class="pin">已固定</span>
+                    </div>
+                    <textarea placeholder="问问这个页面…" rows="3"></textarea>
+                    <div class="composer-bottom">
+                      <div class="ring"></div>
+                      <span class="hint">Enter 发送 · Shift+Enter 换行</span>
+                      <div class="send">→</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="annot">
+            <b>320px 下：</b>目标页 chip 的 URL 被截断（这是可接受的——它是辅助信息），
+            正文行宽舒适，composer 与发送键都在。
+          </div>
+        </div>
+
+        <!-- 400 -->
+        <div class="stage">
+          <div class="stage-label">
+            浏览器侧边栏 · 400px
+            <span class="dim">用户拖宽后的典型值</span>
+          </div>
+          <div class="browser">
+            <div class="browser-top">
+              <div class="dots"><i></i><i></i><i></i></div>
+              <div class="addr">shop.example.com/product/8821</div>
+            </div>
+            <div class="browser-body">
+              <div class="webpage">
+                <div class="tag">（当前网页）</div>
+                <div class="bar w1"></div>
+                <div class="bar w3"></div>
+                <div class="bar w2"></div>
+                <div class="bar w3"></div>
+                <div class="bar w2"></div>
+                <div class="bar w1"></div>
+              </div>
+              <div class="sidepanel w400">
+                <div class="sp-head">
+                  <div class="chip">
+                    <span class="ico">◷</span>
+                    <span class="txt">新会话</span>
+                    <span class="ico">›</span>
+                  </div>
+                  <div class="icon-btn">＋</div>
+                </div>
+                <div class="transcript">
+                  <div class="msg-user">帮我看看这个商品页的结构，顺便把价格和标题的选择器找出来</div>
+                  <div class="msg-ai">
+                    <p>这一页是标准电商详情页：顶部商品图 + 右侧价格与购买区，下方是详情与评价。</p>
+                  </div>
+                  <div class="tool-step">
+                    <div class="ts-head">
+                      <span class="ico">▤</span>
+                      <span class="name">read_page</span>
+                      <span class="status">✓ 完成</span>
+                    </div>
+                    <div class="ts-body">已读取 1 个页面 · 3.2K 字符</div>
+                  </div>
+                  <div class="msg-ai">
+                    <p>价格在选择器 <code>.price--main</code> 里，商品名在 <code>h1.product-title</code>。需要我把这两条直接填进工作流吗？</p>
+                  </div>
+                </div>
+                <div class="composer">
+                  <div class="composer-card">
+                    <div class="target-chip">
+                      <span class="fav"></span>
+                      <span class="t-txt">shop.example.com/product/8821</span>
+                      <span class="pin">已固定</span>
+                    </div>
+                    <textarea placeholder="问问这个页面…" rows="3"></textarea>
+                    <div class="composer-bottom">
+                      <div class="ring"></div>
+                      <span class="hint">Enter 发送 · Shift+Enter 换行</span>
+                      <div class="send">→</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="annot">
+            <b>400px 下：</b>同样的布局，仅多出约 80px 文字宽度。chip 完整显示、
+            长句不换行到碎片化 —— <b>没有任何布局需要为 400px 单独设计</b>。
+          </div>
+        </div>
+      </div>
+
+      <h2>② 历史视图：窄形态的「整块替换」在侧边栏里同样自然</h2>
+      <div class="stage-row">
+        <div class="stage" style="flex: 0 0 320px; min-width: 320px">
+          <div class="browser">
+            <div class="browser-top">
+              <div class="dots"><i></i><i></i><i></i></div>
+              <div class="addr">shop.example.com/product/8821</div>
+            </div>
+            <div class="browser-body" style="height: 480px">
+              <div class="sidepanel w320">
+                <div class="sp-head">
+                  <div class="icon-btn" style="background:transparent">←</div>
+                  <span class="txt" style="font-size:13px;font-weight:500;flex:1">会话历史</span>
+                  <div class="icon-btn">＋</div>
+                </div>
+                <div class="history" style="flex:1;overflow-y:auto">
+                  <div class="sess active">
+                    <div class="s-main">
+                      <div class="s-title">这个商品页的结构</div>
+                      <div class="s-meta">3 轮 · gpt-4o-mini</div>
+                    </div>
+                    <span class="del">🗑</span>
+                  </div>
+                  <div class="sess">
+                    <div class="s-main">
+                      <div class="s-title">帮我把选择器写进剪贴板</div>
+                      <div class="s-meta">1 轮 · gpt-4o-mini</div>
+                    </div>
+                    <span class="del">🗑</span>
+                  </div>
+                  <div class="sess">
+                    <div class="s-main">
+                      <div class="s-title">登录页表单的字段名</div>
+                      <div class="s-meta">5 轮 · gpt-4o-mini</div>
+                    </div>
+                    <span class="del">🗑</span>
+                  </div>
+                  <div class="sess">
+                    <div class="s-main">
+                      <div class="s-title">对比两个列表页的分页方式</div>
+                      <div class="s-meta">2 轮 · gpt-4o-mini</div>
+                    </div>
+                    <span class="del">🗑</span>
+                  </div>
+                </div>
+                <div class="composer" style="opacity:.35;pointer-events:none">
+                  <div class="composer-card">
+                    <textarea placeholder="问问这个页面…" rows="2"></textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="annot">
+            窄形态的历史是<b>整块替换正文区</b>（<code>view: chat ↔ history</code>），
+            不是横向常驻栏。侧边栏宽度下这正是唯一可行且够用的形态 —— 列表项一行一条，
+            不挤。
+          </div>
+        </div>
+
+        <div class="stage" style="flex:1 1 380px">
+          <div class="annot" style="margin-top:0">
+            <p style="margin-top:0">
+              <b>为什么不能保留「宽形态」？</b><br />
+              宽形态靠的是「240px 常驻列表 + 对话区横向并排」。放进侧边栏：
+            </p>
+            <ul style="padding-left:18px;margin:6px 0">
+              <li>320px 侧栏 → 列表 240 + 对话 80px，对话区被压成一条，不可读；</li>
+              <li>400px 侧栏 → 列表 240 + 对话 160px，仍然濒临不可用；</li>
+              <li>而 chrome.sidePanel <b>宽度不可由扩展控制</b>（官方 issue #1011 明说 not supported），
+                用户可能永远停在 320px。</li>
+            </ul>
+            <p>
+              所以迁移的前提就是<b>放弃 wide，全面改用 narrow</b>。好消息是
+              <code>AgentPanel.vue</code> 早已同时支持两种形态，删掉 <code>v-if="wide"</code>
+              那条左栏分支即可，不需要重写面板。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <h2>③ 侧边栏独有的场景：确认卡与「边看边问」</h2>
+      <div class="stage-row">
+        <div class="stage" style="flex: 0 0 320px; min-width: 320px">
+          <div class="browser">
+            <div class="browser-top">
+              <div class="dots"><i></i><i></i><i></i></div>
+              <div class="addr">admin.example.com/orders</div>
+            </div>
+            <div class="browser-body" style="height: 480px">
+              <div class="sidepanel w320">
+                <div class="sp-head">
+                  <div class="chip">
+                    <span class="ico">◷</span>
+                    <span class="txt">新会话</span>
+                    <span class="ico">›</span>
+                  </div>
+                  <div class="icon-btn">＋</div>
+                </div>
+                <div class="transcript">
+                  <div class="msg-user">帮我把这一页的订单号都抓出来</div>
+                  <div class="msg-ai">
+                    <p>我找到 12 条订单，需要执行一段脚本批量读取。</p>
+                  </div>
+                  <div class="confirm">
+                    <div class="c-title">⚠ 需要你确认</div>
+                    <div class="c-hint">这一步会改动你的浏览器或工作流。放行前请先看一眼。</div>
+                    <div class="c-actions">
+                      <button class="primary">执行</button>
+                      <button>取消</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="composer">
+                  <div class="composer-card">
+                    <div class="target-chip">
+                      <span class="fav"></span>
+                      <span class="t-txt">admin.example.com/orders</span>
+                    </div>
+                    <textarea placeholder="问问这个页面…" rows="2"></textarea>
+                    <div class="composer-bottom">
+                      <div class="ring"></div>
+                      <div class="send">■</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="annot">
+            确认门在窄面板里压缩成一张小卡，<b>不遮挡输入区</b>（沿用 T-06 的
+            「放文档流、不放浮层」决策）。320px 下按钮仍在一行。
+          </div>
+        </div>
+
+        <div class="stage" style="flex:1 1 380px">
+          <div class="annot" style="margin-top:0">
+            <p style="margin-top:0"><b>侧边栏相比主面板标签页，真正赢在哪：</b></p>
+            <table>
+              <tr>
+                <th>场景</th>
+                <th>主面板标签页（现状）</th>
+                <th>浏览器侧边栏（迁移后）</th>
+              </tr>
+              <tr>
+                <td>看网页时问助手</td>
+                <td class="no">切走标签页 → 问 → 切回</td>
+                <td class="ok">原地，网页与助手同屏</td>
+              </tr>
+              <tr>
+                <td>切到另一个网页继续问</td>
+                <td class="no">助手页在别的标签，看不到新页</td>
+                <td class="ok">侧栏常驻，跨标签页存活</td>
+              </tr>
+              <tr>
+                <td>对比两个页面</td>
+                <td class="no">做不到（助手跟着主面板）</td>
+                <td class="ok">来回切标签，助手跟着变</td>
+              </tr>
+              <tr>
+                <td>需要展开工作区</td>
+                <td class="ok">宽屏可拖大到全宽</td>
+                <td class="no">受限于 ~400px</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <h2>④ 结论：这条判断成立吗</h2>
+      <table>
+        <tr><th>问题</th><th>demo 结论</th></tr>
+        <tr>
+          <td>窄 UI 与侧边栏 UI 能否大致相同？</td>
+          <td class="ok">能。320–400px 区间内是同一套布局，无分叉点。</td>
+        </tr>
+        <tr>
+          <td>是否必须放弃 wide 形态？</td>
+          <td class="no">必须。240px 常驻栏在 ≤400px 内不可行，且宽度不可控。</td>
+        </tr>
+        <tr>
+          <td>面板组件是否要重写？</td>
+          <td class="ok">不要。删 <code>v-if="wide"</code> 左栏分支 + 接线换 layout 即可。</td>
+        </tr>
+        <tr>
+          <td>还缺什么信息才能拍板？</td>
+          <td>
+            真机实测两件事：<br />
+            ① 侧栏在 <code>chrome.sidePanel</code> 里的真实默认宽度（320 还是别的数）；<br />
+            ② Firefox <code>sidebar_action</code> 是否接受同一套页面。
+          </td>
+        </tr>
+      </table>
+      <p class="note" style="margin-top:14px">
+        本 demo 是<b>形态验证稿</b>，不是实现。颜色、圆角、间距取自现有面板源码
+        （accent = #18181b，与 <code>tailwind.css</code> 的 <code>--color-accent</code> 一致）。
+      </p>
+    </div>
+  </body>
+</html>
