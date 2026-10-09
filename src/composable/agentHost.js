@@ -232,7 +232,10 @@ export function useAgentHost(deps) {
     const plan = sessionAuth.planSwitch({ busy: agent.busy });
     if (!plan.allow) return false;
 
-    if (plan.rejectPending) agent.pendingConfirm.resolve(false);
+    // 判的是 reactive 上的 pendingConfirm，不是 plan.rejectPending —— 后者判的
+    // 是状态机内部的 pending，两个字段目前同生同灭但没有代码保证（T-191）。
+    // 与 :544 的卸载路径、AgentPanel.vue 的面板卸载路径写成同一形状。
+    if (agent.pendingConfirm) agent.pendingConfirm.resolve(false);
     sessionAuth.invalidate();
     return true;
   }

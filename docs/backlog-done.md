@@ -3476,3 +3476,99 @@ UI：chip 拆成**主体 + 解除两个并排的兄弟 button**（不嵌套 —�
 建议：① 工具卡在失败态把 `error.message` 显示出来（现在只显示状态徽标），这是通用改进、对所有失败工具都受益；② 若是权限问题，`open_url` 的描述里就写明「不支持 file://」，让模型别再生成这类 URL；③ 是否该给 `file://` 加权限是产品决策，不在 UI 范围。
 注：本条只是从截图里**看见**的，尚未定位根因，也未复现 —— 按 T-177 的教训，登记时把「看见了什么」与「猜的原因」分开写，别把推断写成结论。
 状态：待审核
+---
+
+## T-190 — `log.js` 里同一段 JSDoc 写了两遍，其中一份是悬空的孤儿
+
+登记日期：2026-10-09
+来源：2026-10-09 会话第一批 review（`src/agent` 核心模块）逐文件通读；触发点 `src/agent/log.js:17-30` 与 `:73-83`
+现象：`log.js` 中「全链路日志实例（模块级单例）/ **为什么放在这里而不是装配层 `index.js`**（T-126 第二步）」这整段块注释出现了两次。`:17-30` 那份**悬空**——它下面紧跟的是 `createAgentLog` 的 JSDoc（`:32-41`），并不修饰任何声明，是纯粹游离在文件里的死注释；`:73-83` 那份才是正确挂在 `export const agentLog` 上的。
+证据：**源码核对**（已读全文）。两份正文约 88% 相同（唯一差异：孤儿那份多出一段讲 `export const` 求值顺序 vs 函数声明提升的说明，`:28-29`）。对 `src/agent` 全部非测试 `.js` 做块注释模糊去重（相似度 >0.8），**只命中这一对**，说明是本文件内的局部笔误，不是全仓普遍现象。
+影响：读代码的人看到两段几乎一字不差、都没有明确修饰对象的文字，会先怀疑「是不是漏了一处声明」「两份是不是有细微差别、哪份是准的」——孤儿那份恰好多了 `export const` 求值顺序那段，容易被误当成 `agentLog` 的补充说明去对照，而它其实什么也不修饰。纯可维护性损耗，无运行时影响。
+建议：删掉 `:17-30` 的孤儿块；删前把它独有的 `:28-29`（「声明放在 `createAgentLog` 定义之后」那段）合并进 `:73-83` 那份，避免丢掉唯一一处解释了「为什么 `agentLog` 排在函数后面」的信息。一行级改动。
+结论：按建议执行 —— 删除孤儿块，把它独有的「`export const` 求值顺序 vs 函数声明提升」那段并进 `:73-83` 那份。改后 `log.js` 中该段块注释只剩一份且明确挂在 `export const agentLog` 上；全仓块注释模糊去重（相似度 >0.8）零命中。`npm test` 769 tests / 0 fail。
+状态：已清（2026-10-10 完成）
+
+## T-191 — `guardAgentSwitch` 里 `agent.pendingConfirm.resolve(false)` 没判空，靠 `busy` 门挡着才没炸
+
+登记日期：2026-10-10
+来源：2026-10-10 会话第二批 review（agent 集成缝）逐文件通读；触发点 `src/composable/agentHost.js:235`（对比 `:544` 与 `AgentPanel.vue:605`）
+现象：同一件事——「放行挂起的确认门」——三处写法不一致，只有 `guardAgentSwitch` 这一处不判空：
+
+- `src/composable/agentHost.js:544`（宿主 `onBeforeUnmount`）：`if (agent.pendingConfirm) agent.pendingConfirm.resolve(false);` ✅ 判空
+- `src/components/newtab/workflow/agent/AgentPanel.vue:605`（面板卸载）：`if (props.host.pendingConfirm) props.host.answerConfirm(false);` ✅ 判空
+- `src/composable/agentHost.js:235`（切会话/新建/删除守卫）：`if (plan.rejectPending) agent.pendingConfirm.resolve(false);` ❌ **用状态机的 `plan.rejectPending` 代替了 `agent.pendingConfirm` 的判空**
+
+`plan.rejectPending` 来自 `confirm.js` 的 `planSwitch`，判的是**状态机内部**的 `pending != null`（`confirm.js:280`），与 reactive 上的 `agent.pendingConfirm` 是两个字段。二者目前同生同灭（`askAgentConfirmation` 里成对设置、`answer` 里成对清除），所以暂时相等——但代码**没有**保证这一点，只是碰巧。
+
+证据：**源码核对（已读全文 + 追踪调用链）**。
+① 可达性：`openAgentSession`/`newAgentSession`/`deleteAgentSession` 都先过 `guardAgentSwitch()`；而 `guardAgentSwitch` 第 233 行 `if (!plan.allow) return false;` 会在 `busy` 时提前返回——`planSwitch({busy:true})` 返回 `{allow:false}`（`confirm.js:275-276`，且有测试 `confirm.test.js:346` 钉死该不变式）。确认卡显示期间 `agent.busy === true`（`agentHost.js:399` 置位，直到 `runtime.send()` 落定的 `finally`（`:474-475`）才清；而确认门 `await requestConfirmation` 发生在 `runtime.send()` 内部——`loop.js:894` 的 `beforeToolCall`），所以 **`:235` 当前不可达，是死代码**。
+② 为什么仍是缺陷：该行是一个「借 `plan` 的字段避免判空」的写法，安全**完全依赖** `planSwitch` 那条 `busy ⇒ rejectPending:false` 的不变式。一旦有人放开 `busy` 门（例如允许「等确认时也能切会话」，是常见 UX 诉求），`plan.rejectPending` 就会在 `agent.pendingConfirm` 已为 null 时返回 true，该行立刻抛 `TypeError: Cannot read properties of null (reading 'resolve')`——把一次会话切换变成未捕获异常。
+③ 覆盖缺口：`src/composable/agentHost.js` **没有测试文件**（`find` 无结果），且 `package.json` 的 test glob 是 `"src/agent/**"` + `"src/workflowEngine/**"`——`src/composable/` 根本不在测试范围内。所以这处不一致没有任何测试能发现。`confirm.test.js:346` 测的是纯状态机 `planSwitch` 自身，不覆盖宿主对它返回值的消费方式。
+
+影响：当前无运行时表现（不可达）。风险在于它是**披着安全外衣的裸解引用**：写法上看着像经过了判断，实际判的是另一个字段。最坏结果是未来放开 `busy` 门时，会话切换路径抛未捕获 `TypeError`，且因为无测试覆盖，只能在用户手上复现。
+
+建议：把 `:235` 改成与另两处同款判空——`if (plan.rejectPending && agent.pendingConfirm) agent.pendingConfirm.resolve(false);`，或直接改成 `if (agent.pendingConfirm) agent.pendingConfirm.resolve(false);`（丢弃 `plan.rejectPending`，因为它本来就是「借来的判空」）。三处入口写成同一形状，后续才不会有人以为「这里判过了」。是否顺带给 `src/composable/` 补测试范围/T-02 相关守卫，是一个更大的决定，可另议。
+结论：采纳第二种 —— `:235` 改成 `if (agent.pendingConfirm) agent.pendingConfirm.resolve(false);`，与 `:544`、`AgentPanel.vue:605` 写成同一形状，并就地加注说明「判的是 reactive 上的 `pendingConfirm`，不是状态机的 `plan.rejectPending`」。裸解引用消除，未来放开 `busy` 门也不会再抛。`src/composable/` 纳入测试范围一事未在此条处理（另议）。
+状态：已清（2026-10-10 完成）
+
+## T-192 — 27 处 `IS_OFFLINE` 门没有一个被测试覆盖（测试里恒为 false）
+
+登记日期：2026-10-10
+来源：2026-10-10 会话第三批 review（上游受影响区）时，为核对 offline 门是否被新测试套件覆盖而全仓 grep；触发点 `src/workflowEngine/blocksHandler.test.js:43` 与 `src/agent/facts.test.js:12`
+现象：本分支（`feature/offline`）的核心卖点就是离线模式，全仓 `IS_OFFLINE` 出现 **27 处、散布 21 个文件**（`src/utils/api.js`、`src/stores/*`、`src/agent/index.js`、`src/newtab/router.js`、`src/components/newtab/workflow/*`、三个 `workflowEngine` handler/manager 等）。但**凡是声明它的测试，一律写死 `globalThis.IS_OFFLINE = false`**——`blocksHandler.test.js:43`、`facts.test.js:12`，全仓仅此两处，且都是 `false`。
+
+证据：**源码核对**。
+① `grep -rn "IS_OFFLINE" src --include=*.test.js` 只命中上述两行，值都是 `false`；没有任何测试把它置为 `true`。
+② 因此 `if (IS_OFFLINE) throw/return` 的**所有分支在测试中永远是死分支**——包括本分支新增的三处门：`WorkflowManager.js:122`（`return engine`）、`handlerGoogleDrive.js:20`（throw）、`handlerGoogleSheets.js:126`（throw），以及 `handlerAiWorkflow.js:14-16`（throw）。
+③ 置 `false` 这个取值本身是**必需的**：处理器要能在 node 里被 import 并跑行为测试（否则全部走 offline 分支，测不到真实逻辑）。所以这不是「写错了」，是「只测了一条路」。
+
+影响：offline 门是「云端能力正确降级」的唯一闸门，且是**用户侧最容易踩到的那条路**（离线构建就是给这部分用户用的）。27 处全部无断言，意味着：门写反了（`!IS_OFFLINE`）、门漏加、门加在了错误的返回形状上（见 T-193），都不会有任何测试变红。当前抽查的几处逻辑本身正确，但**正确性是靠读出来的，不是测出来的**。
+
+建议：给 offline 门补一层最小测试——以 `IS_OFFLINE = true` 为参数化维度，至少覆盖「返回形状契约」这一类：`fetchApi` 类抛错、`getSharedWorkflows`/`getUserWorkflows` 返回可被调用方安全解构的形状、`validateOauthToken` 返回 null。更省事的做法是在 `blocksHandler.test.js` 加一个 describe，实例化时用 `mock.module` 或传参注入 `IS_OFFLINE`，逐处理器断言「offline 下抛错且错误文案含 offline」。是否值得做取决于离线版的发布计划，可另议。
+结论：按建议的**收敛范围**落地 —— 只钉 `src/utils/api.js` 的返回形状契约（`fetchApi`/`fetchGapi` 抛错、`getSharedWorkflows`/`getUserWorkflows` 可安全解构、`validateOauthToken` 返回 null），新增 `src/utils/api.offline.test.js`（5 条，`IS_OFFLINE=true`，动态 import 保证求值顺序）。测试桩走 `utils/test-resolver.mjs` 的 scoped 分支（`secrets`/`BrowserAPIService` 仅对 `api.js` 及其相对拉起的 `helper.js` 生效），**未**扩大 `blocksHandler` 的可导入清单面。其余 25 处门仍未覆盖 —— 本条的语义是「先给最要紧的一类补闸」，不是「27 处全测」。
+状态：已清（2026-10-10 完成）
+
+## T-193 — `SettingsBackup` 对 `getUserWorkflows()` 的返回值不判空，与 `App.vue` 的同款调用不一致
+
+登记日期：2026-10-10
+来源：2026-10-10 会话第三批 review 追查 `IS_OFFLINE` 门的返回形状一致性时发现；触发点 `src/newtab/pages/settings/SettingsBackup.vue:309`（对比 `src/newtab/App.vue:141-144`）
+现象：`getUserWorkflows()` 在 offline 下返回 `{}`（`src/utils/api.js:117`），调用方需要自己判空。两个调用方写法不一致：
+
+- `src/newtab/App.vue:141-144`：`const { backup, hosted } = await getUserWorkflows();` 然后 `userStore.hostedWorkflows = hosted || {};` 再 `if (backup && backup.length > 0) {...}` —— ✅ **判空**
+- `src/newtab/pages/settings/SettingsBackup.vue:308-309`：`const { backup, hosted } = await getUserWorkflows(false);` 紧接着 `const backupIds = backup.map(({ id }) => id);` —— ❌ **不判空**
+
+证据：**源码核对**。`api.js:117` 的 offline 分支 `return {}`；`SettingsBackup.vue:309` 直接对 `backup` 调 `.map`，offline 下 `backup === undefined` → `TypeError: Cannot read properties of undefined (reading 'map')`。该调用被 `:307` 的 `try` 包住，`:327` 的 `catch` 会兜住并弹一句通用 `t('message.somethingWrong')`——**不是崩溃，但是一句答非所问的报错**。
+可达性：**当前不可达** —— `SettingsBackup.vue:3` 把整张卡包在 `v-if="!isOffline"` 里（`:240` `const isOffline = IS_OFFLINE`），offline 下同步按钮（`:39`）根本不渲染，`syncBackupWorkflows` 不会被调用。
+
+影响：当前无运行时表现（不可达）。与 T-191 同一类问题——**同一份数据，一个调用方判了空、另一个没判**。它是「offline 门无测试」（T-192）的直接后果：因为没人测 offline 路径，两个调用方对同一个 `{}` 返回值的处理分歧就一直没被发现。最坏情况是将来 `v-if="!isOffline"` 若被放开（或这张卡被挪到别处复用），offline 用户点同步会看到「出错了」而无从知道原因。
+
+建议：`SettingsBackup.vue:308` 对齐 `App.vue` 的写法（`hosted || {}` + `if (!backup?.length) return;` 或 `backup || []`）。两行级改动。更根本的解法是 T-192——让 `getUserWorkflows` 的返回形状契约有测试，两个调用方就不会各写各的。
+结论：按建议对齐 —— `syncBackupWorkflows` 现在先 `const { backup, hosted } = ...`，再 `if (!backup || backup.length === 0) { state.loadingSync = false; return; }` 才做 `.map`，与 `App.vue:141-144` 同款；`hosted` 也改成 `hosted || {}`。同时 T-192 已把返回形状契约钉进测试，两个调用方以后有共同的闸。
+状态：已清（2026-10-10 完成）
+
+## T-194 — offline 构建的 CSP 加固是「字符串精确替换」，manifest 措辞一变就静默失效且无测试
+
+登记日期：2026-10-10
+来源：2026-10-10 会话第四批 review（存量低风险区）核对构建配置时发现；触发点 `webpack.config.js:189-197`
+现象：offline 构建会在写 manifest 时收紧 CSP，但用的是**硬编码精确字符串替换**：
+
+```js
+if (process.env.OFFLINE_MODE === '1' && manifestObj.content_security_policy) {
+  manifestObj.content_security_policy =
+    manifestObj.content_security_policy.replace(" 'unsafe-inline' https:", '');
+}
+```
+
+`String.replace` 找不到目标时**静默返回原串**——不报错、不留痕。
+
+证据：**源码核对（已读全文 + 交叉核对 manifest）**。
+① 目标串 `'unsafe-inline' https:` **只存在于 `src/manifest.firefox.json:68`**（MV2）；`src/manifest.chrome.json` 与 `manifest.chrome.dev.json` 的 `content_security_policy` 出现次数为 **0**（`grep -c`）。因此该加固**只在 Firefox offline 构建生效**——这本身是**正确的**：Chrome 是 MV3，不声明 CSP 时用的是最严的默认值（`script-src 'self'`），本来就没有 `'unsafe-inline' https:` 要收紧；Firefox 是 MV2，默认较松，才需要这句。所以 `&& manifestObj.content_security_policy` 的真值判断不是 bug，是**正确的按浏览器分流**。
+② 真正的缺口在「精确替换 + 无测试」：全仓 `grep content_security_policy|unsafe-inline`（排除 manifest 本身）**零命中**——没有任何测试断言这次替换真的发生了。将来若有人调整 `manifest.firefox.json` 的 CSP 措辞（比如加个属性、改引号风格、调整空格），`replace` 会静默 no-op，offline 构建就会**带着 `'unsafe-inline' https:` 发出去**，而测试全绿、构建日志无异常。
+③ 与 T-192 同源：offline 相关逻辑（构建期这条 + 运行期 27 处门）都没有测试覆盖。
+
+影响：安全加固的**静默失效**。它不会突然「变危险」（前提是有人改动了 manifest 措辞），但一旦发生，唯一的防线是一句会被静默跳过的字符串匹配——恰好是安全相关代码最不该依赖的机制。最坏结果：offline 版（面向内网/隔离环境用户）带着允许内联与远程脚本的 CSP 发布，无人察觉。
+
+建议：三个选项，代价递增——① 最小：把目标串提成模块级常量并在 `replace` 前后断言 `changed`（`if (next === cur) throw`），构建期炸掉而不是静默放过；② 中：直接在 `manifest.firefox.json` 里就写成收紧后的 CSP，删掉这段 transform（offline 与 full 用同一份 manifest，但 offline 本来就不需要 `'unsafe-inline' https:`——需确认 full 构建是否依赖它）；③ 最稳：给 `transform` 抽成纯函数并补测试（喂两个 manifest 桩，断言 offline=true 时输出不含 `'unsafe-inline' https:`、offline=false 时含）。倾向 ② 或 ③。
+结论：采纳 ③（用户选定）——新增 `utils/manifestCsp.js`（纯函数 `applyOfflineCsp` + 导出 `CSP_REMOTE_SNIPPET`），`webpack.config.js` 改调它；offline 且声明了 CSP 却找不到目标串时**抛错**（构建期炸掉，不再静默 no-op）；未声明 CSP（Chrome MV3）原样返回。新增 `utils/manifestCsp.test.js` 5 条：offline 收紧、full 不动、无 CSP 直通、措辞漂移抛错、以及**真实 `src/manifest.firefox.json` 仍含该片段**（防常量与 manifest 漂移）。注释里写明「只对 Firefox 生效是正确的按浏览器分流」，避免后来人误当遗漏。
+状态：已清（2026-10-10 完成）

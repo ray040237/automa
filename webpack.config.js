@@ -8,6 +8,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
 const env = require('./utils/env');
+const { applyOfflineCsp } = require('./utils/manifestCsp');
 
 const ASSET_PATH = process.env.ASSET_PATH || '/';
 
@@ -186,17 +187,9 @@ const options = {
               }
             }
 
-            // Offline builds must not permit remote scripts on extension pages
-            if (
-              process.env.OFFLINE_MODE === '1' &&
-              manifestObj.content_security_policy
-            ) {
-              manifestObj.content_security_policy =
-                manifestObj.content_security_policy.replace(
-                  " 'unsafe-inline' https:",
-                  ''
-                );
-            }
+            // Offline builds must not permit remote scripts on extension pages.
+            // 逻辑抽到 utils/manifestCsp.js 以便测试（T-194）。
+            applyOfflineCsp(manifestObj, process.env.OFFLINE_MODE === '1');
 
             return Buffer.from(JSON.stringify(manifestObj));
           },

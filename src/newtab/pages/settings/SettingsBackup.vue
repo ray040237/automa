@@ -305,11 +305,18 @@ function formatDate(date) {
 async function syncBackupWorkflows() {
   try {
     state.loadingSync = true;
+    // getUserWorkflows 在 offline 下返回 {}（src/utils/api.js 的 IS_OFFLINE 门），
+    // 所以 backup 可能是 undefined —— 判空后再用，否则 .map 会抛 TypeError，
+    // 被下面的 catch 兜成一句答非所问的「出错了」。写法与 App.vue:141-144 对齐（T-193）。
     const { backup, hosted } = await getUserWorkflows(false);
+    if (!backup || backup.length === 0) {
+      state.loadingSync = false;
+      return;
+    }
     const backupIds = backup.map(({ id }) => id);
 
     userStore.backupIds = backupIds;
-    userStore.hostedWorkflows = hosted;
+    userStore.hostedWorkflows = hosted || {};
 
     await browser.storage.local.set({
       backupIds,
