@@ -3572,3 +3572,51 @@ if (process.env.OFFLINE_MODE === '1' && manifestObj.content_security_policy) {
 建议：三个选项，代价递增——① 最小：把目标串提成模块级常量并在 `replace` 前后断言 `changed`（`if (next === cur) throw`），构建期炸掉而不是静默放过；② 中：直接在 `manifest.firefox.json` 里就写成收紧后的 CSP，删掉这段 transform（offline 与 full 用同一份 manifest，但 offline 本来就不需要 `'unsafe-inline' https:`——需确认 full 构建是否依赖它）；③ 最稳：给 `transform` 抽成纯函数并补测试（喂两个 manifest 桩，断言 offline=true 时输出不含 `'unsafe-inline' https:`、offline=false 时含）。倾向 ② 或 ③。
 结论：采纳 ③（用户选定）——新增 `utils/manifestCsp.js`（纯函数 `applyOfflineCsp` + 导出 `CSP_REMOTE_SNIPPET`），`webpack.config.js` 改调它；offline 且声明了 CSP 却找不到目标串时**抛错**（构建期炸掉，不再静默 no-op）；未声明 CSP（Chrome MV3）原样返回。新增 `utils/manifestCsp.test.js` 5 条：offline 收紧、full 不动、无 CSP 直通、措辞漂移抛错、以及**真实 `src/manifest.firefox.json` 仍含该片段**（防常量与 manifest 漂移）。注释里写明「只对 Firefox 生效是正确的按浏览器分流」，避免后来人误当遗漏。
 状态：已清（2026-10-10 完成）
+
+### T-195 — 新建会话后面板的「目标页 chip」不跟着重置：仍显示旧 pin、仍标「已固定」，与 runtime 已清空的 pins 相反
+
+类型：bug
+登记日期：2026-10-10
+来源：2026-10-10 会话分析「助手界面 pin 住的会话管理 / 标签页两点的状态判定」，触发点 `src/composable/agentHost.js`（`newAgentSession`）与 `src/agent/index.js`（`runtime.newSession`）
+现象：用户在助手面板点「新建会话」，runtime 会清空 `pins` / `focusedTabId` / 插话队列，但面板上的 `agent.targetTab` / `agent.targetPinned` / `agent.targetState` 三件套**一个都不动**。结果是：新会话已经「不认任何固定页」，chip 却仍然显示上一条会话固定的那个页、并带着「已固定」徽标 —— 面板显示的状态与 runtime 的真实状态正好相反。
+证据：**源码核对（推断，未实测 UI）** —— `newAgentSession` 体内只有 `runtime.newSession()` 与 `sessionId/events/usage` 三处重置，grep agentHost.js 的 `targetPinned|targetState|agent.targetTab` 写入点，**没有任何一处在 newSession 路径上**。runtime 侧 `newSession` 明确 `pins = []`。
+影响：切到新会话后，用户看到的 chip 说「我已固定了你选的页」，而模型这一轮拿到的 `pins` 是空的、目标页会走四级降级链重新解析。最坏结果：用户以为助手还在看他固定的页，实际助手已经跟随到另一个页，且 chip 不报警。新会话是高频动作，踩中面广。
+建议：`newAgentSession` 里把面板的目标页三件套也归零/重解析。归零语义要选对——「无目标」不是运行时支持的状态（见 T-164），所以正确做法是按降级链重新解析，而不是置 `null`。可抽成与 `onUnpinTab` 共用的 `resetTargetToAuto()`。
+结论：新增 `agentHost.resetTargetToAuto()`（重解析 + 回写 runtime + 走唯一写入点 `syncTarget`），`newAgentSession` 在清空会话后调用它 —— chip 立刻回到「自动跟随」。同一条不变量由 `panelUi.test.js` 的源码守卫钉住（见 T-198 结论）。
+状态：已清（2026-10-10 完成）
+
+### T-196 — 打开历史会话时，面板的目标页 chip 不恢复「固定」态：会按上一会话残留的 pinned 值显示错徽标
+
+类型：bug
+登记日期：2026-10-10
+来源：同 T-195，触发点 `src/composable/agentHost.js`（`openAgentSession`）
+现象：`openAgentSession` 从会话记录恢复 `targetTab`（index.js 按 `focusedTabId` / `pins[0]` 还原），但**只写 `agent.targetTab` 一个字段**，不写 `targetPinned` 也不写 `targetState`。于是 chip 的「已固定」徽标与失效判定用的是**切换前**的那两个值：从 pin 会话切到非 pin 会话（或反过来）时，徽标与实际来源不一致。
+证据：**源码核对（推断，未实测 UI）** —— `openAgentSession` 体内只有 `sessionId/events/usage/targetTab` 四处赋值；runtime 侧 `openSession` 确实按 pin 还原了目标页，即「这一页有会话级 pin」这个事实**在 runtime 侧成立、在面板侧丢失**。
+影响：与 T-195 同族。常见路径：会话 A 固定某页 → 新建会话 → 打开历史里的会话 A → chip 应显示「已固定 A 选的那页」，实际显示成 auto（或沿用旧值）。「打开会话后 chip 是不是可信」这条不成立。
+建议：`openAgentSession` 同步写 `targetPinned` 与 `targetState`；需要 runtime 的 `openSession` 返回值多带一个 pinned 布尔（不能只看 `targetTab` 是否有值）。
+结论：`runtime.openSession` 改为经纯函数 `restoredTarget(pin, liveTab)`（`targetState.js`，有单测）判定并返回 `{targetTab, targetPinned, targetState}` 三件套；宿主 `openAgentSession` 解构后经 `syncTarget` 一次写全。守卫：`panelUi.test.js` 断言 openSession 必须回这两个字段并经 `restoredTarget`；`targetState.test.js` 四条纯函数断言。
+状态：已清（2026-10-10 完成）
+
+### T-197 — 恢复一个「pin 的页已被关掉」的会话后，chip 不进入失效态，`targetState` 停在 `'ok'`
+
+类型：bug
+登记日期：2026-10-10
+来源：同 T-195，触发点 `src/agent/index.js` 与 `src/composable/agentHost.js`
+现象：`openSession` 恢复 pin 时，若 `browser.tabs.get(pin.tabId)` 抛错（页已关），会**伪造一个快照** `{id, url:'', title:'(页面可能已关闭)', windowId:-1}` 当作 `targetTab` 返回。面板把它赋给 `agent.targetTab`，但 `agent.targetState` 仍是 `'ok'`。于是 chip 既不显示红色「已关闭 / 重新选择」失效态，也不带「已固定」徽标——安静地显示着一个「(页面可能已关闭)」的标题，看起来像正常目标页。
+证据：**源码核对（推断，未实测 UI）** —— `targetHealth` 本可把这种情形判成 `'closed'`，但它的调用点只有 `markTargetHealth`（由 `onRemoved`/`onUpdated` 驱动）——**打开会话这条路径不经过它**。T-08 的失效态设计覆盖的是「面板开着时页被关」，没覆盖「打开会话时页早就关了」。
+影响：与 T-196 同族、但更隐蔽。用户固定某页 → 关掉那页 → 重新打开会话 —— chip 无任何失效视觉，用户以为助手还能操作那页，实际第一次工具调用就会失败。
+建议：拿到 runtime 还原的 `targetTab` 后判一次存活，把 `targetState` 一并写入；runtime 侧 `browser.tabs.get` 成功与否它已经知道。
+结论：并入 T-196 的 `restoredTarget` —— 「有 pin、`tabs.get` 失败」返回 `state: 'closed'` 与兜底快照（标题常量 `TAB_GONE_TITLE`）；面板据此进红色失效态。`targetState.test.js` 有专门断言（pin 但页已关 → state=closed）。
+状态：已清（2026-10-10 完成）
+
+### T-198 — 解除固定（unpin）后 runtime 的 `targetTab` 没跟着重解析：chip 显示新页，模型仍操作旧 pin 的页
+
+类型：bug
+登记日期：2026-10-10
+来源：同 T-195，触发点 `src/composable/agentHost.js`（`onUnpinTab`）与 `src/agent/index.js`（`unpinTab`）
+现象：用户点 chip 上的「✕ 解除固定」，`onUnpinTab` 让 runtime `unpinTab()` 清掉 pins/焦点，然后在**面板侧** `resolveTarget()` 重解析并写 `agent.targetTab`。它**没有回写 runtime**。runtime 闭包里的 `targetTab` 仍指向解除前那个被 pin 的页，而工具执行读的正是这个闭包值。于是 chip 显示「自动 + 新解析的页」，模型下一轮却还在操作旧页。
+证据：**源码核对（推断，未实测 UI）** —— `onUnpinTab` 体内**唯独没有 `runtime.pickTab` / `runtime.setTargetTab`**；对比 `onPickTab` 三条都写了，说明这里漏了一条。
+影响：T-164 的整个收益（「取消固定 → 回到自动跟随」）在「跟随」这一步上断链——UI 跟随了，runtime 没跟随。最坏结果：用户以为助手已经不看旧页了，助手继续在旧页上读/写——正是他想摆脱的那页。
+建议：`onUnpinTab` 拿到新页后同步给 runtime，用 `setTargetTab`（不重新 addPin）而非 `pickTab`（会又 pin 回去）。
+结论：`onUnpinTab` 与 `newAgentSession` 共用 `resetTargetToAuto()`，其中 `agent.runtime.setTargetTab(next)` 把新目标页回写闭包。守卫：`panelUi.test.js` 新增两条源码守卫 —— ① 目标页三件套只允许 `syncTarget` 写（扫全文件，除 syncTarget 体外不得出现 `agent.targetXxx =`）；② `resetTargetToAuto` 必须含 `runtime.setTargetTab(next)`、`openAgentSession` 必须从 runtime 读回 `targetPinned/targetState`。
+状态：已清（2026-10-10 完成）

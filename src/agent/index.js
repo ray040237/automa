@@ -77,6 +77,7 @@ import {
   initialPinsFromTab,
   originDriftKey,
   originDriftNotice,
+  restoredTarget,
   tabClosedNotice,
   upsertPin,
 } from './targetState';
@@ -773,12 +774,25 @@ export function createAgentRuntime(deps) {
       return had;
     },
 
-    /** 打开已有会话：读回历史并按 pin 恢复目标页。 */
+    /**
+     * 打开已有会话：读回历史并按 pin 恢复目标页。
+     *
+     * 返回值自带 `targetPinned` / `targetState` —— 宿主面板要一次性把「目标页
+     * 三件套」写全（T-196 / T-197）。以前只回 `targetTab`，面板只能补一个页、
+     * 徽标与失效态都沿用旧值，导致 chip 与真实来源/健康状态不符。
+     */
     async openSession(id) {
       currentSessionId = id || null;
       lastNoticeKey = '';
 
-      if (!sessionStore || !id) return { events: [], targetTab: null };
+      if (!sessionStore || !id) {
+        return {
+          events: [],
+          targetTab: null,
+          targetPinned: false,
+          targetState: 'none',
+        };
+      }
 
       const rec = await sessionStore.load(id);
       let events = (rec && rec.events) || [];
@@ -816,26 +830,26 @@ export function createAgentRuntime(deps) {
       }
 
       // 目标页从 pin 恢复（focus_tab 会改 focusedTabId，比扫 TARGET_TAB
-      // 事件更准）。纯显示用途——真实执行前预检会发现 tab 已关并报给模型
-      let tab = null;
+      // 事件更准）。判定收在 targetState.restoredTarget（纯函数、有单测）：
+      // 「有 pin 无活页」返回 closed，面板据此进红色失效态（T-197）。
       const pin = pins.find((p) => p.tabId === focusedTabId) || pins[0] || null;
+      let liveTab = null;
       if (pin) {
         try {
-          tab = normalize(await browser.tabs.get(pin.tabId));
+          liveTab = normalize(await browser.tabs.get(pin.tabId));
         } catch {
-          tab = {
-            id: pin.tabId,
-            url: '',
-            title: pin.title || '(页面可能已关闭)',
-            windowId: -1,
-          };
+          liveTab = null;
         }
-        setTargetTab(tab);
       }
+
+      const restored = restoredTarget(pin, liveTab);
+      if (restored.tab) setTargetTab(restored.tab);
 
       return {
         events,
-        targetTab: tab,
+        targetTab: restored.tab,
+        targetPinned: restored.pinned,
+        targetState: restored.state,
         usage: (rec && rec.usage) || null,
       };
     },

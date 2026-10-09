@@ -1989,3 +1989,86 @@ test('T-182：助手入口的图标不许再与画布上的自动布局撞车', 
     '助手 tab 用 riChat3Line（对话框），语义上比魔法棒准'
   );
 });
+
+test('T-195~T-198 守卫：目标页三件套只能经 syncTarget 写入，且六条入口都覆盖', () => {
+  // 本仓无组件测试基建（见文件头），agentHost.js 又不在 test glob 内 ——
+  // 这里用源码守卫钉住「唯一写入点」这条不变量：chip 的 targetTab /
+  // targetPinned / targetState 只能由 syncTarget 一次性写全，任何一处
+  // 直接 `agent.targetXxx =` 的写法都会让 chip 与 runtime 再次各说各话。
+  const src = read('src/composable/agentHost.js');
+  // 只剥块注释，保留行注释不影响下面针对 `=` 赋值的断言（赋值不会被写进注释）。
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // ① syncTarget 必须存在，且三个字段都写。
+  assert.match(
+    code,
+    /function syncTarget\(/,
+    'agentHost 必须有唯一的 syncTarget 写入点'
+  );
+  const body = code.slice(code.indexOf('function syncTarget('));
+  const bodyEnd = body.indexOf('\n  }');
+  const syncBody = body.slice(0, bodyEnd);
+  for (const field of [
+    'agent.targetTab',
+    'agent.targetPinned',
+    'agent.targetState',
+  ]) {
+    assert.ok(
+      syncBody.includes(field),
+      `syncTarget 必须写全三件套，缺 ${field}`
+    );
+  }
+
+  // ② 除 syncTarget 自身外，不得再有别的地方直接写这三个字段（读不算）。
+  const directWrites = [
+    ...code.matchAll(/agent\.(targetTab|targetPinned|targetState)\s*=[^=]/g),
+  ].filter((m) => {
+    // 允许 syncTarget 体内那三处 —— 用「是否落在 syncTarget 函数体内」判定。
+    const at = m.index;
+    const fnStart = code.indexOf('function syncTarget(');
+    const fnEnd = code.indexOf('\n  }', fnStart);
+    return !(at > fnStart && at < fnEnd);
+  });
+  assert.deepEqual(
+    directWrites.map((m) => m[0].trim()),
+    [],
+    '目标页三件套只允许 syncTarget 写；其它入口一律改调它（T-195~T-198）'
+  );
+
+  // ③ 六条入口都不能漏：新建会话 / 解除固定必须回到自动跟随（会回写 runtime）；
+  //    打开会话必须读回 pinned 与 state。
+  assert.match(
+    code,
+    /await resetTargetToAuto\(\);/,
+    'newSession/unpin 必须经 resetTargetToAuto'
+  );
+  assert.match(
+    code,
+    /runtime\.setTargetTab\(next\)/,
+    'resetTargetToAuto 必须把新目标页回写 runtime（T-198：chip 与模型操作同一页）'
+  );
+  assert.match(
+    code,
+    /targetPinned,\s*targetState,\s*usage\s*\}\s*=\s*\n?\s*await agent\.runtime\.openSession/,
+    'openAgentSession 必须从 runtime 读回 targetPinned / targetState（T-196/T-197）'
+  );
+});
+
+test('T-196/T-197 守卫：runtime.openSession 必须回 pinned 与 state 两个字段', () => {
+  const src = read('src/agent/index.js').replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // openSession 的两个 return 都要带齐 targetPinned / targetState，否则
+  // 面板侧解构出 undefined，退回「沿用旧值」的老问题。
+  const pinReturns = src.match(/targetPinned:\s*restored\.pinned/g) || [];
+  assert.ok(pinReturns.length >= 1, 'openSession 必须回 targetPinned');
+  assert.match(
+    src,
+    /targetState:\s*restored\.state/,
+    'openSession 必须回 targetState'
+  );
+  assert.match(
+    src,
+    /restoredTarget\(pin,\s*liveTab\)/,
+    'openSession 必须走 restoredTarget 纯函数判定（有单测）'
+  );
+});

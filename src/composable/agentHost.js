@@ -136,6 +136,27 @@ export function useAgentHost(deps) {
   });
 
   /**
+   * 目标页「三件套」的唯一写入点（T-195~T-198）。
+   *
+   * 面板上那个目标页 chip 只是这套状态的显示器：`targetTab`（指向哪一页）、
+   * `targetPinned`（固定来源 / 自动解析）、`targetState`（ok/closed/drift/none）。
+   * 以前六个入口（init / pickTab / unpinTab / target-tab 事件 / openSession /
+   * newSession）各自零散地改其中一两个字段，其余留着旧值，于是 chip 与 runtime
+   * 经常各说各话。现在一律走这里，一次写全。
+   *
+   * 定义在 markTargetHealth 之前是有意的：下面那个监听函数要用它，而本文件
+   * 的 lint 规则不允许「先用后定义」。
+   *
+   * @param {Object|null} tab 目标页快照
+   * @param {{pinned?: boolean, state?: string}=} opts
+   */
+  function syncTarget(tab, { pinned = false, state } = {}) {
+    agent.targetTab = tab || null;
+    agent.targetPinned = Boolean(pinned);
+    agent.targetState = state || (tab ? 'ok' : 'none');
+  }
+
+  /**
    * 目标页失效的监听（T-08）。
    *
    * 运行时每步开工前的 preStepNotice 已经判过「tab 没了 / origin 漂了」，但它的
@@ -150,7 +171,12 @@ export function useAgentHost(deps) {
    * 比明着报警更糟（CONTEXT.md「pin」条：origin 才是真身份）。
    */
   function markTargetHealth(liveTab) {
-    agent.targetState = targetHealth(liveTab, agent.targetTab);
+    // 只改健康状态这一路（不换页、不动 pinned）：仍走 syncTarget 这个唯一写入点，
+    // 把当前 pinned 原样带过去，避免出现第二处直接改 targetState 的写法。
+    syncTarget(agent.targetTab, {
+      pinned: agent.targetPinned,
+      state: targetHealth(liveTab, agent.targetTab),
+    });
   }
 
   const onTabRemoved = (tabId) => {
@@ -240,16 +266,53 @@ export function useAgentHost(deps) {
     return true;
   }
 
+  /**
+   * 回到自动跟随：按降级链重新解析一次目标页，并把结果**同时**写进 runtime 与面板
+   * （T-195 / T-198）。
+   *
+   * 为什么必须回写 runtime：工具执行读的是 runtime 闭包里的 `targetTab`
+   * （index.js 的 `get targetTab()`），只改面板会让 chip 显示新页、模型仍操作旧页。
+   * 用 `setTargetTab`（只改当前目标、不重新 addPin）而不是 `pickTab` ——
+   * 「回到自动跟随」的语义就是没有 pin 参与解析，语义见 index.js 的 unpinTab。
+   *
+   * 取不到窗口就退化（与 init / 历史行为一致），不因此让调用失败。
+   *
+   * @returns {Promise<Object|null>} 新解析出的目标页
+   */
+  async function resetTargetToAuto() {
+    let windowId;
+    try {
+      const currentWindow = await browser.windows.getCurrent();
+      windowId = currentWindow ? currentWindow.id : undefined;
+    } catch (err) {
+      windowId = undefined;
+    }
+
+    const next = await resolveTarget({ windowId });
+    if (agent.runtime) agent.runtime.setTargetTab(next);
+    syncTarget(next, { pinned: false, state: next ? 'ok' : 'none' });
+
+    return next;
+  }
+
   async function openAgentSession(id) {
     // id 为空是下拉里的占位项，不是一次切换 —— 交给它会把 runtime 的
     // 会话 id 置空但不清 pins/插话队列，落到一个不新不旧的状态。
     if (!id || !guardAgentSwitch() || !agent.runtime) return;
 
-    const { events, targetTab, usage } = await agent.runtime.openSession(id);
+    const { events, targetTab, targetPinned, targetState, usage } =
+      await agent.runtime.openSession(id);
     agent.sessionId = id;
     agent.events = events || [];
     agent.usage = usage || null;
-    if (targetTab) agent.targetTab = targetTab;
+    // T-196 / T-197：runtime 一次性给全三件套（pinned 来源 + 健康状态）。
+    if (targetTab) {
+      syncTarget(targetTab, { pinned: targetPinned, state: targetState });
+    } else {
+      // 这条会话没有 pin：保留当前自动解析出的页，但把来源明确成「自动」，
+      // 避免沿用上一个会话的 pinned 徽标。
+      syncTarget(agent.targetTab, { pinned: false });
+    }
   }
 
   async function newAgentSession() {
@@ -259,6 +322,9 @@ export function useAgentHost(deps) {
     agent.sessionId = null;
     agent.events = [];
     agent.usage = null;
+    // T-195：runtime.newSession 清空了 pins，面板的目标页三件套必须跟着归零并
+    // 回到自动跟随，否则 chip 还会显示旧 session 固定过的页 + 「已固定」徽标。
+    await resetTargetToAuto();
   }
 
   /**
@@ -306,39 +372,26 @@ export function useAgentHost(deps) {
 
   function onPickTab(tab) {
     // 目标页变了要同步三处：runtime 的闭包快照、会话 pin（用户选的页
-    // 就是「以后就用这个页」的意图）、面板上显示的那一行
-    agent.runtime.pickTab(tab);
-    agent.targetTab = tab;
+    // 就是「以后就用这个页」的意图）、面板上显示的那一行。
     // T-08：用户手选 = 固定；新选的页此刻必然是活的（列表就是从 tabs.query 拉的）
-    agent.targetPinned = true;
-    agent.targetState = tab ? 'ok' : 'none';
+    agent.runtime.pickTab(tab);
+    syncTarget(tab, { pinned: true, state: tab ? 'ok' : 'none' });
   }
 
   /**
-   * 取消固定目标页（T-164）。
+   * 取消固定目标页（T-164 / T-198）。
    *
    * 立刻按降级链重新解析一次 —— chip 不能闪成空：用户按 X 之后看到的应当是
-   * 「自动 + 解析出来的那一页」，而不是先空一下再填上。unpinTab 返回 false
-   * 说明本来就是自动态，这时不用（也不该）重解析：解析结果不会变，白白多一次
-   * tabs 查询。
+   * 「自动 + 解析出来的那一页」，而不是先空一下再填上。重解析同时回写 runtime
+   * （T-198），否则 chip 已切到新页、模型还在操作旧 pin 的页。
+   * `unpinTab` 返回 false 说明本来就是自动态，这时不用（也不该）重解析：解析结果
+   * 不会变，白白多一次 tabs 查询。
    */
   async function onUnpinTab() {
     if (!agent.runtime) return;
     if (!agent.runtime.unpinTab()) return;
 
-    agent.targetPinned = false;
-
-    let windowId;
-    try {
-      const currentWindow = await browser.windows.getCurrent();
-      windowId = currentWindow ? currentWindow.id : undefined;
-    } catch (err) {
-      windowId = undefined;
-    }
-
-    const next = await resolveTarget({ windowId });
-    agent.targetTab = next;
-    agent.targetState = next ? 'ok' : 'none';
+    await resetTargetToAuto();
   }
 
   function goToAgentSettings() {
@@ -415,12 +468,10 @@ export function useAgentHost(deps) {
         ...(workflowContext ? { workflowContext } : {}),
         onEvent: (ev) => {
           if (ev && ev.kind === 'agent:target-tab') {
-            agent.targetTab = ev.tab || agent.targetTab;
             // T-08：只有 focus_tab 会发这个事件（index.js:500）—— 模型明确指定了
             // 这一页，等同于「以后就用它」，与用户手选同级；快照刚从 tabs.get
             // 拿到，此刻必然是活的，失效状态顺手清掉。
-            agent.targetPinned = true;
-            agent.targetState = agent.targetTab ? 'ok' : 'none';
+            syncTarget(ev.tab || agent.targetTab, { pinned: true });
             return;
           }
           if (ev) agent.events.push(ev);
@@ -494,19 +545,12 @@ export function useAgentHost(deps) {
     // windowId 显式取当前窗口 —— 早先是写死的 window.id（扩展页上没有这个属性），
     // 于是「当前窗口优先」那一级永远匹配不上，退化成了全浏览器最近访问的那个页。
     // 取不到窗口就退化到原来的行为，不因此让整个 init 失败。
-    let windowId;
-    try {
-      const currentWindow = await browser.windows.getCurrent();
-      windowId = currentWindow ? currentWindow.id : undefined;
-    } catch (err) {
-      windowId = undefined;
-    }
-
-    agent.targetTab = await resolveTarget({ windowId });
+    //
     // T-08：resolveTargetTab 是从 tabs.query 的结果里挑的，拿到就是活的；
-    // 且这一页是自动解析的（用户没选），所以 targetPinned 保持 false。
-    agent.targetState = agent.targetTab ? 'ok' : 'none';
-    agent.targetPinned = false;
+    // 且这一页是自动解析的（用户没选），所以 pinned=false。统一走 resetTargetToAuto
+    // ——此处 runtime 还没建，函数内的 `if (agent.runtime)` 是安全的空操作，
+    // 下面 createAgentRuntime 会带上刚解析出的 targetTab。
+    await resetTargetToAuto();
 
     // markRaw：runtime 是满是闭包/getter 的对象，塞进 reactive 会被深层代理
     // —— 方法碰巧不被包装才没炸（T-90）。零成本保险。

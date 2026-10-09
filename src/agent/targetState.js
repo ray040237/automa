@@ -114,3 +114,44 @@ export function upsertPin(pins, pin) {
   if (list.some((p) => p.tabId === pin.tabId)) return list;
   return [...list, pin];
 }
+
+/**
+ * pin 记录的页已经取不到时，面板要显示的兜底标题。抽成常量而不是散在
+ * index.js 里的字面量：它同时是「这一页已失效」的可见标记，panel 与测试
+ * 都要能引用同一个值。
+ */
+export const TAB_GONE_TITLE = '(页面可能已关闭)';
+
+/**
+ * 打开已有会话时，按 pins 还原「面板目标页三件套」的判定（T-196 / T-197）。
+ *
+ * 这条路径以前只回一个 `targetTab`，把另外两个字段留在原值上 —— 于是：
+ *   - `pinned` 沿用上一个会话的值，徽标与实际来源不符（T-196）；
+ *   - pin 的页已关时用一个伪造快照顶上，`state` 却停在 'ok'，
+ *     红色失效态（T-08）在这条路径上永不出现（T-197）。
+ *
+ * 判定收在这里、一次性给全三个值，调用方（index.js）只负责把 liveTab 取回来，
+ * 组件侧只负责原样写进面板。
+ *
+ * @param {{tabId: number, title?: string}=} pin  命中的 pin（无则视为该会话没有目标页）
+ * @param {Object|null} liveTab  browser.tabs.get 拿到的活 tab；取不到传 null
+ * @returns {{tab: Object|null, pinned: boolean, state: 'none'|'ok'|'closed'}}
+ */
+export function restoredTarget(pin, liveTab) {
+  if (!pin) return { tab: null, pinned: false, state: 'none' };
+
+  if (liveTab) return { tab: liveTab, pinned: true, state: 'ok' };
+
+  // 页已关：给一个能显示身份的兜底快照（id 仍是 pin 的 tabId，title 用 pin 的），
+  // 同时把 state 明确判成 closed —— 面板据此进红色失效态，而不是安静地假装正常。
+  return {
+    tab: {
+      id: pin.tabId,
+      url: '',
+      title: pin.title || TAB_GONE_TITLE,
+      windowId: -1,
+    },
+    pinned: true,
+    state: 'closed',
+  };
+}

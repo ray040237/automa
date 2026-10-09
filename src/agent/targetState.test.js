@@ -7,6 +7,8 @@ import {
   initialPinsFromTab,
   originDriftKey,
   originDriftNotice,
+  restoredTarget,
+  TAB_GONE_TITLE,
   tabClosedNotice,
   upsertPin,
 } from './targetState';
@@ -87,4 +89,45 @@ test('upsertPin：按 tabId 去重；重复时保持原引用', () => {
     { tabId: 2, origin: 'b' },
   ]);
   assert.notEqual(next, list, '新 pin 产出新数组，不改写入参');
+});
+
+// —— T-196 / T-197：打开会话时按 pin 还原「目标页三件套」 ——
+//
+// 这两条 bug 的根因是 openSession 只回一个 targetTab，pinned / state 沿用旧值。
+// 判定抽成 restoredTarget 纯函数后，下面把三种情形钉死：无 pin、pin 且活、
+// pin 但页已关。谁再退回「只算 targetTab 不回其余两个状态」的写法，这里就红。
+
+test('T-196 restoredTarget：该会话没有 pin → 无目标、非固定、state=none', () => {
+  assert.deepEqual(restoredTarget(null, null), {
+    tab: null,
+    pinned: false,
+    state: 'none',
+  });
+});
+
+test('T-196 restoredTarget：pin 且页还活着 → 固定(pinned) + state=ok', () => {
+  const live = { id: 7, url: 'https://a.com', title: 'A', windowId: 2 };
+  const out = restoredTarget({ tabId: 7, title: 'A' }, live);
+  assert.equal(out.tab, live, '活 tab 原样透传，不重造快照');
+  assert.equal(out.pinned, true, 'pin 命中的目标页必须标成「已固定」');
+  assert.equal(out.state, 'ok');
+});
+
+test('T-197 restoredTarget：pin 但页已关 → 兜底快照 + state=closed（进红色失效态）', () => {
+  const out = restoredTarget({ tabId: 9, title: '旧标题' }, null);
+  assert.equal(out.tab.id, 9);
+  assert.equal(out.tab.url, '', '页已关时 url 为空');
+  assert.equal(out.tab.title, '旧标题', '保留 pin 记下的标题');
+  assert.equal(out.tab.windowId, -1);
+  assert.equal(out.pinned, true);
+  assert.equal(
+    out.state,
+    'closed',
+    '必须是 closed，不能停在 ok（T-197 的根因）'
+  );
+});
+
+test('T-197 restoredTarget：pin 无标题时用兜底文案', () => {
+  const out = restoredTarget({ tabId: 3 }, null);
+  assert.equal(out.tab.title, TAB_GONE_TITLE);
 });
