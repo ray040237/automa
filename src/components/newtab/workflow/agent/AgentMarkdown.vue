@@ -1,6 +1,7 @@
 <template>
-  <!-- v-html 的内容全部来自 @/agent/markdown：先转义再做行内替换，
-       链接只放行 http/https/mailto，所以这里不需要 DOMPurify 之类的二次清洗 -->
+  <!-- v-html 的内容全部来自 @/agent/markdown：marked 只做词法，HTML 由我们自己
+       逐 token 产出，白名单以外的 token（含源码里手写的标签）一律转义成文本，
+       链接只放行 http/https/mailto —— 所以不需要 DOMPurify 之类的二次清洗 -->
   <!-- eslint-disable vue/no-v-html -->
   <div class="group relative text-sm leading-relaxed">
     <!-- T-16：整条回答的复制入口（原来只有代码块有复制按钮）。
@@ -62,19 +63,38 @@
         class="my-3 border-gray-200 dark:border-gray-700"
       />
 
-      <component
-        :is="block.ordered ? 'ol' : 'ul'"
-        v-else-if="block.type === 'list'"
-        :class="['my-2 pl-5', block.ordered ? 'list-decimal' : 'list-disc']"
-      >
+      <!-- T-176：列表由 marked 解析成「带 depth 的扁平项」，模板只负责画。
+           每项自带 marker，所以有序/无序可以混在同一个列表里（换库前
+           `1. step` 换行 `- bullet` 会把子项并进父项、**吞掉内容**）；
+           缩进直接由 depth 决定（换库前被 Math.min(1,…) 拍成一层）。
+           任务列表的勾选态来自 item.checked。 -->
+      <ul v-else-if="block.type === 'list'" class="my-2 list-none pl-0">
         <li
           v-for="(item, j) in block.items"
           :key="j"
-          :class="{ 'ml-4': item.depth > 0 }"
-          class="mb-0.5"
-          v-html="item.html"
-        />
-      </component>
+          class="mb-0.5 flex items-start gap-1.5"
+          :style="{ paddingLeft: `${item.depth * 14}px` }"
+        >
+          <input
+            v-if="item.task"
+            type="checkbox"
+            :checked="item.checked"
+            disabled
+            class="mt-[3px] h-3.5 w-3.5 shrink-0"
+          />
+          <span
+            v-else
+            class="shrink-0 select-none text-gray-400 dark:text-gray-500"
+            style="min-width: 1.15em"
+            aria-hidden="true"
+            v-text="item.marker"
+          />
+          <span
+            class="min-w-0 flex-1 break-words [overflow-wrap:anywhere]"
+            v-html="item.html"
+          />
+        </li>
+      </ul>
 
       <!-- T-156：表格溢出提示（渐变遮罩 + 「可横滑」角标）收进 AgentTable，
            这样多表格互不干扰、逻辑也好钉守卫 -->

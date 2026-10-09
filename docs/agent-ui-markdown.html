@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Agent 聊天区 Markdown · 手搓解析器 vs 引库 对照设计稿</title>
+    <title>Agent 聊天区 Markdown · 引库落地（marked 词法 + 自渲染）</title>
     <style>
       :root {
         --bg: #f4f5f7;
@@ -258,11 +258,12 @@
   </head>
   <body>
     <div class="wrap">
-      <h1>Agent 聊天区 Markdown · 手搓解析器 vs 引库 对照设计稿</h1>
+      <h1>Agent 聊天区 Markdown · 引库落地（marked 词法 + 自渲染）</h1>
       <p class="lede">
         问题（用户提出）：聊天区正文本应把模型的 markdown 展示得"更完美"，
         现在是自己手搓的解析器，是不是该换成现成的库？
-        本稿先把<b>实测缺口</b>和<b>两条路的真实成本</b>摊开，再给建议 —— 决策权留给你。
+        本稿前半是<b>实测缺口</b>与<b>两条路的真实成本</b>；第六节起是
+        <b>最终决策与落地结果</b>（走的是"库做词法、渲染自己出"的混合路线）。
       </p>
       <div class="toolbar">
         <button id="theme">切换 深/浅</button>
@@ -569,44 +570,112 @@
         </tbody>
       </table>
 
-      <h2>六、建议</h2>
+      <h2>六、决策与落地（2026-10-09）</h2>
       <p class="lede">
-        <b>走方案 A（原地补全）。</b> 理由：
+        结论：<b>上库 —— 但走"库做词法、渲染自己出"的混合路线</b>，而不是
+        上面设想的 <code>marked + DOMPurify</code>。
+      </p>
+      <p>
+        本稿原先把"上库"等同于"用 <code>marked.parse()</code> 吐 HTML、再拿
+        DOMPurify 过滤"，于是把它判成"安全降档 + 三处重造"。真正落地时发现
+        还有第三条路，而它把这两笔代价同时绕开了：
       </p>
       <ul>
         <li>
-          这个场景是"模型生成的<b>会话正文</b>"，真实流量是段落 + 列表 + 代码 +
-          偶尔表格。缺口集中在嵌套列表 / 混合嵌套 / 行内反引号 / 任务列表 ——
-          <b>都能就地补</b>，而且是几十行的改动。
+          <b>解析</b>交给 marked 的<b>词法器</b>（<code>Lexer.lex</code> /
+          <code>Lexer.lexInline</code>），只拿 token 树；
         </li>
         <li>
-          方案 B 换来的是"完整 CommonMark 合规"，代价是装依赖、+60KB、
-          <b>把安全模型从结构性保证降成过滤</b>，还要重造 token 接口与流式
-          两套已有的东西。收益与代价明显不成比例。
-        </li>
-        <li>
-          真要上库，也应当<b>先保留 token 接口</b>（用库做 inline 解析、
-          自己出块结构），而不是直接 <code>v-html</code> 库的 HTML 串 ——
-          但那是另一个量级的工程。
+          <b>渲染</b>仍由自己逐 token 拼 HTML —— 白名单以外的 token（含源码里
+          手写的 <code>&lt;script&gt;</code> / <code>&lt;img onerror&gt;</code>）
+          一律转义。
         </li>
       </ul>
+      <p>
+        于是三处代价全部消失：<b>安全不变量原样保留</b>（是"结构上不可能注入"，
+        不是"渲染完再过滤"，所以<b>没有引入 DOMPurify</b>）；<b>token 接口不用重造</b>
+        （复制按钮仍拿得到代码块原文、表格仍委托给 AgentTable）；<b>流式也不用重写</b>
+        —— 换的只是 <code>parse</code> 的实现，切点策略一行未动，那 200 组随机切分
+        等价性断言原样继续跑，并全部通过。
+      </p>
 
-      <h3>方案 A 的落地清单（若采纳）</h3>
+      <h3>落地清单（已完成）</h3>
       <ol>
-        <li>列表解析重写：<code>depth</code> 不再 <code>Math.min(1, …)</code>，按缩进推层级；</li>
-        <li>混合嵌套：有序项下的无序/有序子项不再当"续行"合并；</li>
-        <li>行内代码：支持 <code>``…``</code> 多反引号定界；</li>
-        <li>任务列表：<code>- [ ]</code> / <code>- [x]</code> → 复选框标记；</li>
-        <li>有序列表起始序号：<code>&lt;ol start="n"&gt;</code>；</li>
-        <li>多段落列表项：缩进续段并回同一项，不留前导空格；</li>
-        <li>每条补一条守卫（沿用"每改必补"纪律），并跑变异验证。</li>
+        <li>
+          解析层换成 marked 词法器，<code>markdownToBlocks</code> 改为
+          <code>token → 块</code> 的映射（公开 API 五个导出一个没动）；
+        </li>
+        <li>
+          列表 <code>depth</code> 按真实层级（不再 <code>Math.min(1, …)</code>），
+          子列表递归展开成独立项；
+        </li>
+        <li>
+          每项自带 <code>marker</code>，有序/无序可混在同一列表里
+          —— 修掉"混合嵌套把子项并进父项、改写内容"这条真 bug；
+        </li>
+        <li>任务列表：<code>task</code> / <code>checked</code> → 模板画只读复选框；</li>
+        <li>有序列表起始序号保留（<code>3.</code> 起就从 3 编）；</li>
+        <li>行内多反引号 <code>``…``</code> 由 marked 处理；</li>
+        <li>
+          守卫：新增 <code>markdownLib.test.js</code>（链路守卫 + 钉死"不许退化成
+          <code>marked.parse</code> + <code>v-html</code>"）+ 6 条 GFM 能力断言，
+          变异验证 <b>8/8 命中</b>。
+        </li>
       </ol>
 
-      <h2>七、待决策</h2>
+      <h3>实测与验证</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>项</th>
+            <th>结果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>版本</td>
+            <td>
+              <code>marked@16.4.2</code> 与 <code>@18.1.0</code> <b>都</b>通过。
+              注意 v18 起列表项会多出一个 <code>checkbox</code> token（v16 是直接
+              剥掉的），不显式吃掉它正文就会多出一段字面的 <code>[ ] </code>。
+            </td>
+          </tr>
+          <tr>
+            <td>安全</td>
+            <td>块级 + 行内两路注入、<code>javascript:</code> 协议降级 —— 全绿</td>
+          </tr>
+          <tr>
+            <td>流式</td>
+            <td>200 组随机切分等价性原样通过（切点策略未改）</td>
+          </tr>
+          <tr>
+            <td>性能</td>
+            <td>
+              单次整段解析 2K 字 2.5ms / 10K 字 5.2ms / 40K 字 15ms
+              —— 比手搓版慢约 <b>6~7 倍</b>（仍是毫秒级）；20K 字按 40 字一个
+              delta，缓存式累计 <b>47ms</b> vs 无缓存 <b>1926ms</b>（约 <b>41 倍</b>）。
+            </td>
+          </tr>
+          <tr>
+            <td>包体</td>
+            <td>
+              打包进 bundle（<code>lib/marked.esm.js</code> 约 40KB）；
+              <b>未引 DOMPurify</b>，比方案 B 省下约 22KB
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>七、遗留</h2>
       <ul>
-        <li>是否采纳方案 A？</li>
-        <li>若不采纳、想直接上库：是否接受"安全模型降档 + 体积 +60KB"，以及先解决装依赖？</li>
-        <li>落地清单里可有取舍？（例如任务列表要不要真做成交互式复选框 —— 本稿按"只读标记"设计）</li>
+        <li>
+          依赖要落地进 <code>package.json</code> / <code>pnpm-lock.yaml</code>：
+          本机 agent 通道装不了 pnpm 依赖（npm 管不了 pnpm 树，pnpm 的 link
+          阶段会被删除守卫拦），须由人工执行一次 <code>pnpm add marked</code>。
+        </li>
+        <li>
+          浏览器里的 DOM patch 成本仍未实测 —— 本次只按可测的解析成本下判断。
+        </li>
       </ul>
     </div>
 

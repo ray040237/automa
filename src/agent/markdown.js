@@ -1,19 +1,27 @@
 /**
- * agent 正文的极简 markdown 渲染。
+ * agent 正文的 markdown 渲染。
  *
- * 为什么自己写：本机装不上 npm 依赖，仓库里也没有 markdown 库可复用。
- * 为什么输出 token 数组而不是一整串 HTML：代码块要在 UI 上单独挂复制按钮，
- * 塞进 HTML 里就只能用 JS 事后补，不如一开始就把结构交出去。
+ * 分工（T-176 换库时定下，改之前先读）：
+ *   - **解析**交给 marked：块结构、嵌套列表、任务列表、表格、行内强调的配对、
+ *     反引号转义这些最容易写错的规则，用成熟库取代原来那份手搓正则。
+ *     手搓版实测有真 bug：`1. step` 换行 `   - bullet` 会被当列表续行**吞掉**；
+ *     嵌套列表 depth 被 `Math.min(1, …)` 截成一层；任务列表不认；有序起始号丢失。
+ *   - **渲染**仍留在自己手里：marked 只做词法（`Lexer.lex` / `Lexer.lexInline`
+ *     拿 token 树），HTML 由本模块逐个 token 自己拼。
  *
- * 安全底线（改之前先读）：
- * 正文全部来自模型，是不可信输入。流程是「先转义 → 再做行内替换」，
- * 任何情况下模型写进来的 script 标签、带 onerror 的 img 都只会落成可见文本。
- * 代码围栏里的内容保持原始字符串不转义，由 UI 用插值渲染（Vue 自带转义）。
- * 链接只允许 http/https/mailto，其余协议（javascript:、data:、vbscript:）
- * 一律降级成纯文本。
+ * 为什么不直接 `marked.parse()` 吐 HTML（安全底线，改之前先读）：
+ *   正文全部来自模型，是不可信输入。marked 默认**原样透传**源码里的 HTML，
+ *   所以要安全就得再过一道 DOMPurify —— 那是「先渲染、再过滤掉已知的坏」，
+ *   比「结构上不可能注入」弱一档。自己渲染则能维持这条不变量：白名单以外的
+ *   token（含源码里手写的 `<script>` / `<img onerror>`）一律按纯文本转义。
+ *   顺带还拿到两样 marked 的 HTML 串给不了的东西：代码块原文（挂复制按钮）
+ *   与表格结构（委托给 AgentTable）。
  *
- * 流式友好：围栏未闭合、表格缺分隔行等情况按「还没写完」处理，不抛异常。
+ * 流式友好：围栏未闭合、表格缺分隔行等情况按「还没写完」处理，不抛异常
+ * （marked 的词法器本身也不抛，实测过 `'```'`、`'| a |\n|'`、`'[未闭合](https://'`）。
  */
+
+import { Lexer } from 'marked';
 
 const HTML_ESCAPE = {
   '&': '&amp;',
@@ -24,6 +32,20 @@ const HTML_ESCAPE = {
 };
 
 const SAFE_URL = /^(?:https?:\/\/|mailto:)/i;
+
+/**
+ * gfm  —— 表格、任务列表、删除线、裸 URL 自动成链（换库前手搓版已覆盖的部分）。
+ * breaks —— 软换行按 `<br>` 渲染。换库前的实现是把段落/引用的连续行
+ *   `join('<br>')`，所以这里保持一致，前端观感零变化（也免得正文里的换行
+ *   被 HTML 折叠成空格）。
+ */
+const MD_OPTIONS = { gfm: true, breaks: true };
+
+const CODE_CLASS = 'rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800';
+
+// 只服务于 advanceCut 的切点判定（找围栏行），不参与渲染 —— 渲染全是 marked 的事。
+const FENCE_OPEN = /^\s*(?:```|~~~)\s*([\w+#.-]*)\s*$/;
+const FENCE_CLOSE = /^\s*(?:```|~~~)\s*$/;
 
 export function escapeHtml(text) {
   return String(text ?? '').replace(/[&<>"']/g, (ch) => HTML_ESCAPE[ch]);
@@ -36,84 +58,147 @@ export function safeHref(raw) {
 }
 
 /**
- * 行内渲染：粗体、斜体、删除线、行内代码、链接、裸 URL。
+ * 单个 token → HTML 片段。
  *
- * 输入是未转义的原文，输出可安全交给 v-html。行内代码先摘出来占位，
- * 免得代码块里的星号被当成强调符号再解析一遍。
+ * 白名单之外**一律按纯文本转义**（宁可多转义，不肯漏）—— 这就是「转义优先」
+ * 不变量的落点：marked 只负责把源码切成 token，任何来自源码的 `html`
+ * （`<script>`、带 `onerror` 的 `<img>`…）到这儿都还只是字符串，被 escapeHtml。
  */
+function emitToken(tok) {
+  const { text = '', tokens = null, href = '', raw = '' } = tok;
+
+  switch (tok.type) {
+    case 'text':
+    case 'escape':
+      // marked 的 text token 有时自带子 token（例如被软换行切开的那半段）
+      return tokens && tokens.length ? emitTokens(tokens) : escapeHtml(text);
+
+    case 'codespan':
+      return `<code class="${CODE_CLASS}">${escapeHtml(text)}</code>`;
+
+    case 'br':
+      return '<br>';
+
+    // 任务列表的勾选框：**不是内容**，是列表项的一个 UI 附属，由模板画成
+    // 真正的 <input type="checkbox">（勾选态来自 item.checked）。
+    // marked v16 会把 `[ ] ` 直接从 item.tokens 里剥掉，v18 起则留下一个
+    // `checkbox` token —— 不显式吃掉它，v18 上正文就会多出一段字面的 "[ ] "。
+    // （跨版本差异靠这条 + markdown.test.js 的任务列表断言兜住。）
+    case 'checkbox':
+      return '';
+
+    case 'strong':
+      return `<strong>${emitTokens(tokens)}</strong>`;
+
+    case 'em':
+      return `<em>${emitTokens(tokens)}</em>`;
+
+    case 'del':
+      return `<del>${emitTokens(tokens)}</del>`;
+
+    // 裸 URL / 自动链接 / [label](href) 在 marked 里都是 link token
+    case 'link':
+    case 'url': {
+      const label = emitTokens(tokens) || escapeHtml(text);
+      const safe = safeHref(href);
+      // 危险协议降级成可读文本：留 label 让用户看懂这句写的是什么，
+      // 但不把 javascript: 原样甩出去
+      if (!safe) return label;
+      return `<a href="${escapeHtml(
+        safe
+      )}" target="_blank" rel="noopener noreferrer nofollow">${label}</a>`;
+    }
+
+    case 'image':
+      // 图片一律降级成 alt 文本：正文里的外链图既不可控，也不该自动发起请求
+      return escapeHtml(text);
+
+    default:
+      // 'html'（源码里手写的标签）以及任何不认识的 token
+      if (tokens && tokens.length) return emitTokens(tokens);
+      return escapeHtml(text || raw);
+  }
+}
+
+function emitTokens(tokens, out = []) {
+  for (const tok of tokens || []) {
+    if (tok) out.push(emitToken(tok));
+  }
+  return out.join('');
+}
+
+/** 行内渲染的公开入口：粗体、斜体、删除线、行内代码、链接、裸 URL、转义。 */
 export function renderInline(text) {
-  const codes = [];
-  let source = escapeHtml(text);
+  const src = String(text ?? '');
+  return src ? emitTokens(Lexer.lexInline(src, MD_OPTIONS)) : '';
+}
 
-  source = source.replace(/`([^`\n]+)`/g, (_, code) => {
-    codes.push(code);
-    return `@@CODE${codes.length - 1}@@`;
-  });
+/**
+ * 列表项里的行内内容。子列表（nested `list` token）在这里**跳过** ——
+ * 它由 listItems 递归展开成带 depth 的独立项，不能混进父项的文字里。
+ */
+function itemInline(item) {
+  const out = [];
+  for (const tok of item.tokens || []) {
+    if (!tok || tok.type === 'list') continue;
+    // 松散列表项里的段落分隔，按换行处理
+    out.push(tok.type === 'space' ? { type: 'br' } : tok);
+  }
+  return out;
+}
 
-  source = source
-    .replace(
-      /!?\[([^\]\n]*)\]\(([^)\s]+)(?:\s+&quot;[^)]*&quot;)?\)/g,
-      (whole, label, href) => {
-        const safe = safeHref(href);
-        // 危险协议降级成可读文本：留 label 让用户还能看懂这句写的是什么，
-        // 但不能把 javascript: 这种原样甩出去吓人
-        if (!safe) return label || '';
-        if (whole.startsWith('!')) return label || '';
-        return `<a href="${safe}" target="_blank" rel="noopener noreferrer nofollow">${
-          label || safe
-        }</a>`;
+/**
+ * 把 marked 的嵌套 list token 拍平成「带 depth 的项数组」。
+ *
+ * 拍平而不是渲染成嵌套的 <ul>：模板里一个 v-for 就能画完，且深度直接变成
+ * 缩进、每项自带 marker（有序/无序可以在同一个列表里混）。
+ * 有序项的序号按「同层计数」推：marked 只在 list 上给 start，不给每项序号。
+ */
+function listItems(list, depth, out) {
+  const { items = [], ordered = false, start = 1 } = list;
+  let n = ordered ? (Number(start) || 1) - 1 : 0;
+
+  for (const item of items) {
+    if (!item) continue;
+    if (ordered) n += 1;
+
+    out.push({
+      html: emitTokens(itemInline(item)),
+      depth,
+      ordered,
+      marker: ordered ? `${n}.` : '•',
+      task: Boolean(item.task),
+      checked: Boolean(item.checked),
+    });
+
+    for (const child of item.tokens || []) {
+      if (child && child.type === 'list') listItems(child, depth + 1, out);
+    }
+  }
+
+  return out;
+}
+
+/** 引用块：内部块（段落/列表/…）拍成一段带 <br> 的文本。 */
+function quoteHtml(tokens) {
+  const parts = [];
+
+  for (const tok of tokens || []) {
+    if (!tok || tok.type === 'space' || tok.type === 'table') continue;
+
+    if (tok.type === 'list') {
+      for (const item of tok.items || []) {
+        parts.push(emitTokens(itemInline(item)));
       }
-    )
-    .replace(/(\*\*|__)(?=\S)([\s\S]*?\S)\1/g, '<strong>$2</strong>')
-    .replace(/~~(?=\S)([\s\S]*?\S)~~/g, '<del>$1</del>')
-    .replace(/(?<![*\w])\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>')
-    .replace(/(?<![_\w])_([^_\n]+)_(?![_\w])/g, '<em>$1</em>')
-    // 裸 URL 自动成链。前面限定是行首或空白，避免二次匹配我们刚生成的 href="..."
-    .replace(
-      /(^|[\s(])((?:https?:\/\/)[^\s<>"']+)/g,
-      (_, lead, url) =>
-        `${lead}<a href="${url}" target="_blank" rel="noopener noreferrer nofollow">${url}</a>`
-    );
+      continue;
+    }
 
-  return source.replace(/@@CODE(\d+)@@/g, (_, index) => {
-    return `<code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">${
-      codes[Number(index)] ?? ''
-    }</code>`;
-  });
-}
+    const { tokens: inner = null, text = '' } = tok;
+    if (inner && inner.length) parts.push(emitTokens(inner));
+    else if (typeof text === 'string' && text) parts.push(escapeHtml(text));
+  }
 
-const FENCE_OPEN = /^\s*(?:```|~~~)\s*([\w+#.-]*)\s*$/;
-const FENCE_CLOSE = /^\s*(?:```|~~~)\s*$/;
-const HEADING = /^(#{1,6})\s+(.*)$/;
-const HR = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
-const QUOTE = /^\s*>\s?/;
-const BULLET = /^(\s*)([-*+])\s+(.*)$/;
-const ORDERED = /^(\s*)(\d+)[.)]\s+(.*)$/;
-const TABLE_DIVIDER = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
-
-function splitRow(line) {
-  return line
-    .replace(/^\s*\|/, '')
-    .replace(/\|\s*$/, '')
-    .split('|')
-    .map((cell) => cell.trim());
-}
-
-function alignOf(spec) {
-  if (/^:.*:$/.test(spec)) return 'center';
-  if (/:$/.test(spec)) return 'right';
-  if (/^:/.test(spec)) return 'left';
-  return '';
-}
-
-function isBreakAhead(line) {
-  return (
-    FENCE_OPEN.test(line) ||
-    HEADING.test(line) ||
-    QUOTE.test(line) ||
-    BULLET.test(line) ||
-    ORDERED.test(line)
-  );
+  return parts.filter(Boolean).join('<br>');
 }
 
 /**
@@ -122,130 +207,92 @@ function isBreakAhead(line) {
  * @returns {Array<{
  *   type: 'p'|'heading'|'code'|'quote'|'list'|'table'|'hr',
  *   html?: string, lang?: string, code?: string, level?: number,
- *   ordered?: boolean, items?: Array<{html: string, depth: number}>,
+ *   ordered?: boolean,
+ *   items?: Array<{html: string, depth: number, ordered: boolean,
+ *                  marker: string, task: boolean, checked: boolean}>,
  *   head?: string[], align?: string[], rows?: string[][]
  * }>}
  */
 export function markdownToBlocks(raw) {
+  const src = String(raw ?? '');
+  if (!src.trim()) return [];
+
   const blocks = [];
-  const lines = String(raw ?? '').split('\n');
-  let i = 0;
 
-  while (i < lines.length) {
-    const line = lines[i];
+  for (const tok of Lexer.lex(src, MD_OPTIONS)) {
+    if (!tok) continue;
+    const { type } = tok;
 
-    if (!line.trim()) {
-      i += 1;
-      continue;
-    }
+    if (type === 'space') continue;
 
-    const fence = FENCE_OPEN.exec(line);
-    if (fence) {
-      const body = [];
-      i += 1;
-      while (i < lines.length && !FENCE_CLOSE.test(lines[i])) {
-        body.push(lines[i]);
-        i += 1;
-      }
-      // 没闭合（流式输出中）也要把已收到的部分渲染出来，尾部的反引号下一轮会补上
-      if (i < lines.length) i += 1;
-      blocks.push({
-        type: 'code',
-        lang: fence[1] || '',
-        code: body.join('\n'),
-      });
-      continue;
-    }
-
-    if (HR.test(line)) {
-      blocks.push({ type: 'hr' });
-      i += 1;
-      continue;
-    }
-
-    const heading = HEADING.exec(line);
-    if (heading) {
+    if (type === 'heading') {
+      const { depth = 1, tokens } = tok;
       blocks.push({
         type: 'heading',
-        level: heading[1].length,
-        html: renderInline(heading[2]),
+        level: Math.min(6, Math.max(1, depth)),
+        html: emitTokens(tokens),
       });
-      i += 1;
       continue;
     }
 
-    if (QUOTE.test(line)) {
-      const body = [];
-      while (i < lines.length && QUOTE.test(lines[i])) {
-        body.push(lines[i].replace(QUOTE, ''));
-        i += 1;
-      }
-      blocks.push({ type: 'quote', html: body.map(renderInline).join('<br>') });
+    if (type === 'paragraph') {
+      const html = emitTokens(tok.tokens);
+      if (html) blocks.push({ type: 'p', html });
       continue;
     }
 
-    if (
-      line.includes('|') &&
-      i + 1 < lines.length &&
-      TABLE_DIVIDER.test(lines[i + 1])
-    ) {
-      const head = splitRow(line);
-      const align = splitRow(lines[i + 1]).map(alignOf);
-      i += 2;
-      const rows = [];
-      while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
-        rows.push(splitRow(lines[i]));
-        i += 1;
-      }
+    if (type === 'code') {
+      const { lang = '', text = '' } = tok;
+      blocks.push({
+        type: 'code',
+        lang: String(lang).trim().split(/\s+/)[0],
+        code: text,
+      });
+      continue;
+    }
+
+    if (type === 'blockquote') {
+      blocks.push({ type: 'quote', html: quoteHtml(tok.tokens) });
+      continue;
+    }
+
+    if (type === 'hr') {
+      blocks.push({ type: 'hr' });
+      continue;
+    }
+
+    if (type === 'list') {
+      const { ordered = false } = tok;
+      const items = [];
+      listItems(tok, 0, items);
+      if (items.length) blocks.push({ type: 'list', ordered, items });
+      continue;
+    }
+
+    if (type === 'table') {
+      const { header = [], align = [], rows = [] } = tok;
       blocks.push({
         type: 'table',
-        head: head.map(renderInline),
-        align,
-        rows: rows.map((row) => row.map(renderInline)),
+        head: header.map((cell) => emitTokens(cell.tokens)),
+        align: align.map((a) => a || ''),
+        rows: rows.map((row) => row.map((cell) => emitTokens(cell.tokens))),
       });
       continue;
     }
 
-    if (BULLET.test(line) || ORDERED.test(line)) {
-      const ordered = !BULLET.test(line);
-      const items = [];
-      while (i < lines.length) {
-        const item = ordered ? ORDERED.exec(lines[i]) : BULLET.exec(lines[i]);
-        if (item) {
-          const indent = item[1].replace(/\t/g, '  ').length;
-          items.push({
-            text: item[3],
-            depth: Math.min(1, Math.floor(indent / 2)),
-          });
-          i += 1;
-          continue;
-        }
-        // 缩进的续行并入上一项，不另起一块
-        if (items.length && /^\s{2,}\S/.test(lines[i])) {
-          items[items.length - 1].text += ` ${lines[i].trim()}`;
-          i += 1;
-          continue;
-        }
-        break;
-      }
-      blocks.push({
-        type: 'list',
-        ordered,
-        items: items.map((item) => ({
-          html: renderInline(item.text),
-          depth: item.depth,
-        })),
-      });
+    if (type === 'html') {
+      const { text = '', raw: rawText = '' } = tok;
+      // 源码里手写的 HTML 块：按纯文本转义后当段落渲染
+      const html = escapeHtml(text || rawText).replace(/\s+$/, '');
+      if (html.trim()) blocks.push({ type: 'p', html });
       continue;
     }
 
-    const body = [];
-    while (i < lines.length && lines[i].trim() && !isBreakAhead(lines[i])) {
-      body.push(lines[i]);
-      i += 1;
-    }
-    if (body.length) {
-      blocks.push({ type: 'p', html: body.map(renderInline).join('<br>') });
+    // 其余块类型（def/list_item 等）在 gfm 默认配置下不会出现在顶层；
+    // 真出现的话按段落兜底，不静默丢内容。
+    if (tok.tokens) {
+      const html = emitTokens(tok.tokens);
+      if (html) blocks.push({ type: 'p', html });
     }
   }
 
@@ -253,10 +300,10 @@ export function markdownToBlocks(raw) {
 }
 
 /**
- * 围栏外的一个空行就是块边界 —— 上面每个 while 循环都以「空行或块起始」收尾，
- * 所以按空行切开后分段解析的结果与整段解析完全一致。唯一的例外是代码围栏：
- * 围栏里的空行是代码内容，不能切。切点判定必须与 FENCE_OPEN/FENCE_CLOSE 用同一套
- * 正则，否则会和上面的解析器对不上（下面 advanceCut 就是这么做的）。
+ * 围栏外的一个空行就是块边界 —— 上面每个块都收在空行或块起始处，
+ * 所以按空行切开后分段解析的结果与整段解析一致。唯一的例外是代码围栏：
+ * 围栏里的空行是代码内容，不能切。切点判定必须与解析器对「围栏行」的
+ * 认定一致，否则会切出半截围栏（下面 advanceCut 就是这么做的）。
  */
 function advanceCut(text, from) {
   let fence = false;
@@ -277,7 +324,7 @@ function advanceCut(text, from) {
       // delta 是按 token 来的，会切在一行中间 —— 此时看到的「空行」可能只是
       // 下一行的前缀（两个空格 + 后面还要来的「补充：…」）。提前切掉的话，
       // 解析器会把后续内容当成新块，而整段解析会把它并进上一条列表项：
-      // 列表续行规则 /\s{2,}\S/ 要求的正是「缩进 + 非空」。
+      // 列表续行规则要求的正是「缩进 + 非空」。
       safe = lineEnd + 1;
     }
 
@@ -294,15 +341,18 @@ function advanceCut(text, from) {
  * 问题：`blocks = computed(() => markdownToBlocks(raw))`，而 raw 每来一个 delta 就变一次，
  * 于是整段被反复重解析，累计成本随回答长度**平方**增长。
  *
- * 实测（本机 node，`src/agent/markdown.test.js` 同一份 markdown.js，2026-10-07）：
- *   单次解析是**线性**的，约 0.55 ms / 万字（5K 字 0.44ms、40K 字 2.26ms）——
- *   单帧最差 2.2ms，**不到掉帧**。真正贵的是累计：20K 字按 40 字一个 delta 累计
- *   **313ms**，按 10 字一个 delta 累计 **1.1s** 主线程时间。
- *   对照：只重解析最后一个未完成块，20K 字累计 **4ms**（约 70 倍）。
- *   渲染侧（SSR 渲染当代理指标，编译已剔除）每次 0.9~2.8ms，与解析同量级，
- *   所以本次只治可测的解析成本；**浏览器里的 DOM patch 成本未实测**。
+ * 手法与换库前一致：已确定完成的块缓存起来，只重解析「最后一个还没写完的块」。
+ * 换库只动了 `parse` 的实现（marked 词法），切点策略不变 —— 所以
+ * markdownStream.test.js 那套「随机切分的结果必须与整段解析完全一致」的
+ * 等价性断言继续有效，也是这次换库最重要的回归网。
  *
- * 做法：已确定完成的块缓存起来，只重解析「最后一个还没写完的块」。
+ * 实测（本机 node，2026-10-09 改用 marked 后重测，样本是重复的「标题+段落+
+ * 列表+代码块+表格」单元）：
+ *   单次整段解析 2K 字 2.5ms / 10K 字 5.2ms / 40K 字 15ms —— 比手搓版慢约
+ *   6~7 倍（marked 的词法本身重得多），但绝对值仍是毫秒级，不在掉帧量级；
+ *   真正贵的是**累计**：20K 字按 40 字一个 delta，缓存式累计 **47ms**，
+ *   不做缓存（每轮整段重解析）**1926ms**，约 **41 倍**。
+ *   渲染侧（浏览器里的 DOM patch）仍未实测 —— 这里只按可测的解析成本下判断。
  *
  * 契约：`push(text)` 接整段文本（不是增量片段），内部自己算差量；返回当前全部块。
  *   text 不是已收文本的追加（换了会话 / 组件复用）时自动整体重来。

@@ -1,6 +1,7 @@
 <template>
-  <!-- v-html 的内容全部来自 @/agent/markdown：先转义再做行内替换，
-       链接只放行 http/https/mailto，所以这里不需要 DOMPurify 之类的二次清洗 -->
+  <!-- v-html 的内容全部来自 @/agent/markdown：marked 只做词法，HTML 由我们自己
+       逐 token 产出，白名单以外的 token（含源码里手写的标签）一律转义成文本，
+       链接只放行 http/https/mailto —— 所以不需要 DOMPurify 之类的二次清洗 -->
   <!-- eslint-disable vue/no-v-html -->
   <div class="relative my-2">
     <!-- 横向滚动容器：窄侧栏（320px）里表格常溢出，用户需要能拖。 -->
