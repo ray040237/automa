@@ -3177,3 +3177,32 @@ build exit 0 且产物含 4 个新键、无 `interject` 残留。
 设计稿：`docs/agent-ui-markdown.html` —— 聊天区 markdown「手搓 vs 引库」对照设计稿（实测 8 条缺口 + 两方案成本表 + 渲染前后对照），**先出稿待决策，本次未动渲染器**。
 验收：build 100% 通过（`font-mono` / `text-[11px]` / `max-h-56` / `overflow-x-hidden` / `overflow-wrap:anywhere` 等均进 CSS，49 产物）；npm test 747/746 pass 0 fail 1 skipped；lint 0 error（10 个既有 no-console warning）；check:i18n passed。
 状态：已清（2026-10-09）
+
+### T-176 — markdown 解析改用 marked（词法引库、渲染仍自出）
+
+类型：改进（架构 / 正确性）
+登记日期：2026-10-09
+来源：会话 2026-10-09，commit feb14dec；用户反馈「聊天框展示的 markdown 显示是自己手搓的，是不是可以引用现成的库，展示是不是会完美一点」，并选定「上库」。
+现象：聊天区正文由 `src/agent/markdown.js`（355 行手搓解析器）渲染，文件头自述原因是「本机装不上 npm 依赖，仓库里也没有 markdown 库可复用」。实跑常见语法后确认有真缺口。
+根因 / 缺口（实跑 16 条常见语法，8 条不符，其中 2 条是真 bug）：
+- ① 嵌套列表 `depth` 被 `Math.min(1, …)` 拍成一层 —— 三层列表看着只有一层；
+- ② **混合嵌套改写内容**：`1. step` 换行缩进 `- bullet` 被当「列表续行」并进父项，输出 `step - bullet`（真 bug，不是显示问题）；
+- ③ 行内代码含反引号（用两个反引号包一段含单个反引号的代码）解析崩、破结构；
+- ④ 任务列表 `- [ ]` / `- [x]` 不认，字面显示 `[ ] todo`；
+- ⑤ 有序列表起始序号丢失（`3.` 开头仍从 1 编）；多段落列表项断成两块；
+- ✅ 段落 / 标题 / 一二级列表 / 代码块 / 表格（含对齐、缺竖线）/ 引用 / 强调 / 链接与裸 URL 均正确，且有测试钉着。
+结论：**上库，但走「库做词法、渲染自己出」的混合路线** —— 不是最初设想的 `marked.parse()` + DOMPurify。理由：正文是不可信输入，marked 默认原样透传源码里的 HTML，走 `parse()` 就必须再挂 DOMPurify，安全模型从「结构上不可能注入」降档成「渲染完再过滤」；而自己渲染能同时保住 token 接口（代码块复制按钮、表格委托 AgentTable）与流式（切点策略一行未动）。因此**没有引入 DOMPurify**（比方案 B 省约 22KB）。
+落地：
+- `src/agent/markdown.js`：解析换 `Lexer.lex` / `Lexer.lexInline`（`gfm + breaks`），新增 token→块 的映射与逐 token 转义发射器；公开 API 五个导出（`escapeHtml` / `safeHref` / `renderInline` / `markdownToBlocks` / `createMarkdownStream`）一个没动；列表项新增 `depth`（真实层级）/ `marker` / `task` / `checked`。
+- `AgentMarkdown.vue`：列表改画扁平项 —— 缩进按 `depth`、每项自带 `marker`（有序/无序可混在同一列表里）、任务项画只读 `checkbox`；不再用 ol/ul 原生 marker。
+- 依赖：`package.json` / `pnpm-lock.yaml` 加 `marked ^18.1.0`（bundle 里 `lib/marked.esm.js` 约 40KB）。
+- **跨版本坑**：v16 会把 `[ ] ` 从 item.tokens 里剥掉，**v18 起留下一个 `checkbox` token** —— 不显式吃掉它，v18 上正文会多出字面 `[ ] `。已在 `16.4.2` 与 `18.1.0` 上双向验证。
+守卫（每改必补）：
+- 新增 `src/agent/markdownLib.test.js`：① 解析走 marked 词法器，手搓的表格切分（`TABLE_DIVIDER` / `splitRow` / `alignOf`）与 depth 截断已删除；② **不许退化成 `marked.parse` + `v-html`**、不许引 DOMPurify；③ 五个公开导出齐全；④ 模板真的渲染 depth 缩进 / marker / 勾选，且不再用原生 marker；⑤ 用到的类真产出到构建 CSS（没构建就 skip，不假绿）。
+- `markdown.test.js`：更新「列表续行」预期（续行现在按 `<br>` 渲染，与段落/引用一致）；新增 6 条 GFM 能力断言（三层嵌套 / 混合嵌套不吞内容 / 任务列表 / 有序起始 / 反引号 codespan / 自动链接）；**补一条「行内」手写标签转义断言** —— 变异测试发现原先只有块级注入被覆盖，把 `emitToken` 兜底分支的 `escapeHtml` 去掉后全部测试依旧绿（真缺口）。
+- `markdownStream.test.js` **未改**：200 组随机切分等价性原样通过，是这次换库最重要的回归网。
+变异验证 8/8 命中：去掉 marked 引入、子列表不加深 depth、有序序号写死、勾选态写死、兜底分支不转义、链接不过白名单、缩进不按 depth、marker 不逐项画。
+性能（本机 node，换库后重测）：单次整段解析 2K 字 2.5ms / 10K 字 5.2ms / 40K 字 15ms（比手搓慢约 6~7 倍，仍是毫秒级，不在掉帧量级）；20K 字按 40 字一个 delta，缓存式累计 **47ms** vs 无缓存 **1926ms**（约 **41 倍**）。浏览器 DOM patch 成本仍未实测。
+设计稿：`docs/agent-ui-markdown.html` 更新为决策 + 落地记录（原「待决策」关闭）。
+验收：build 100% 通过（`list-none` / `select-none` / `items-start` / `mt-[3px]` 等均进 CSS，49 产物，marked 打进 bundle）；npm test 759/758 pass 0 fail 1 skipped；lint 0 error（10 个既有 no-console warning）；check:i18n passed。
+状态：已清（2026-10-09）
