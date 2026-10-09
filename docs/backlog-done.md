@@ -3086,3 +3086,65 @@ build exit 0 且产物含 4 个新键、无 `interject` 残留。
 - `onMounted` 测量 + 窗口 resize 监听 + `watch(block)` 流式重测，覆盖侧栏宽度变化与增量渲染。
 验收：新增 `src/agent/scrollHint.test.js`，钉住 —— 表格渲染已委托给 AgentTable、提示以 `overflowing` 为总开关且末列后渐隐、两语 `tableScrollHint` 齐备、渐变类真产出到构建 CSS。变异 4（提示常驻不条件化）/ 8（角标不看 atEnd）均命中。`npm test` 731/0 fail，`npm run lint` 0 error，`check:i18n` passed，build 49 产物含首用渐变组合。
 状态：已完成（2026-10-09）
+
+---
+
+### T-169 — 宿主形态宽窄分流（host.layout 分栏）
+
+类型：feature
+登记日期：2026-10-08
+来源：会话 2026-10-08，commit 27029e06
+现象：目标页=状态指示器、会话历史=历史导航，但两者共用 `AgentDropdown` 只是被 320px 侧栏所迫；历史需要从浮层搬成独立视图 —— 否则 `utils/sfc-render.mjs` 把 `agent-dropdown` 放进 GLOBAL_STUBS、slot 不渲染，会话列表在渲染测试里不可见。
+结论：新增 `AgentSessionHistory.vue` 与 `src/agent/sessionGroups.js`（groupSessionsByDay / filterSessionsByTitle / relativeTime，纯函数带单测）；`agentHost.js` 增加 `layout` 字段（`'wide'` 独立助手页 / 窄侧栏），面板形态由 `host.layout` 决定而非窗口断点；`AgentPanel.vue` 加 `view:'chat'|'history'`，窄宿主历史作为正文区整块替换（搜索+分组+每行删除，composer 隐藏），宽宿主左 240px 常驻列表 + 右对话。`sfc-render` 不再把 `agent-dropdown` 当 stub → 会话列表在 `panelRender` 真断言。locale 新增 session.history/searchPlaceholder/searchLimit/groupToday/groupYesterday/groupEarlier/turnCount/deleteOne，`sessionOptionLabel` 保留（header chip 还在用）。
+验收：npm test 717 pass（1 跳过既有 provider 用例）；lint 0 error；i18n passed。
+状态：已清（2026-10-08）
+
+### T-170 — 像素账修正：设计稿的数字之前是 mock 量出来的
+
+类型：bug（方法论）
+登记日期：2026-10-08
+来源：commit 15bff428（与 T-171 同批）
+现象：设计稿里写死的像素数字（输入区 130px、会话行 44px）是 mock 阶段手量的，等于自证；真实值分别是输入区 162px（改前 194）、会话行 54px。
+结论：像素账改为「从源码逐段算 + 用真实构建 CSS 核对」，不拿自写 mock 量。输入区逐段拆：form pb-2 8 + border 2 + 卡片 py-1.5 12 + chip 28 + mb-1 4 + textarea min-h 60 + `!py-1` 8 + 底行 40（`UiButton` 根节点自带 `h-10`）。会话行：`text-[13px]`/`text-[10.5px]` 只声明 font-size 不写 line-height，两行都继承面板 base `text-sm` 的 `line-height:20px`，按 1.5 倍少算 10px。一屏 6 条仍成立（540−34−40−分组标题 69−底部模型名 33 = 364 ÷ 54）。
+验收：随 15bff428 落地；build 49 产物、14 个新 class 全部产出。
+状态：已清（2026-10-08）
+
+### T-171 — composer 的三个工具类覆盖一直是哑的（静默失效）
+
+类型：bug
+登记日期：2026-10-08
+来源：commit 15bff428（与 T-170 同批）
+现象：`AgentPanel` 给 `<ui-textarea>` 写的 `px-1 py-1 bg-transparent` 三项全部无效。`UiTextarea` 根节点自带 `px-4 py-2 bg-input`，Tailwind 按「工具组+刻度」排序：`.bg-input`(110753) > `.bg-transparent`(96687)、`.px-4`(98408) > `.px-1`(98187)、`.py-2`(98802) > `.py-1`(98577)，同优先级后来者赢 → 调用方那条被组件自身吃掉。后果：输入框左右各多 12px、上下各多 4px；输入区里多一块比卡片略深的矩形（`bg-input`=黑/白 5%），把「一条边框包住整个输入区」拆成「边框里又有个框」。
+结论：改用 `!px-1 !py-1 !bg-transparent`（`SettingsEvents.vue` 有 `!px-3`/`!h-8` 先例），已验证三条 `!important` 真产出到 `build/newtab.css`。新增 `src/agent/cssSpecificity.test.js`（扫全仓 24 个 ui 原子组件 / 508 处调用，判据=两条类 CSS 属性集有交集且调用方那条在产物里排得更靠后，属性集靠解析 CSS 规则正文、不手写前缀映射）；`panelUi.test.js` 加 MUST_OVERRIDE 清单 ↔ `UiTextarea` 源码双向核对 + 「后来者赢」前提自检。8 个变异全红。
+验收：随 15bff428 落地；npm test 717 pass；lint 0 error；i18n passed。
+状态：已清（2026-10-08）
+
+### T-171b — 窄宿主整页滚动 + composer 圆角/背景对齐设计稿
+
+类型：bug（回归修复）
+登记日期：2026-10-09
+来源：会话 2026-10-09，commit 1712907c；用户报告两处窄宿主（320px 侧栏）回归。
+现象：① 滚动条逼出整页而非只在 transcript；② composer 与设计稿（`docs/agent-ui-composer-redesign.html`）不符。
+结论：问题1 根因 `AgentPanel` 右栏 flex 列子项缺 `min-h-0`（flex 子项默认 `min-height:auto` 不收缩，内部 `overflow-y-auto` 拿不到固定高度，整列溢出固定高度侧栏 → 整页滚动）；右栏补 `min-h-0` + composer 表单加 `shrink-0`（优先压 transcript）。问题2 根因 T-171 修了底色/内边距但漏了 `UiTextarea` 根节点的 `rounded-lg`，卡片里又套圆角框；textarea 加 `rounded-none` 中和 + 卡片补显式表面背景 `bg-white dark:bg-gray-800` 对齐设计稿 `var(--surface)`。守卫：`panelUi.test.js` T-169 断言右栏含 `min-h-0`、textarea 类含 `rounded-none`，新增 T-171b 钉源码含 `min-h-0` 右栏 + `shrink-0` composer；`panelRender.test.js` 新增 T-171b 渲染 PANEL 断言含 `min-h-0` 与 `shrink-0`（源码级+渲染级双保险）。
+验收：build 100% 通过（rounded-none/min-h-0/shrink-0/bg-white/dark:bg-gray-800 均进 CSS）；npm test 733/726 pass 0 fail 7 skipped；lint 0 error；i18n passed。
+状态：已清（2026-10-09）
+
+### T-172 — 配色语义分离：琥珀只保留「工具被拒」一处语义
+
+类型：改进
+登记日期：2026-10-08
+来源：commit 48b96c77（与 T-173 同批）
+现象：notice / 确认门 / 未配置横幅 / 工具被拒 四处共用琥珀或黄，警示退化；thinking 与 compaction 卡 class 逐字相同无法区分。
+结论：琥珀四义拆解 —— notice 改中性灰 + 左侧竖线（`border-l-2`，避免与 thinking 折叠卡撞形状）；确认门改 accent（近黑近白，不加新色相）；未配置横幅改红（阻塞态）；工具被拒保留琥珀（收敛后本面板唯一语义）。thinking 与 compaction 卡三处零色彩成本区分：虚线边框 / `bg-gray-50→bg-gray-100` / 前置 `riHistoryLine` + 箭头 `ml-auto` 移右侧。新增 `src/agent/semanticColor.test.js`（琥珀只许一处 + 四卡配色两两不同 + 折叠卡四个区分点 + 语义色 class 真产出 CSS）、`src/agent/affordance.test.js`（chip title 动态化 / auto 不贴徽标 / pinned 用 accent / 发送按钮 title 在包裹层 / canSend 定义）。变异 14/14 全中。守卫踩的三个坑已修：dark 类在 `darkMode:'class'` 下生成 `.dark\:x:is(.dark *)`（检测方法要匹配 `:is(`）；`includes('pickTab.auto')` 被 `pickTab.autoHint` 子串命中（负向断言）；`TOOL_STATUS.REJECTED` 状态色在对象字面量里（提取函数要支持两种落点）。
+验收：随 48b96c77 落地；npm test 726 pass 0 fail（新增 9 条）；lint 0 error；i18n passed；build 49 产物、14 新 class 全部产出（含首次 `bg-accent/15`）。
+状态：已清（2026-10-08）
+
+### T-173 — chip / 发送按钮说得出状态与原因
+
+类型：改进
+登记日期：2026-10-08
+来源：commit 48b96c77（与 T-172 同批，待审核区 T-150 / T-154 / T-160 收口）
+现象：T-150 目标页 chip 的「自动」徽标对非技术用户语义不清且在 320px 侧栏挤掉标题；T-154 thinking / compaction 卡不可区分（见 T-172）；T-160 disabled 发送按钮 title 挂在按钮上被 `pointer-events-none` 吃掉，说不出「为什么点不动」。
+结论：T-150 改为 auto 态不渲染徽标（默认跟随是常态不需贴标签），两态含义改由动态 title 说明，删 `pickTab.auto`/`pickTab.title`。T-160 把 title 移到非 disabled 包裹层 `<span data-test="send-wrap">`，禁用原因分两种（没配 Key / 空草稿），禁用条件提成 `canSend` computed 防漂移。上述点由 `affordance.test.js` 守卫。
+验收：随 48b96c77 落地（见 T-172 验收数字）。
+状态：已清（2026-10-08）
