@@ -15,7 +15,7 @@
     class="rounded border border-accent/40 bg-accent/5 p-3 dark:border-accent/40"
   >
     <div class="mb-1 flex items-center gap-2 text-sm font-medium">
-      <v-remixicon name="riAlertLine" />
+      <v-remixicon name="riAlertLine" size="16" />
       <span>{{ title }}</span>
     </div>
     <p class="mb-2 text-xs text-gray-600 dark:text-gray-300">{{ hint }}</p>

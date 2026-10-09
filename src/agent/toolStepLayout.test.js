@@ -1,5 +1,5 @@
 /**
- * 工具卡窄形态布局守卫（T-174）。
+ * 工具卡窄形态布局守卫（T-174）+ 体量与可读性守卫（T-175）。
  *
  * 问题形态（用户实测，320px 侧栏）：展开工具卡后，观察值里的长无空格串
  * （`file:///…`、`https://…`、长 tabId）把**卡片本身**撑得比面板还宽，
@@ -20,6 +20,14 @@
  *   ③ 展开体外层只允许纵向滚动（`overflow-y-auto overflow-x-hidden`），
  *      体量收敛（`max-h-56`，不再 `max-h-80`）；
  *   ④ 同型长串隐患收口：用户气泡与错误卡正文也用 `[overflow-wrap:anywhere]`。
+ *
+ * T-175 追加（体量与可读性，用户反馈"工具调用显示很大"）：
+ *   ⑤ 头部降到 `text-xs` —— 工具调用是元信息，不该跟正文（text-sm=14px）同级；
+ *   ⑥ 工具名用 `font-mono`（它是标识符，和代码块读法一致）；
+ *   ⑦ 展开体两段加「参数 / 结果」标签（原先是两段裸 <pre>，分不清谁是谁）；
+ *   ⑧ 一层扁平的小对象铺成键值行（比 JSON 少一层括号与引号）；
+ *   ⑨ 折叠态给一行 `key=value` 摘要。
+ *   图标尺寸另见 `iconSize.test.js`（那边管全面板，这边只管工具卡的本体）。
  *
  * 另有一条 CSS 产出检查：上面这些类必须真的出现在构建产物里（按老规矩，
  * 没构建就 skip 而不是假绿）。
@@ -60,11 +68,13 @@ test('T-174：工具卡根节点带 max-w-full + min-w-0', () => {
 test('T-174：参数/观察值 <pre> 用 [overflow-wrap:anywhere]，不再靠 overflow-x-auto/break-words', () => {
   const src = stepSrc();
 
+  // T-175：键值行的 <dd> 也承载参数值（可能是长 URL/路径），它同样要 anywhere。
+  // 所以现在共 3 处：参数 <pre>、观察值 <pre>、键值行 <dd>。
   const anywhere = (src.match(/\[overflow-wrap:anywhere\]/g) || []).length;
   assert.equal(
     anywhere,
-    2,
-    `应恰好两个 <pre>（参数 + 观察值）用 [overflow-wrap:anywhere]，实际 ${anywhere} 处`
+    3,
+    `应有 3 处 [overflow-wrap:anywhere]（参数 pre + 观察值 pre + 键值行 dd），实际 ${anywhere} 处`
   );
 
   assert.equal(
@@ -132,8 +142,71 @@ test('T-174：工具卡仍以 self-start 渲染（保持紧凑，不被顺手改
   );
 });
 
+// —— T-175：头部字号降到元信息档 ——
+test('T-175：工具卡头部是 text-xs，不得与正文 text-sm 同级', () => {
+  const src = stepSrc();
+  assert.match(
+    src,
+    /<button[\s\S]{0,240}?class="[^"]*\btext-xs\b[^"]*"/,
+    '工具卡头部必须 text-xs —— 工具调用是元信息，和正文（text-sm=14px）同级会抢视觉重心'
+  );
+  assert.equal(
+    /text-left\s+text-sm"/.test(src),
+    false,
+    '工具卡头部不该回到 text-sm'
+  );
+});
+
+// —— T-175：工具名等宽 + 图标显式尺寸 ——
+test('T-175：工具名用等宽体（它是标识符，和代码块读法一致）', () => {
+  const src = stepSrc();
+  assert.match(
+    src,
+    /class="[^"]*\bfont-mono\b[^"]*\bfont-medium\b[^"]*">\{\{ step\.name \}\}/,
+    '工具名（list_tabs 这类）应 font-mono + font-medium'
+  );
+});
+
+// —— T-175：两段带标签 + 小对象走键值行 + 折叠态摘要 ——
+test('T-175：参数/结果两段带 i18n 标签，小对象铺键值行，折叠态给摘要', () => {
+  const src = stepSrc();
+
+  assert.match(
+    src,
+    /t\('workflow\.agent\.tool\.args'\)/,
+    '参数段要有标签 —— 原先两段裸 <pre>，用户分不清哪段是参数哪段是返回'
+  );
+  assert.match(
+    src,
+    /t\('workflow\.agent\.tool\.observation'\)/,
+    '结果段要有标签'
+  );
+
+  assert.match(
+    src,
+    /const argRows = computed/,
+    '要有 argRows（小对象 → 键值行）'
+  );
+  assert.match(src, /v-for="row in argRows"/, '键值行必须真的渲染出来');
+
+  // prettyArgs 与 argRows 必须互斥：小对象已经铺成键值行了，
+  // 若 prettyArgs 还吐 JSON，同一份参数会在卡片里渲染两遍。
+  assert.match(
+    src,
+    /const prettyArgs = computed\(\(\) => \{\s*if \(argRows\.value\.length\) return '';/,
+    'prettyArgs 必须在 argRows 有内容时让位，否则参数渲染两遍'
+  );
+
+  assert.match(src, /const summary = computed/, '折叠态要有一行摘要');
+  assert.match(
+    src,
+    /v-if="!expanded && summary"/,
+    '摘要只在折叠态出现（展开后让位给正文），且不能把状态徽标挤出去'
+  );
+});
+
 // —— CSS 产出检查：上面的类必须真产出到构建产物 ——
-test('T-174：用到的类都产出了 CSS（没构建则跳过）', (t) => {
+test('T-174 / T-175：用到的类都产出了 CSS（没构建则跳过）', (t) => {
   if (!existsSync(CSS)) {
     // 没构建过就跳过而不是假绿 —— 假绿比红更坏。
     t.skip('build/newtab.css 不存在，先跑一次 npm run build');
@@ -151,9 +224,16 @@ test('T-174：用到的类都产出了 CSS（没构建则跳过）', (t) => {
     'max-h-56',
     'overflow-y-auto',
     'overflow-x-hidden',
+    'font-mono',
   ]) {
     assert.notEqual(offset(cls), -1, `构建产物里没有 .${cls} 规则`);
   }
+  // text-[11px] 是任意值工具类，构建产物里选择器是 .text-\[11px\]。
+  assert.notEqual(
+    offset('text-[11px]'),
+    -1,
+    '构建产物里没有 .text-\\[11px\\] 规则（工具卡的小标签用了它）'
+  );
   assert.ok(
     css.includes('overflow-wrap: anywhere'),
     '构建产物里没有 overflow-wrap:anywhere 规则（[overflow-wrap:anywhere] 没被 tailwind 产出）'

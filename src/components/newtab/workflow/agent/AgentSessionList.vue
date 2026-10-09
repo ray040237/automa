@@ -96,7 +96,7 @@
             "
             @click="emit('delete', s.id)"
           >
-            <v-remixicon name="riDeleteBin7Line" class="shrink-0" />
+            <v-remixicon name="riDeleteBin7Line" size="14" class="shrink-0" />
           </button>
         </div>
       </template>

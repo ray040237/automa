@@ -800,6 +800,8 @@
         "error": "failed",
         "rejected": "declined",
         "running": "running",
+        "args": "Arguments",
+        "observation": "Result",
         "truncatedNote": "(too long — only the beginning is shown here)"
       },
       "config": {

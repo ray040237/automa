@@ -65,6 +65,7 @@
         >
           <v-remixicon
             name="riChatHistoryLine"
+            size="14"
             class="shrink-0 text-gray-500 dark:text-gray-400"
           />
           <span class="min-w-0 flex-1 truncate text-sm">
@@ -74,6 +75,7 @@
              等于标题多显示两三个字，而标题正是被 truncate 截断最狠的地方。 -->
           <v-remixicon
             name="riArrowRightSLine"
+            size="14"
             class="shrink-0 text-gray-500 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 dark:text-gray-400"
           />
         </button>
@@ -87,7 +89,7 @@
             data-test="close-history"
             @click="view = 'chat'"
           >
-            <v-remixicon name="riArrowLeftSLine" />
+            <v-remixicon name="riArrowLeftSLine" size="16" />
           </button>
           <span class="min-w-0 flex-1 truncate text-sm font-medium">
             {{ t('workflow.agent.session.history') }}
@@ -116,7 +118,7 @@
           "
           @click="host.newSession()"
         >
-          <v-remixicon name="riAddLine" class="shrink-0" />
+          <v-remixicon name="riAddLine" size="16" class="shrink-0" />
         </button>
       </div>
 
@@ -215,6 +217,7 @@
                 <v-remixicon
                   v-else
                   name="riEarthLine"
+                  size="16"
                   class="shrink-0 text-gray-400"
                 />
                 <span class="min-w-0 flex-1 truncate">{{
@@ -259,7 +262,7 @@
           class="mx-2 mb-1 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
           data-test="pending-interjections"
         >
-          <v-remixicon name="riStackLine" class="shrink-0" />
+          <v-remixicon name="riStackLine" size="14" class="shrink-0" />
           {{
             t('workflow.agent.queuedPending', {
               n: host.pendingInterjections,
@@ -366,7 +369,7 @@
                     "
                     @click="startNewSession"
                   >
-                    <v-remixicon name="riAddLine" class="shrink-0" />
+                    <v-remixicon name="riAddLine" size="14" class="shrink-0" />
                     <span class="min-w-0 flex-1">{{
                       t('workflow.agent.session.new')
                     }}</span>
@@ -410,7 +413,10 @@
                 :aria-label="t('workflow.agent.stop')"
                 @click="host.abort()"
               >
-                <v-remixicon name="riStopLine" class="shrink-0" />
+                <!-- 这一处**刻意**保持 24：ui-button 的 icon 变体是 h-10 + p-2，
+                     内容区正好 24px，图标填满才算"图标按钮"。其余面板图标都收到
+                     14/16 —— 它们没有固定高度的宿主，24px 只会把行撑高。 -->
+                <v-remixicon name="riStopLine" size="24" class="shrink-0" />
               </ui-button>
 
               <!--
@@ -432,7 +438,11 @@
                   :disabled="!canSend"
                   :aria-label="t('workflow.agent.send')"
                 >
-                  <v-remixicon name="riArrowRightLine" class="shrink-0" />
+                  <v-remixicon
+                    name="riArrowRightLine"
+                    size="24"
+                    class="shrink-0"
+                  />
                 </ui-button>
               </span>
             </div>

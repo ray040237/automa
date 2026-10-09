@@ -800,6 +800,8 @@
         "error": "失败",
         "rejected": "已拒绝",
         "running": "执行中",
+        "args": "参数",
+        "observation": "结果",
         "truncatedNote": "（内容太长，这里只显示前面一部分）"
       },
       "config": {

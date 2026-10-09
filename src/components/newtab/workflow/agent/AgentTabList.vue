@@ -36,6 +36,7 @@
           <v-remixicon
             v-else
             name="riEarthLine"
+            size="16"
             class="shrink-0 text-gray-400"
           />
           <span class="min-w-0 flex-1">
@@ -47,6 +48,7 @@
           <v-remixicon
             v-if="isCurrent(tab)"
             name="riCheckLine"
+            size="14"
             class="shrink-0 text-accent"
           />
         </button>

@@ -53,7 +53,8 @@
           >
             <v-remixicon
               :name="item.open ? 'riArrowDropDownLine' : 'riArrowRightLine'"
-              class="shrink-0"
+              size="16"
+              class="shrink-0 text-gray-400 dark:text-gray-500"
             />
             <span class="shrink-0">{{ thinkingLabel(item, i) }}</span>
             <span
@@ -103,6 +104,7 @@
           <div class="flex items-start gap-2">
             <v-remixicon
               name="riErrorWarningLine"
+              size="16"
               class="mt-0.5 shrink-0 text-red-500"
             />
             <div class="min-w-0 flex-1">
@@ -126,7 +128,7 @@
                   class="flex items-center gap-1 text-red-700 hover:underline dark:text-red-400"
                   @click="emit('retry', item.retryText)"
                 >
-                  <v-remixicon name="riRefreshLine" />
+                  <v-remixicon name="riRefreshLine" size="14" />
                   {{ t('workflow.agent.errorDetail.retry') }}
                 </button>
                 <button
@@ -174,12 +176,13 @@
                  ① 虚线边框 —— 形状上就和实线的 thinking 卡不同；
                  ② 灰底深一档（bg-gray-50 → bg-gray-100）；
                  ③ 前置档案图标 + 箭头移到右侧（thinking 卡是左箭头、无前置图标）。 -->
-            <v-remixicon name="riHistoryLine" class="shrink-0" />
+            <v-remixicon name="riHistoryLine" size="16" class="shrink-0" />
             <span class="shrink-0">{{
               t('workflow.agent.compacted', { n: item.turns })
             }}</span>
             <v-remixicon
               :name="item.open ? 'riArrowDropDownLine' : 'riArrowRightLine'"
+              size="16"
               class="ml-auto shrink-0"
             />
           </button>
@@ -238,7 +241,7 @@
         v-if="pendingHint"
         class="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500"
       >
-        <v-remixicon name="riLoader4Line" class="animate-spin" />
+        <v-remixicon name="riLoader4Line" size="14" class="animate-spin" />
         {{ t('workflow.agent.thinking') }}
       </div>
     </div>

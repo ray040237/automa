@@ -37,6 +37,7 @@
           <v-remixicon
             v-else
             name="riEarthLine"
+            size="16"
             class="shrink-0 text-gray-400"
           />
 
@@ -85,7 +86,11 @@
             {{ t('workflow.agent.pickTab.reselect') }}
           </span>
 
-          <v-remixicon name="riArrowDownSLine" class="shrink-0 text-gray-400" />
+          <v-remixicon
+            name="riArrowDownSLine"
+            size="14"
+            class="shrink-0 text-gray-400"
+          />
         </button>
 
         <button
@@ -97,7 +102,7 @@
           data-test="unpin-target"
           @click.stop="emit('unpin')"
         >
-          <v-remixicon name="riCloseLine" class="shrink-0" />
+          <v-remixicon name="riCloseLine" size="14" class="shrink-0" />
         </button>
       </div>
     </template>

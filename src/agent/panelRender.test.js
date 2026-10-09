@@ -367,6 +367,54 @@ test('T-174：工具卡渲染出的根节点带 max-w-full / min-w-0（长串撑
   );
 });
 
+test('T-175：工具卡头部收敛为 text-xs、图标显式尺寸、折叠态有一行摘要', async () => {
+  // 只在**渲染出来的元素属性**上断言，不看整段 html —— 模板里的 HTML 注释
+  // 会原样出现在 SSR 输出里（注释里就写着 text-sm/text-xs 这些字面量），
+  // 对着整段做 includes 会被注释骗到。
+  const html = await renderSfc(STEP, {
+    props: {
+      step: {
+        name: 'list_tabs',
+        status: 'ok',
+        args: { detail: 'summary' },
+        observation: 'ok',
+      },
+    },
+  });
+
+  const button = html.match(/<button[^>]*>/);
+  assert.ok(button, '没渲染出工具卡的折叠按钮，守卫本身失效');
+  assert.ok(
+    button[0].includes('text-xs'),
+    '工具卡头部必须 text-xs —— 工具调用是元信息，不该和正文（text-sm）同级'
+  );
+  assert.equal(
+    button[0].includes('text-sm'),
+    false,
+    '工具卡头部不该是 text-sm（那正是"显示很大"的第二个根因）'
+  );
+
+  // v-remixicon 在 SSR 里是 stub，但它把 props 透传成属性 —— 所以这里能确认
+  // size **真的传下去了**（源码里写没写是 toolStepLayout/iconSize 那边的事）。
+  const icons = [...html.matchAll(/<i data-stub="v-remixicon"[^>]*>/g)].map(
+    (m) => m[0]
+  );
+  assert.equal(icons.length, 2, '工具卡应有 2 个图标（折叠箭头 + 状态徽标）');
+  for (const icon of icons) {
+    assert.match(
+      icon,
+      /\bsize="\d+"/,
+      '图标必须带显式 size —— v-remixicon 默认 24px 会把 12px 的折叠行顶高'
+    );
+  }
+
+  assert.ok(
+    html.includes('detail=summary'),
+    '折叠态应给一行 key=value 摘要（展开后让位给正文）'
+  );
+  assert.ok(html.includes('font-mono'), '工具名是标识符，应走等宽体');
+});
+
 test('T-153：模型名仍在会话列表里渲染（搬走水位时别把它一起丢了）', async () => {
   const html = await renderSfc(LIST, {
     props: {
