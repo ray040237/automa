@@ -3162,3 +3162,18 @@ build exit 0 且产物含 4 个新键、无 `interject` 残留。
 设计稿：`docs/agent-ui-toolstep.html`（320px 前后对照 + 四条规则 + 顺带修正记录）。
 验收：build 100% 通过（max-w-full/min-w-0/max-h-56/overflow-x-hidden/!rounded-none/overflow-wrap:anywhere 均进 CSS）；npm test 740/739 pass 0 fail 1 skipped；lint 0 error（10 个既有 no-console warning）；check:i18n passed。
 状态：已清（2026-10-09）
+
+### T-175 — 工具卡重塑为紧凑卡 + 面板图标尺寸统一
+
+类型：改进（视觉体量 / 层级）
+登记日期：2026-10-09
+来源：会话 2026-10-09，commit dbbc7bf8；用户反馈「工具调用显示的这一部分很大，而且字体是不是可以比正文稍小一点」。
+现象：一条工具调用的头部在 320px 侧栏里显得又高又重，与助手正文（14px）几乎同档，看不出「这是元信息，不是正文」。
+根因（两个）：① **图标吃默认 24px**（主因）—— `v-remixicon` 的 `size` 默认 24，渲染成 `<svg width="24" height="24">`；agent 面板 25 个图标里 **24 个**没给 size（唯一给了的是「回到底部」的 `size="14"`），于是一条 `text-xs`(12px) 的折叠行、一个 11px 的状态徽标，行高被 24px 图标整个顶起来。无全局 CSS 兜底（`drawflow.css` 的 svg 规则显式排除 `.v-remixicon`）。② **字号与正文同级**（次因）—— 工具卡头部 `text-sm`(14px)，与助手正文（`AgentMarkdown` 根节点 `text-sm`）同档；整块 UI 里只有工具卡标题敢跟正文一样大。
+结论：`AgentToolStep.vue` 重塑为紧凑卡 —— 头部 `text-sm`→`text-xs`；折叠行 `px-3 py-2`→`px-2 py-1`；图标显式 `size`（折叠箭头 16 / 状态徽标 12）；工具名 `font-mono`（是标识符，与 `pre`/`code` 同字体，`Source Code Pro`）；状态徽标 `text-xs`→`text-[11px]`（与头部拉开半档）；展开体加 i18n 标签「参数 / 结果」（原先是两段裸 `<pre>`，用户分不清哪段是参数、哪段是返回）；**一层扁平小对象（≤4 键、全标量）铺成键值行**，出现嵌套即整体退回 JSON（`prettyArgs` 与 `argRows` 互斥，同一份参数不渲染两遍）；**折叠态给一行 `key=value` 摘要**（`truncate` + `min-w-0`，不挤走状态徽标）。新增 i18n 键 `workflow.agent.tool.args` / `.observation`（en/zh 同步）。
+连带收口（同一根因）：`AgentTranscript`（thinking / compaction / error / loader）、`AgentPanel`（头部 chip / 返回 / 新建 / tab-picker 占位 / 插话提示 / 下拉项）、`AgentConfirmCard`、`AgentSessionList`、`AgentTabList`、`AgentTabPicker` 的图标统一 14/16。**唯一保留 24** 的是 composer 的发送/停止 —— `ui-button` 的 `icon` 变体固定 `h-10` + `p-2`，内容区正好 24px，图标填满才算「图标按钮」；这两处也**显式**写 `size="24"` 并注明理由。
+守卫：新增 `src/agent/iconSize.test.js`（① 每个 `v-remixicon` 必须显式给 `size`，不许再吃默认 24；② 尺寸收敛 12/14/16，24 只允许 composer 那两个且名字写死；含扫描器自检）；`toolStepLayout.test.js` 扩 T-175 四条（头部 `text-xs` 不得回 `text-sm`、工具名 `font-mono`、两段带 i18n 标签 + 小对象走键值行 + `prettyArgs` 互斥、折叠态摘要只在折叠时出现），并把 T-174 的 anywhere 计数 2→3（键值行 `<dd>` 也承载长串）；`panelRender.test.js` 加 T-175 渲染断言（按钮类含 `text-xs` 不含 `text-sm`、两个 stub 图标都带 `size`、折叠态渲染出摘要）——**只断言元素属性，不看整段 html**，因为 HTML 注释会原样出现在 SSR 输出里，`includes` 会被注释骗到（本次踩到）。
+变异验证 7/7 命中：去掉图标 `size`、头部改回 `text-sm`、删参数标签、`prettyArgs` 不再让位、摘要改常驻、工具名去 `font-mono`、根节点去 `max-w-full` —— 每条都让对守卫变红。
+设计稿：`docs/agent-ui-markdown.html` —— 聊天区 markdown「手搓 vs 引库」对照设计稿（实测 8 条缺口 + 两方案成本表 + 渲染前后对照），**先出稿待决策，本次未动渲染器**。
+验收：build 100% 通过（`font-mono` / `text-[11px]` / `max-h-56` / `overflow-x-hidden` / `overflow-wrap:anywhere` 等均进 CSS，49 产物）；npm test 747/746 pass 0 fail 1 skipped；lint 0 error（10 个既有 no-console warning）；check:i18n passed。
+状态：已清（2026-10-09）
