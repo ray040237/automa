@@ -759,6 +759,7 @@
     },
     "agent": {
       "tab": "助手",
+      "sidebarBlocks": "块",
       "send": "发送",
       "sendBlockedNoKey": "先到设置里配置 API Key 才能发送",
       "sendBlockedEmpty": "先输入内容再发送",

@@ -1718,9 +1718,11 @@ test('T-171b：面板高度必须被约束在侧栏内，否则窄宿主逼出�
     /class="flex min-h-0 min-w-0 flex-1 flex-col"/,
     '右栏必须 min-h-0：否则中部展示区无法被高度约束，面板溢出侧栏、整页出现滚动条'
   );
-  assert.ok(
-    src.includes('class="shrink-0 p-2 pt-0"'),
-    'composer 表单必须 shrink-0 —— 窄宿主下输入框要常驻底部、不能被压没'
+  assert.match(
+    src,
+    /<form class="shrink-0 px-4 pb-2\.5 pt-0"/,
+    'composer 表单必须 shrink-0 —— 窄宿主下输入框要常驻底部、不能被压没' +
+      '（T-187 把 p-2 换成 px-4 pb-2.5 pt-0，钉的是 shrink-0 + 16px 横向起线）'
   );
 });
 
@@ -1752,5 +1754,238 @@ test('T-171：这个「后来者赢」的规律本身没变（守卫的前提不
       at('bg-input') +
       ' bg-transparent=' +
       at('bg-transparent')
+  );
+});
+
+// —— T-180 / T-181 / T-182 / T-183：工作流编辑器侧栏的入口与面板 ——
+const editorPage = 'src/newtab/pages/workflows/[id].vue';
+
+/**
+ * 这里的守卫要比上面那些多剥一层：`//` 行注释。
+ *
+ * 本文件第一版守卫就被注释骗过 —— stripComments 只剥 HTML 注释与块注释，
+ * 于是「在解释性注释里留一句 `toggleAgentPanel`」就能把「这个函数不许回来」的红灯糊弄过去。
+ * T-180 那批守卫大多是「某样东西不许存在」，最怕的就是这个，所以单独剥干净。
+ *
+ * 顺带一个踩坑：写这段说明时别把块注释的结束符 `*` 加斜杠原样写进注释里，
+ * 它会把注释提前闭合，后面半句就成了裸代码 —— 报出来的是
+ * "Unexpected identifier"，跟真正出问题的那行八竿子打不着。
+ */
+const stripAll = (src) => stripComments(src).replace(/^\s*\/\/.*$/gm, '');
+
+test('T-180：切面板的入口归侧栏所有，顶栏不许再有助手按钮', () => {
+  const src = stripAll(read(editorPage));
+
+  // ① 顶栏（ui-tabs 内）不再有助手入口。那个按钮做的是「换侧栏内容」，
+  //    却坐在管「画布区域看什么」的 tab 组里，还自带一套不相干的选中态（药丸 vs 下边框）。
+  const tabbar = src.slice(src.indexOf('<ui-tabs'), src.indexOf('</ui-tabs>'));
+
+  // 自检：切片必须真的有内容。哪天 <ui-tabs> 改了写法，slice 会退化成空串，
+  // 下面两条 `!includes` 就变成永真 —— 守卫看着绿，其实什么都没断言。
+  assert.ok(
+    tabbar.length > 200 && tabbar.includes('value="editor"'),
+    '顶栏 tab 组的切法变了（<ui-tabs> 没找到或结构改了）—— 先更新本守卫再改模板'
+  );
+
+  assert.ok(
+    !tabbar.includes('workflow.agent.tab'),
+    '顶栏 tab 组里不许再出现助手入口 —— 切侧栏内容的控件归侧栏自己（见侧栏顶部那行 tab）'
+  );
+  assert.ok(
+    !tabbar.includes('riMagicLine'),
+    '顶栏不许再用魔法棒：同一个图标画布上的自动布局按钮也在用（T-182）'
+  );
+
+  // ② 侧栏里有且仅有一处切面板的控件
+  assert.equal(
+    (src.match(/setSidebarPanel\(/g) || []).length,
+    2,
+    '切面板只走 setSidebarPanel（定义 + 那行 tab 的调用）—— 两处入口就是 T-177 刚拆掉的那个坑'
+  );
+  assert.match(src, /const SIDEBAR_TABS = \[/, '侧栏那行 tab 的定义不许消失');
+  for (const id of ['blocks', 'agent']) {
+    assert.ok(
+      src.includes(`id: '${id}'`),
+      `侧栏 tab 少了 ${id} —— 缺 blocks 则块库进不来，缺 agent 则助手没了入口`
+    );
+  }
+
+  // ③ tab 要是 tab：得有选中态语义，不能只有底色（对比 T-180 记录的旧按钮缺 aria）
+  assert.match(src, /:aria-pressed="state\.sidebarPanel === tab\.id"/);
+
+  // ④ 编辑卡期间整行 tab 不渲染 —— 这正是 T-179 自动消解的原因：
+  //    入口点不到，正在编辑的块就不可能被静默丢弃
+  assert.match(
+    src,
+    /<template v-if="!editState\.editing">/,
+    '切面板那行必须挂在非编辑态上 —— 编辑中它连渲染都不渲染，才谈得上「点不到」'
+  );
+});
+
+test('T-179 回归守卫：入口搬走后，「点助手顺手关掉正在编辑的块」这个动作不存在了', () => {
+  const src = stripAll(read(editorPage));
+
+  assert.equal(
+    src.includes('toggleAgentPanel'),
+    false,
+    '旧入口 toggleAgentPanel 已随 T-180 删除。它内部无条件 `editState.editing = false`，' +
+      '正是「点助手会静默丢弃正在编辑的块」的来源 —— 别把它连同副作用一起搬回来'
+  );
+
+  // setSidebarPanel 里也不许偷偷关编辑卡：那一行 tab 在编辑态压根不渲染，
+  // 走到 setSidebarPanel 时按定义就不在编辑中。
+  const fn = src.slice(
+    src.indexOf('function setSidebarPanel'),
+    src.indexOf('function initEditBlock')
+  );
+  assert.equal(
+    fn.includes('editState.editing = false'),
+    false,
+    'setSidebarPanel 不许改 editState —— 它是切面板，不是关别人的编辑卡'
+  );
+});
+
+test('T-181：侧栏面板不再持久化', () => {
+  const src = stripAll(read(editorPage));
+
+  assert.equal(
+    src.includes('workflow:sidebarPanel'),
+    false,
+    'workflow:sidebarPanel 已删除：它是全局一个键，而会话按 workflowId 过滤 —— ' +
+      '在 A 工作流用过助手，打开 B 工作流会直接撞上 B 的会话列表（T-181）'
+  );
+  assert.equal(
+    src.includes("localStorage.setItem('workflow:sidebarPanel'"),
+    false,
+    '别只删读、留着写'
+  );
+});
+
+test('T-187：侧栏外壳零内缩 —— 各面板自带 padding，且统一 16px', () => {
+  // T-183 当初是反的：它让**外壳** padding 随面板切换（助手 0 / 块库 20），
+  // 换来 40px 宽度，代价是切面板时整列内容左右各跳 20px、上下各跳 20px，
+  // 并且造出两套内缩（块库 20+16=36，助手 8~12）。实测截图判定「切换像界面错位」。
+  //
+  // 现在的不变式：**外壳不带任何 padding**，内缩只由面板自己带，且都是 px-4。
+  // 谁再想按面板切外壳 padding，这三条会红。
+
+  const src = stripAll(read(editorPage));
+
+  // ① 外壳不许再有 padding：内联 style 里没有、类名里也没有 py-6 之类的上下内缩。
+  const sidebarTag = src.slice(
+    src.indexOf('class="sidebar'),
+    src.indexOf('>', src.indexOf('class="sidebar')) + 1
+  );
+  assert.ok(
+    sidebarTag.length > 100 && sidebarTag.includes('w-80'),
+    '侧栏根节点没找到或结构变了 —— 先更新本守卫再改模板'
+  );
+  assert.equal(
+    /\bp-[xytrbl]?-\d|\bpx-\d|\bpy-\d/.test(sidebarTag),
+    false,
+    '侧栏外壳不许带任何 padding 工具类 —— 外壳一有 padding，切换时整列内容就会位移'
+  );
+  assert.equal(
+    /padding:/.test(sidebarTag),
+    false,
+    '侧栏外壳的 :style 里也不许再有 padding（内联 style 同样会让外壳随面板变宽度）'
+  );
+  assert.equal(
+    src.includes('sidebarPadding'),
+    false,
+    'sidebarPadding computed 已删除：外壳 padding 不再随 state.sidebarPanel 变化'
+  );
+  assert.equal(
+    /padding:\s*['"]?\d/.test(src),
+    false,
+    '别把「侧栏外壳 padding」换个写法加回来 —— 它就是切换偏移的来源'
+  );
+
+  // ② 分段控件那一行本身按 16px 起 —— 它是这一列的标尺，下面所有块都得跟它对齐。
+  assert.match(
+    src,
+    /class="border-b border-gray-100 px-4 py-2\.5 dark:border-gray-700"/,
+    '切面板那行必须自带 px-4：外壳没有 padding 了，行自己不帶就会贴到边上'
+  );
+});
+
+test('T-187：助手面板这一列的左边缘必须处处 16px（header/流/表单/确认卡/模板菜单）', () => {
+  // 用户报的第二个症状：「组件和组件之间的留白不够完善」。
+  // 实测是左边缘有 8 / 12 / 8 / 12 / 8 五个不同的值，竖着看参差不齐。
+  // 钉住参与者的类串 —— 哪一个改回 px-2 就变红。
+  const panel = stripAll(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
+  );
+  const transcript = stripAll(
+    read('src/components/newtab/workflow/agent/AgentTranscript.vue')
+  );
+  const list = stripAll(
+    read('src/components/newtab/workflow/agent/AgentSessionList.vue')
+  );
+
+  // 两个 header（宽宿主左栏 + 右栏）必须同构，否则两栏顶边/左边会错开。
+  const headerCount = (
+    panel.match(/class="flex items-center gap-1\.5 px-4 py-1"/g) || []
+  ).length;
+  assert.equal(
+    headerCount,
+    2,
+    '左右两栏的 header 必须都是 px-4 py-1 —— 少一个说明有一栏还停在 px-2，两栏会对不齐'
+  );
+
+  for (const [name, needle, why] of [
+    [
+      panel,
+      'class="border-b border-red-300 bg-red-500/10 px-4 py-1.5',
+      '「未配置 Key」横幅是整列级的元素，它要跟正文同一起始',
+    ],
+    [panel, 'class="mx-4 mb-3"', '确认卡'],
+    [panel, 'class="shrink-0 px-4 pb-2.5 pt-0"', 'composer 表单'],
+    [transcript, 'overflow-y-auto px-4 py-3', 'transcript 滚动容器'],
+    [list, '<div class="px-4 pb-2">', '会话列表的搜索框'],
+  ]) {
+    assert.ok(
+      name.includes(needle),
+      `${why}的横向内缩必须是 16px（px-4），实际没找到：${needle}`
+    );
+  }
+
+  // 反向自检：mx-4 与 px-4 必须真的存在，否则上面那条 needle 匹配到的是别的东西。
+  assert.ok(
+    panel.includes('mx-4') && transcript.includes('px-4'),
+    'px-4 / mx-4 在助手面板里必须真实存在 —— 上面几条 needle 若匹配到巧合，这道是兜底'
+  );
+});
+
+test('T-180/T-183：侧栏那行 tab 与面板键两种语言都得齐', () => {
+  for (const lang of ['zh', 'en']) {
+    const { agent } = JSON.parse(
+      read(`src/locales/${lang}/newtab.json`)
+    ).workflow;
+
+    for (const key of ['tab', 'sidebarBlocks']) {
+      assert.equal(
+        typeof agent[key],
+        'string',
+        `${lang} 缺 workflow.agent.${key}`
+      );
+    }
+  }
+});
+
+test('T-182：助手入口的图标不许再与画布上的自动布局撞车', () => {
+  const src = stripAll(read(editorPage));
+
+  // 自动布局按钮保留魔法棒（那是它的本名），助手让开。
+  // 同屏两个一模一样的小魔法棒，用户分不出点的是哪个。
+  assert.equal(
+    (src.match(/riMagicLine/g) || []).length,
+    1,
+    'riMagicLine 只能留给画布上的自动布局按钮 —— 助手入口已改用别的图标（T-182）'
+  );
+  assert.match(
+    src,
+    /id: 'agent'[\s\S]*?icon: 'riChat3Line'/,
+    '助手 tab 用 riChat3Line（对话框），语义上比魔法棒准'
   );
 });

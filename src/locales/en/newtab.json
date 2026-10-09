@@ -759,6 +759,7 @@
     },
     "agent": {
       "tab": "Assistant",
+      "sidebarBlocks": "Blocks",
       "send": "Send",
       "sendBlockedNoKey": "Configure an API key in Settings before sending",
       "sendBlockedEmpty": "Type something first",

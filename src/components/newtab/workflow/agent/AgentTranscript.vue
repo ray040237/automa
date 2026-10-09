@@ -4,9 +4,12 @@
          工具结果、压缩摘要都是追加进来的，屏幕阅读器据此逐条播报；
          aria-relevant=additions 表示只有新增内容需要播报，翻回旧消息不重复念。
          T-13 之前这里只有一个滚动容器，读屏软件完全读不到流里的内容。 -->
+    <!-- T-187：横向 p-3 → px-4，与 header / composer / 确认卡对齐成一条竖线
+         （原先这一列有 8 / 12 / 8 三个不同的左边缘）；纵向仍是 p-3，
+         T-174 定的工具卡横向溢出处理与此无关，不动。 -->
     <div
       ref="scroller"
-      class="scroll scroll-xs flex h-full flex-col gap-3 overflow-y-auto p-3"
+      class="scroll scroll-xs flex h-full flex-col gap-3 overflow-y-auto px-4 py-3"
       role="log"
       aria-live="polite"
       aria-relevant="additions"

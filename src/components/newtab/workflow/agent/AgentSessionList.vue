@@ -12,7 +12,7 @@
     它 —— 只能靠静态 grep。搬出下拉之后，它是真实节点了。
   -->
   <div class="flex h-full min-h-0 flex-col" data-test="session-history">
-    <div class="px-2 pb-2">
+    <div class="px-4 pb-2">
       <ui-input
         v-model="query"
         :placeholder="t('workflow.agent.session.searchPlaceholder')"
@@ -20,7 +20,7 @@
       />
     </div>
 
-    <div class="scroll min-h-0 flex-1 overflow-y-auto px-1">
+    <div class="scroll min-h-0 flex-1 overflow-y-auto px-2">
       <p
         v-if="total === 0"
         class="px-2 py-6 text-center text-sm text-gray-500"

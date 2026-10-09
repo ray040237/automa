@@ -19,8 +19,9 @@
       class="flex w-60 shrink-0 flex-col border-r border-gray-200 dark:border-gray-700"
       data-test="session-side"
     >
-      <!-- 与右侧 header 同构（同样的 py-1 行 + py-1.5 内容），否则两栏顶边不齐 -->
-      <div class="flex items-center gap-1.5 px-2 py-1">
+      <!-- 与右侧 header 同构（同样的 py-1 行 + py-1.5 内容），否则两栏顶边不齐。
+           T-187：px 也跟着右侧一起走 px-4 —— 同一条列上的两栏，左右边缘必须对齐。 -->
+      <div class="flex items-center gap-1.5 px-4 py-1">
         <span class="min-w-0 flex-1 truncate py-1.5 text-sm font-medium">
           {{ t('workflow.agent.session.history') }}
         </span>
@@ -47,8 +48,10 @@
       控件会和面板背景糊在一起，用户看不出哪里能点。
     -->
       <!-- T-158：py-1 而不是 py-1.5 —— 面板是 flex-col + transcript flex-1，
-         常驻行每省 1px，正文就多 1px。 -->
-      <div class="flex items-center gap-1.5 px-2 py-1">
+         常驻行每省 1px，正文就多 1px。**横向不省**：T-187 把这列的左边缘统一到
+         px-4，header / transcript / form / 确认卡 / 模板菜单全部 16px 起，
+         一条竖线对齐；原先是 8 / 12 / 8 / 12 / 8 五个值，左边缘参差不齐。 -->
+      <div class="flex items-center gap-1.5 px-4 py-1">
         <!--
         T-168：chat 视图下的会话 chip。**点它是「进历史视图」，不再是「打开一个
         下拉列表」** —— 会话历史需要浏览 + 搜索 + 管理，而浮层（max-h-[60vh]）
@@ -168,7 +171,7 @@
          「这事现在不成」），琥珀则收敛为单一语义「工具被你拒绝了」。 -->
         <div
           v-if="!configured"
-          class="border-b border-red-300 bg-red-500/10 px-2 py-1.5 text-xs text-red-700 dark:border-red-700 dark:text-red-400"
+          class="border-b border-red-300 bg-red-500/10 px-4 py-1.5 text-xs text-red-700 dark:border-red-700 dark:text-red-400"
         >
           <button type="button" class="underline" @click="goSettings">
             {{ t('workflow.agent.goSettings') }}
@@ -180,7 +183,7 @@
          这里是文档流，面板高度不够时压缩的是 transcript，输入框永远点得到。 -->
         <agent-confirm-card
           v-if="host.pendingConfirm"
-          class="mx-3 mb-3"
+          class="mx-4 mb-3"
           :confirm="host.pendingConfirm"
           @answer="host.answerConfirm($event)"
         />
@@ -201,7 +204,7 @@
          与确认卡同一立场（T-06）。回车/点击选中后整框替换为模板正文。 -->
         <div
           v-if="slashMenuOpen"
-          class="mx-2 mb-1 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
+          class="mx-4 mb-1 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
         >
           <ul class="scroll max-h-48 overflow-y-auto py-1">
             <li v-for="(c, i) in matchedCommands" :key="c.id">
@@ -225,7 +228,7 @@
          面板滚动一屏就没了；这条钉在输入框正上方，队列排空前一直在。 -->
         <p
           v-if="host.busy && host.pendingInterjections > 0"
-          class="mx-2 mb-1 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
+          class="mx-4 mb-1 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
           data-test="pending-interjections"
         >
           <v-remixicon name="riStackLine" size="14" class="shrink-0" />
@@ -236,7 +239,7 @@
           }}
         </p>
 
-        <form class="shrink-0 p-2 pt-0" @submit.prevent="send">
+        <form class="shrink-0 px-4 pb-2.5 pt-0" @submit.prevent="send">
           <!--
         T-166：composer 卡片。chip、输入框、底行共用一个边框 —— 目标页从「面板
         底部常驻的一行控件」变成「输入区里的一个附件」。省掉 chip 那一行约 30px，

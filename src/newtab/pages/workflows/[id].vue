@@ -7,33 +7,77 @@
           ? 'absolute h-full md:relative z-50'
           : 'hidden md:flex'
       "
-      class="sidebar w-80 flex flex-col border-l border-gray-100 bg-white py-6 dark:border-gray-700 dark:border-opacity-50 dark:bg-gray-800"
+      class="sidebar w-80 flex flex-col border-l border-gray-100 bg-white dark:border-gray-700 dark:border-opacity-50 dark:bg-gray-800"
       :style="{
         width: `${sidebarCss.width}px`,
-        padding: sidebarCss.padding,
         position: 'relative',
       }"
     >
+      <!--
+        T-180：块编辑卡是侧栏的**全部**内容（侧栏整体变 absolute z-50 覆盖，见 :class），
+        所以切面板那行只挂在非编辑态上 —— 编辑中它连渲染都不渲染，助手入口物理上点不到。
+        这不是层叠玄学，是这份结构自带的性质：它顺带把 T-179「点助手会静默丢弃正在编辑的块」
+        变成不可能发生，两难不用写任何防御代码。
+      -->
+      <template v-if="!editState.editing">
+        <!--
+          T-180：切面板的控件归侧栏所有。顶栏只留折叠键（管「侧栏在不在」）与真正的
+          tab（管「画布区域看什么」），三件事三个地方。入口不再伪装成 tab 混进目的地列表。
+
+          T-187：**这行是分段控件，不是 tab**。窄列里只有两块内容、且切换的是「同一列里
+          看什么」，分段控件（整块底 + 选中项浮起）比下划线 tab 更贴切，也不会和顶栏那组
+          真 tab 撞形状。
+          选中态用 bg-white + shadow 而不是灰底：灰底在白面板上分不清「选中」和「轨道」，
+          浮起才有「这一格被拿起来了」的层次。
+          focus-visible 环是显式写的 —— 不写就是浏览器默认那圈深色描边（实测截图里选中态
+          旁边那圈黑框），和 `ui-tab` 的 `focus:ring-0` 一样都会漏到用户脸上。
+        -->
+        <div class="border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
+          <div
+            class="flex gap-0.5 rounded-lg bg-gray-100 p-0.5 dark:bg-gray-700"
+            role="group"
+          >
+            <button
+              v-for="tab in SIDEBAR_TABS"
+              :key="tab.id"
+              type="button"
+              class="flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              :class="
+                state.sidebarPanel === tab.id
+                  ? 'bg-white font-medium text-gray-900 shadow-sm dark:bg-gray-800 dark:text-gray-100'
+                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100'
+              "
+              :aria-pressed="state.sidebarPanel === tab.id"
+              :data-test="`sidebar-tab-${tab.id}`"
+              @click="setSidebarPanel(tab.id)"
+            >
+              <v-remixicon :name="tab.icon" size="14" class="shrink-0" />
+              {{ t(tab.label) }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 助手：只改内存画布，改完标未保存，由用户自己点保存（G5） -->
+        <div
+          v-if="state.sidebarPanel === 'agent'"
+          class="relative flex min-h-0 flex-1 flex-col"
+        >
+          <!-- T-90：面板收单个 host 对象（useAgentHost 的返回值），绑定只此一行 -->
+          <agent-panel :host="agentHost" />
+        </div>
+        <workflow-details-card
+          v-else
+          :workflow="workflow"
+          @update="updateWorkflow"
+        />
+      </template>
       <workflow-edit-block
-        v-if="editState.editing"
+        v-else
         :data="editState.blockData"
         :workflow="workflow"
         :editor="editor"
         @update="updateBlockData"
         @close="closeEditingCard"
-      />
-      <!-- 助手：只改内存画布，改完标未保存，由用户自己点保存（G5） -->
-      <div
-        v-else-if="state.sidebarPanel === 'agent'"
-        class="relative flex min-h-0 flex-1 flex-col"
-      >
-        <!-- T-90：面板收单个 host 对象（useAgentHost 的返回值），绑定只此一行 -->
-        <agent-panel :host="agentHost" />
-      </div>
-      <workflow-details-card
-        v-else
-        :workflow="workflow"
-        @update="updateWorkflow"
       />
       <!-- drag-element -->
       <div ref="sidebarRef" class="custom-drag" @mousedown="startDrag"></div>
@@ -90,20 +134,15 @@
               :name="state.showSidebar ? 'riSideBarFill' : 'riSideBarLine'"
             />
           </button>
-          <button
-            v-if="haveEditAccess"
-            :class="[
-              'flex items-center rounded-lg px-2 py-1 text-sm transition-colors hoverable',
-              state.sidebarPanel === 'agent'
-                ? 'bg-accent bg-opacity-10 text-accent dark:bg-opacity-20'
-                : 'text-gray-600 dark:text-gray-300',
-            ]"
-            style="margin-right: 6px"
-            @click="toggleAgentPanel"
-          >
-            <v-remixicon name="riMagicLine" size="18" />
-            <span class="ml-1">{{ t('workflow.agent.tab') }}</span>
-          </button>
+          <!--
+            T-180：原来这里还有一个「助手」按钮（riMagicLine + 文字），与上面这个折叠键
+            做的是同一件大类的事（都只管右侧栏），却混在 tab 组里、用一套不相干的选中态
+            （药丸底色 vs tab 的下边框）。切面板的控件已搬进侧栏（见侧栏顶部的 块|助手），
+            顶栏从此只管画布区域。
+
+            副作用 T-179：那个按钮在 :1212 无条件 `editState.editing = false`，
+            点它会静默丢掉正在编辑的块。入口搬走后这个动作不存在了，问题随之消失。
+          -->
           <ui-tab value="editor">{{ t('common.editor') }}</ui-tab>
           <template v-if="isPackage">
             <ui-tab value="package-details">
@@ -418,13 +457,36 @@ const editor = shallowRef(null);
 const connectedTable = shallowRef(null);
 
 const sidebarRef = ref(null);
+/**
+ * T-187：`padding` 字段随「外壳不再有 padding」一起删掉。
+ *
+ * 它原先唯一的用处是 T-183 那个按面板切换的内联 `padding: sidebarPadding`
+ * （助手态归零、块库态回 20px）。现在内缩统一由各面板自带，外壳这层是 0 ——
+ * 留着一个没人读的死字段，下一轮就会有人以为「改这里能调侧栏留白」。
+ */
 const sidebarCss = reactive({
   width: 360,
-  padding: '20px',
   isDragging: false,
   startX: 0,
   startWidth: 0,
 });
+
+/**
+ * T-180：侧栏顶部那行 tab。
+ *
+ * 「块」而不是「详情」：这张卡的主体是块库（置顶块 + 按分类的全部可用块），
+ * 工作流名称描述只占顶上三行，而改名在顶栏「更多 → 重命名」已有一份。
+ * 叫「模块」更糟 —— workflow.blocks.base.title 已经是「模块」（工作流设置页那个 tab），
+ * 中文包里 块/单元/模块 三个词已经并排，再加一处只会更乱。
+ */
+const SIDEBAR_TABS = [
+  {
+    id: 'blocks',
+    label: 'workflow.agent.sidebarBlocks',
+    icon: 'riListUnordered',
+  },
+  { id: 'agent', label: 'workflow.agent.tab', icon: 'riChat3Line' },
+];
 const drag = (event) => {
   if (sidebarCss.isDragging) {
     const diffX = event.clientX - sidebarCss.startX;
@@ -448,8 +510,9 @@ const startDrag = (event) => {
 const state = reactive({
   showSidebar: true,
   sidebarState: true,
-  // 侧栏当前显示哪个面板：details（工作流信息）/ agent（助手）
-  sidebarPanel: 'details',
+  // T-180：侧栏当前显示哪个面板：blocks（块库）/ agent（助手）。
+  // 键值跟着侧栏那行 tab 走；不再从 localStorage 恢复（T-181）。
+  sidebarPanel: 'blocks',
   dataChanged: false,
   animateBlocks: false,
   isExecuteCommand: false,
@@ -476,6 +539,23 @@ const editState = reactive({
   blockData: {},
   editing: false,
 });
+
+/**
+ * T-187（取代 T-183）：**侧栏外壳不再有任何 padding**，内缩统一由各面板自己带。
+ *
+ * T-183 当初的判断是「助手态把 20px 收回来」，值 +40px。实测截图打脸：
+ * 切面板时整列内容左右各跳 20px、上下各跳 20px —— 切换看着像「界面错位了一下」，
+ * 比那 40px 宽度值钱得多。而且它同时制造了两套内缩：块库那侧是「外壳 20 + 卡片自带
+ * px-4」= 36px，助手那侧是 8~12px（header px-2 / transcript p-3 / form p-2 三者还各不
+ * 相同），左边缘根本不在一条线上。
+ *
+ * 现在统一：**外壳 0，各面板一律 16px（px-4）**。切换时任何一块内容的左边缘都不动，
+ * 块库的面板仍然自带 px-4（WorkflowDetailsCard 三处根节点），块编辑卡也自带 px-4
+ * （WorkflowEditBlock.vue:2），助手面板由本轮统一到 px-4。
+ *
+ * 净账：助手面板可用宽度 320 → 328（**+8px**，不是 T-183 说的 +40），
+ * 换来的是「切换零位移」+「左边缘一条线」。宽度不够用该做的是拖宽侧栏，不是省 padding。
+ */
 const autocompleteState = reactive({
   blocks: {},
   common: {},
@@ -1192,25 +1272,22 @@ function toggleSidebar() {
   localStorage.setItem('workflow:sidebar', state.showSidebar);
 }
 /**
- * 切到助手面板。首次打开才建 runtime —— 多数人多数时候不碰助手，
- * 没必要每进一个工作流都去读配置、探标签页。
+ * T-180：切侧栏面板。由侧栏顶部那行 tab 调用。
+ *
+ * 为什么是 set 而不是 toggle：它是个 tab 组，两端都是明确目标，点哪去哪，
+ * 不需要「再点一下回去」那种开关语义。
+ *
+ * 首次切到助手才建 runtime —— 多数人多数时候不碰助手，没必要每进一个工作流
+ * 都去读配置、探标签页。
  */
-function toggleAgentPanel() {
-  const next = state.sidebarPanel === 'agent' ? 'details' : 'agent';
+function setSidebarPanel(id) {
+  if (!id || state.sidebarPanel === id) return;
+  // 编辑某个块时那行 tab 根本不渲染（见模板），走到这里说明没在编辑
+  state.sidebarPanel = id;
 
-  state.sidebarPanel = next;
-  localStorage.setItem('workflow:sidebarPanel', next);
+  if (id !== 'agent') return;
 
-  if (next !== 'agent') return;
-
-  if (!state.showSidebar) {
-    state.showSidebar = true;
-    localStorage.setItem('workflow:sidebar', true);
-  }
-
-  // 编辑某个块时 node 编辑卡优先，助手在它让位后才可见
-  editState.editing = false;
-
+  // 侧栏被收起时 tab 也看不见，用户是先把侧栏展开才点得到这里的 —— 不必替他展开
   agentHost.init().catch((err) => {
     console.warn('[agent] init failed:', err);
   });
@@ -1779,14 +1856,15 @@ onMounted(() => {
   state.showSidebar = sidebarState;
   state.sidebarState = sidebarState;
 
-  const sidebarPanel = localStorage.getItem('workflow:sidebarPanel');
-  if (sidebarPanel === 'agent') {
-    state.sidebarPanel = 'agent';
-    // 上次离开时停在助手上 → 这次直接把它拉起来
-    agentHost.init().catch((err) => {
-      console.warn('[agent] init failed:', err);
-    });
-  }
+  // T-181：这里原来会读 workflow:sidebarPanel，把上次停在哪个面板恢复回来。
+  // 已删除，理由三条：
+  //   ① 它是**全局**一个键，而侧栏宿主的会话按 workflowId 过滤 —— 在 A 工作流用过助手，
+  //      打开 B 工作流会直接撞上 B 的（多半空的）会话列表，还顶着个高亮的「编辑器」tab；
+  //   ② 切面板是个 tab，点哪去哪，不是一次「恢复上次状态」的动作 —— 持久化并没有替用户
+  //      省掉任何点击（进页面时是详情，点一次助手 tab 就是助手，两种情况下都是 1 击）；
+  //   ③ 紧挨着它的侧栏**宽度**从来不持久化（sidebarCss.width 每访回 360）。
+  //      「宽度不记忆、面板跨工作流长存」两套相反的策略挨在同一段代码里。
+  // 需要「回到 A 工作流助手还在」的连续性，第二个宿主（独立助手页 /workflows/agent）本身就是。
 
   if (!isPackage) {
     const convertedData = convertWorkflowData(workflow.value);
