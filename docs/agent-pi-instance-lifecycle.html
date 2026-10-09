@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pi Agent 实例生命周期分析 · 每轮重建 vs 长驻复用</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --surface-2: #f1efe8;
+    --border: rgba(0,0,0,0.12);
+    --border-strong: rgba(0,0,0,0.25);
+    --text: #1c1c1a;
+    --text-2: #5f5e5a;
+    --text-3: #888780;
+    --red: #a32d2d;    --red-bg: #fcebeb;
+    --green: #3b6d11;  --green-bg: #eaf3de;
+    --amber: #854f0b;  --amber-bg: #faeeda;
+    --blue: #185fa5;   --blue-bg: #e6f1fb;
+    --purple: #534ab7; --purple-bg: #eeedfe;
+    --teal: #0f6e56;   --teal-bg: #e1f5ee;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 48px 24px 96px;
+    background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 14px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  header { border-bottom: 2px solid var(--text); padding-bottom: 24px; margin-bottom: 40px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .sub { color: var(--text-2); font-size: 14px; margin: 0; }
+  .meta { margin-top: 16px; display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; color: var(--text-3); }
+  .meta b { color: var(--text-2); font-weight: 500; }
+
+  h2 { font-size: 19px; font-weight: 600; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 15px; font-weight: 600; margin: 28px 0 10px; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  a { color: var(--blue); text-decoration: none; border-bottom: 1px solid rgba(24,95,165,0.3); }
+
+  .verdict {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--amber);
+    border-radius: 10px; padding: 20px 24px; margin: 24px 0 32px;
+  }
+  .verdict .tag {
+    display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--amber); background: var(--amber-bg);
+    padding: 2px 8px; border-radius: 4px; margin-bottom: 10px;
+  }
+  .verdict p:last-child { margin-bottom: 0; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px 24px; margin: 16px 0;
+  }
+  .card.hit { border-left: 4px solid var(--red); }
+  .card.ok  { border-left: 4px solid var(--green); }
+  .card.note{ border-left: 4px solid var(--blue); }
+  .card h3 { margin-top: 0; }
+  .card p:last-child { margin-bottom: 0; }
+
+  pre {
+    background: #2c2c2a; color: #e8e6df; border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono);
+    font-size: 12px; line-height: 1.6; margin: 12px 0;
+  }
+  pre .c { color: #888780; }
+  pre .k { color: #f0997b; }
+  pre .s { color: #97c459; }
+  pre .f { color: #85b7eb; }
+  pre .hi { background: rgba(240,153,123,0.22); border-radius: 3px; padding: 0 2px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; background: var(--surface); }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--surface-2); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-2); }
+  td:first-child { white-space: nowrap; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+  .pill.a { background: var(--purple-bg); color: var(--purple); }
+  .pill.b { background: var(--teal-bg); color: var(--teal); }
+  .pill.c { background: var(--blue-bg); color: var(--blue); }
+
+  .chain { display: flex; flex-direction: column; gap: 0; margin: 20px 0; }
+  .step { display: flex; gap: 16px; align-items: flex-start; position: relative; padding-bottom: 18px; }
+  .step:last-child { padding-bottom: 0; }
+  .step:not(:last-child)::before {
+    content: ""; position: absolute; left: 13px; top: 30px; bottom: 0; width: 2px; background: var(--border);
+  }
+  .step .num {
+    flex: 0 0 28px; height: 28px; border-radius: 50%; background: var(--text); color: #fff;
+    font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; z-index: 1;
+  }
+  .step.dead .num { background: var(--red); }
+  .step.alive .num { background: var(--green); }
+  .step .body { flex: 1; padding-top: 2px; }
+  .step .body code { font-size: 12px; }
+  .step .body .why { color: var(--text-2); font-size: 13px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  @media (max-width: 680px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .rec { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--green); border-radius: 10px; padding: 20px 24px; margin: 16px 0; }
+  .rec h3 { margin-top: 0; color: var(--green); }
+  .lvl { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: var(--green-bg); color: var(--green); margin-bottom: 10px; }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-3); }
+  .fn { font-size: 12px; color: var(--text-3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>pi Agent 实例生命周期分析</h1>
+  <p class="sub">每轮对话重建实例（现状） vs 长驻复用 —— 代码层面的取舍证据</p>
+  <div class="meta">
+    <span><b>范围</b> src/agent/loop.js · index.js · provider.js · pi 包</span>
+    <span><b>日期</b> 2026-10-10</span>
+    <span><b>方法</b> 源码实测追踪</span>
+  </div>
+</header>
+
+<div class="verdict">
+  <span class="tag">结论</span>
+  <p><b>现状不属于 pi 的最佳实践，但也不是 bug —— 它换到了「无状态可抛、切会话零漂移」。</b>真正的问题只有一个：<b>每轮重建时没有把 <code>sessionId</code> 传给 pi</b>，等于主动放弃了 pi 唯一一条为「长会话缓存亲和」准备的通道。</p>
+  <p>但代码追到底后发现一个反直觉的事实：<b>对我们的 BYOK 自定义端点，光补 <code>sessionId</code> 几乎不产生任何效果</b> —— pi 的缓存头与 <code>prompt_cache_key</code> 都被厂商/域名判定卡住，自定义端点不在放行名单里。所以「加 sessionId」不是那个划算的修复。</p>
+</div>
+
+<h2>1. 现状如何运转（已核实）</h2>
+
+<p>每一轮 <code>runtime.send()</code> 都走一遍 <code>createAgent()</code>，而 pi 的 <code>Agent</code> 实例是在 <code>createAgent</code> 闭包里惰性创建的 —— 二者同生共死，所以实例的寿命恰好是「一轮」。</p>
+
+<div class="chain">
+  <div class="step alive">
+    <div class="num">1</div>
+    <div class="body">
+      <div><code>index.js:589</code> —— <span class="why">每轮 <code>send()</code> 都 <code>createAgent({...})</code></span></div>
+      <div class="why">跨轮状态不在 runtime 里另存，每轮从 <code>sessionStore.load()</code> 现读历史（<code>index.js:520-522</code>）。注释原文：「两份状态必然漂移」。</div>
+    </div>
+  </div>
+  <div class="step alive">
+    <div class="num">2</div>
+    <div class="body">
+      <div><code>loop.js:543</code> —— <span class="why"><code>let piAgent = null;</code> 闭包变量</span></div>
+      <div class="why">注释明写：「每个 createAgent 一个，跨轮复用」。但 createAgent 本身每轮重建，所以这句「跨轮复用」实际只在同一轮内成立。</div>
+    </div>
+  </div>
+  <div class="step alive">
+    <div class="num">3</div>
+    <div class="body">
+      <div><code>loop.js:810</code> —— <span class="why"><code>piAgent = new Agent({...})</code></span></div>
+      <div class="why">构造参数含 <code>initialState / streamFn / transformContext / beforeToolCall</code>。<b>没有 <code>sessionId</code></b>。</div>
+    </div>
+  </div>
+  <div class="step alive">
+    <div class="num">4</div>
+    <div class="body">
+      <div><code>loop.js:1025-1037</code> —— <span class="why">历史重灌进 <code>agent.state.messages</code></span></div>
+      <div class="why">靠 <code>historyToPiMessages()</code> 把上轮的 agent 事件历史投影回 pi 的 transcript。这是跨轮续接的唯一机制。</div>
+    </div>
+  </div>
+</div>
+
+<h3>pi 自己的设计意图（对照）</h3>
+<p>pi 的 README 第一行就是 <b>「Stateful agent with tool execution and event streaming」</b>，并且整条 API 都围绕「实例持有会话」来设计：</p>
+<ul>
+  <li><code>initialState.messages</code> —— 构造时就该带上完整对话（不是构造完再覆盖）。</li>
+  <li><code>agent.state.messages</code> —— 权威 transcript，可读可赋值。</li>
+  <li><code>reset()</code>（<code>agent.ts:355</code>）—— 语义是「清空对话但保留 prompt/tool 基线」。<b>作者预期的生命周期是：一个实例活很久，需要重开时 <code>reset()</code>，而不是 <code>new Agent()</code>。</b></li>
+  <li><code>sessionId</code>（构造参数）—— 专门给 provider 做缓存亲和，只有实例长驻才谈得上意义。</li>
+</ul>
+
+<h2>2. <code>sessionId</code> 到 provider 的完整链路（实测）</h2>
+
+<p>第一轮里「<code>sessionId</code> 是否被传递」还是个推断。现已逐层读通，链路是<b>通的</b> —— 唯一断点在最上游的构造处。</p>
+
+<div class="chain">
+  <div class="step alive">
+    <div class="num">1</div>
+    <div class="body">
+      <div><code>pi/agent/src/agent.ts:472</code> —— <span class="why"><code>createLoopConfig()</code> 里有 <code>sessionId: this.sessionId</code></span></div>
+      <div class="why"><b>关键差异</b>：ADR 0004 记的「pi 不转发 temperature / maxRetries」是真的，但 <code>sessionId</code> <b>被转发了</b>。三者命运不同。</div>
+    </div>
+  </div>
+  <div class="step alive">
+    <div class="num">2</div>
+    <div class="body">
+      <div><code>pi/agent/src/agent-loop.ts:403</code> —— <span class="why"><code>streamFunction(model, ctx, { ...config, apiKey, signal })</code></span></div>
+      <div class="why">整份 config 被展开，<code>sessionId</code> 随之下行到 streamFn。</div>
+    </div>
+  </div>
+  <div class="step alive">
+    <div class="num">3</div>
+    <div class="body">
+      <div><code>src/agent/provider.js:134</code> —— <span class="why">我们的 <code>streamFn</code> 把 <code>...options</code> 展开进 <code>streamSimple</code></span></div>
+      <div class="why">这一层是透明转发的，不需要额外接线 —— 只要上游给了，它就会到。</div>
+    </div>
+  </div>
+  <div class="step alive">
+    <div class="num">4</div>
+    <div class="body">
+      <div><code>pi/ai/src/api/openai-completions.ts:348</code> —— <span class="why"><code>cacheSessionId = cacheRetention === "none" ? undefined : options?.sessionId</code></span></div>
+      <div class="why">实测 <code>resolveCacheRetention()</code>（<code>:294</code>）默认返回 <code>"short"</code>（不是 <code>"none"</code>）→ 所以这里<b>不会</b>把 sessionId 抹掉。</div>
+    </div>
+  </div>
+  <div class="step dead">
+    <div class="num">5</div>
+    <div class="body">
+      <div><code>openai-completions.ts:776 / :826</code> —— <span class="why">用 sessionId 时被厂商判定卡住</span></div>
+      <div class="why">见下一节。这是「补 sessionId 没效果」的根因。</div>
+    </div>
+  </div>
+</div>
+
+<h2>3. 反直觉证据：BYOK 端点下 <code>sessionId</code> 几乎无效</h2>
+
+<p>pi 用 <code>sessionId</code> 做两件事，两件都有前置门 —— 而这些门对「自定义 OpenAI 兼容端点」全部关闭。证据在 <code>openai-completions.ts</code>：</p>
+
+<div class="card note">
+<h3>门一：会话亲和头 —— 仅 OpenRouter</h3>
+<pre><span class="c">// :776</span>
+<span class="k">if</span> (sessionId && compat.<span class="f">sendSessionAffinityHeaders</span>) {
+  <span class="k">if</span> (compat.sessionAffinityFormat === <span class="s">"openrouter"</span>) {
+    headers[<span class="s">"x-session-id"</span>] = sessionId;
+  } <span class="k">else</span> { <span class="c">/* x-client-request-id / x-session-affinity */</span> }
+}
+
+<span class="c">// :1680  默认值 —— 只有 OpenRouter 才是 true</span>
+<span class="f">sendSessionAffinityHeaders</span>: isOpenRouter,   <span class="c">// isOpenRouter = provider==="openrouter" || baseUrl.includes("openrouter.ai")</span></pre>
+<p>我们的 <code>buildModel</code>(<code>provider.js:69</code>) 里 <code>provider</code> 取用户配置、<code>baseUrl</code> 是任意 BYOK 端点 → <code>isOpenRouter</code> 恒 <code>false</code> → <b>这一整块头都不会发。</b></p>
+</div>
+
+<div class="card note">
+<h3>门二：<code>prompt_cache_key</code> —— 仅 api.openai.com 或 long 保留</h3>
+<pre><span class="c">// :826</span>
+prompt_cache_key:
+  (model.baseUrl.includes(<span class="s">"api.openai.com"</span>) && cacheRetention !== <span class="s">"none"</span>) ||
+  (cacheRetention === <span class="s">"long"</span> && compat.<span class="f">supportsLongCacheRetention</span>)
+    ? <span class="f">clampOpenAIPromptCacheKey</span>(options?.sessionId)
+    : undefined,</pre>
+<p>我们既不是 <code>api.openai.com</code>，也没把 <code>cacheRetention</code> 设成 <code>"long"</code>（<code>buildModel</code> 根本不设这个字段，默认 <code>"short"</code>）→ 条件为假 → <code>prompt_cache_key</code> 恒 <code>undefined</code>。</p>
+</div>
+
+<div class="card hit">
+<h3>门三（连带）：anthropic 风格 <code>cache_control</code> —— 同样不适用</h3>
+<pre><span class="c">// :1642</span>
+const cacheControlFormat = provider === <span class="s">"openrouter"</span> && model.id.startsWith(<span class="s">"anthropic/"</span>)
+  ? <span class="s">"anthropic"</span> : undefined;
+
+<span class="c">// :1081  getCompatCacheControl()</span>
+<span class="k">if</span> (compat.cacheControlFormat !== <span class="s">"anthropic"</span> || cacheRetention === <span class="s">"none"</span>) <span class="k">return</span> undefined;</pre>
+<p>只有「OpenRouter + anthropic/* 模型」才会挂 <code>cache_control</code> 块。我们的端点连这个分支都进不去。</p>
+</div>
+
+<p><b>综合：</b>对我们的典型 BYOK 端点（自定义 baseUrl、非 OpenRouter、非 api.openai.com），把 <code>sessionId</code> 补上之后，pi 内部会拿到它、<code>resolveCacheRetention</code> 也不会抹掉它 —— 但走到实际 HTTP 请求时，<b>没有任何一个字段会因此变化</b>。收益 ≈ 0。</p>
+
+<h2>4. 两方案的取舍对照</h2>
+
+<table>
+  <thead>
+    <tr><th>维度</th><th><span class="pill a">方案 A</span> 长驻实例 + reset()</th><th><span class="pill b">方案 B</span> 保持每轮重建 + 补 sessionId</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>符合 pi 意图</td>
+      <td>✅ 是 pi 预期用法（stateful + <code>reset()</code>）</td>
+      <td>⚠️ 仍偏离，只在参数上贴近</td>
+    </tr>
+    <tr>
+      <td>缓存亲和收益</td>
+      <td>❌ 同样拿不到 —— 门在 provider 层，与实例寿命<b>无关</b></td>
+      <td>❌ <code>sessionId</code> 走到 HTTP 时被判定卡住，收益 ≈ 0</td>
+    </tr>
+    <tr>
+      <td>省掉历史重放</td>
+      <td>部分 —— 同会话续轮可省；<b>切会话仍要 reset + 重灌</b></td>
+      <td>不变，仍每轮重放</td>
+    </tr>
+    <tr>
+      <td>切会话正确性</td>
+      <td>❌ 风险点：需 <code>reset()</code> 再灌，漏 reset 会跨会话串味；<code>systemPrompt</code> 每轮变（facts 每轮重建）也要处理</td>
+      <td>✅ 天然干净 —— 实例可抛，无残留</td>
+    </tr>
+    <tr>
+      <td>改动面</td>
+      <td>中 —— 改 <code>createAgent</code> 生命周期 + runtime 持有实例 + 切会话/切宿主 reset；动 <code>countedUsage</code>/<code>harvestUsage</code> 语义</td>
+      <td>极小 —— 两处加字段</td>
+    </tr>
+    <tr>
+      <td>测试影响</td>
+      <td>大 —— <code>loop.test.js</code>(79KB) 假设按轮新建</td>
+      <td>小</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="card">
+<h3>方案 A 的结构性摩擦（具体到代码）</h3>
+<ul>
+  <li><b>历史仍要从存储重灌。</b> <code>index.js:652</code> 的 <code>initialHistory</code> 是每轮从 <code>sessionStore</code> 现读的。即使实例长驻，只要真值在存储，就必须 <code>reset()</code> + 重灌 → 重放成本并没省掉，反而多了一层「实例状态 vs 存储」可能漂移的隐患（而那正是 <code>index.js:513</code> 注释想避免的事）。</li>
+  <li><b>systemPrompt 每轮变。</b> <code>ensurePiAgent(systemPrompt)</code> 只吃一个参数，systemPrompt 由每轮 facts 构建（<code>loop.js:959-962</code>）。长驻实例要处理「prompt 基线在活实例上如何更新」，pi 提供了 append system message 的机制，但那是新增接线。</li>
+  <li><b>usage 去重语义变化。</b> <code>countedUsage</code>（<code>loop.js:578</code>）是每闭包一个 Set，靠「按消息对象身份」去重。实例长驻后 pi 的 transcript 不再每轮清空，这套去重的假设要重新验证。</li>
+  <li><b>切宿主 / 切会话要记得 reset。</b> <code>agentHost.js</code> 的切换流程没这动作，漏了就串会话。</li>
+</ul>
+</div>
+
+<h2>5. 解决方案</h2>
+
+<div class="rec">
+  <span class="lvl">推荐 · 分级处理</span>
+  <h3>不为了一个拿不到的缓存收益去翻动实例生命周期</h3>
+  <p><b>方案 B 的收益已被证据否定（≈0），方案 A 的收益不成立（门在 provider 层）+ 代价高（动生命周期与 79KB 测试假设）。</b>所以正确的动作不是二选一，而是：</p>
+</div>
+
+<h3>① 立即做（成本极低，消除「主动放弃」的观感）</h3>
+<ol>
+  <li><b>把 <code>sessionId</code> 接上，并写清它是「为将来/他端点留的通道」而非当前收益。</b>
+    <ul>
+      <li><code>createAgent</code> 的 <code>deps</code> 加 <code>sessionId</code>；<code>loop.js:810</code> 的 <code>new Agent</code> 传入它。</li>
+      <li>值用会话 id（<code>currentSessionId</code>，<code>index.js:532</code> 保证每会话有 id）。<b>不要用 workflowId</b> —— 一个工作流有多会话。</li>
+      <li>注释必须照实写：<i>「自定义 BYOK 端点下当前不会产生 <code>prompt_cache_key</code> / 亲和头（见 pi <code>openai-completions.ts:776/826</code> 的判定门）；接上它是为了 (a) 端点切到 api.openai.com/OpenRouter 时自动生效，(b) 避免每轮变化的值污染将来的缓存键。」</i> <b>不许写成「修好了缓存」—— 那是假的。</b></li>
+    </ul>
+  </li>
+  <li><b>在 <code>buildModel</code>（<code>provider.js:69</code>）补显式的 <code>cacheRetention</code> 决策</b>（现在完全不设，默认 <code>"short"</code> 是隐式的）。若要 long 保留，需确认端点真支持，否则同样无效 —— 这也要注释写清依据。</li>
+</ol>
+
+<h3>② 观察后再定（不现在做）</h3>
+<ul>
+  <li>把「每轮 <code>new Agent</code> 的实测开销」与「重放历史的有损/成本」记成一条<b>可观测的日志</b>（<code>turn.start</code> 已有，加一个 <code>replayedMessages</code> 计数即可），跑一段时间看长会话下是否有真实痛点。</li>
+  <li><b>只有</b>当出现「长会话续轮明显变慢 / token 成本异常」的实测数据时，才启动方案 A 的评估。届时前提也应是「先和用户确认缓存端点」，而不是默认做。</li>
+</ul>
+
+<h3>③ 明确不做</h3>
+<ul>
+  <li><b>不做</b>方案 A 的实例长驻 —— 在收益被证据否定、代价明确偏高的当前，它属于「以为在优化、实际引入新漂移面」的改动（与项目「不许看起来成功、实际什么都没做」的立场冲突）。</li>
+  <li><b>不把</b>「每轮重建」当 bug 修 —— 它是刻意的取舍，理由（无漂移）成立且写在 <code>index.js:513</code>。</li>
+</ul>
+
+<div class="verdict" style="border-left-color: var(--blue);">
+  <span class="tag" style="color: var(--blue); background: var(--blue-bg);">一句话</span>
+  <p><b>「每轮新建 pi Agent」不是 pi 的最佳实践，但它换来的「无状态可抛」是本项目的合理选择；唯一的实际缺口是没传 <code>sessionId</code> —— 而证据显示，对当前 BYOK 端点补上它也几乎没用。所以：补字段 + 如实注释（成本低、防将来踩坑），不做生命周期重构。</b></p>
+</div>
+
+<h2>附：证据索引</h2>
+<table>
+  <thead><tr><th>结论</th><th>证据位置</th></tr></thead>
+  <tbody>
+    <tr><td>每轮重建实例</td><td><code>index.js:589</code>（每轮 <code>createAgent</code>）· <code>loop.js:543</code>（闭包 <code>piAgent</code>）</td></tr>
+    <tr><td>未传 sessionId</td><td><code>loop.js:810-917</code>（构造参数无该字段）· <code>provider.js:69/106</code>（返回体无该字段）</td></tr>
+    <tr><td>pi 会转发 sessionId</td><td><code>pi/packages/agent/src/agent.ts:472</code> → <code>agent-loop.ts:403</code></td></tr>
+    <tr><td>默认 <code>cacheRetention="short"</code></td><td><code>pi/.../openai-completions.ts:294-302</code></td></tr>
+    <tr><td>亲和头仅 OpenRouter</td><td><code>openai-completions.ts:776</code> + <code>:1680</code></td></tr>
+    <tr><td><code>prompt_cache_key</code> 门槛</td><td><code>openai-completions.ts:826-830</code></td></tr>
+    <tr><td>cache_control 仅 openrouter+anthropic</td><td><code>openai-completions.ts:1642</code> + <code>:1081</code></td></tr>
+    <tr><td>历史每轮从存储现读</td><td><code>index.js:520-522</code>（注释「两份状态必然漂移」）</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  本报告为源码实测追踪结论；文中「收益 ≈ 0」基于对 pi <code>openai-completions</code> 路径的完整阅读。未做真机抓包验证 —— 若要点到「绝对零收益」，需一次带代理的实测抓包确认请求体无缓存字段变化。
+</footer>
+
+</div>
+</body>
+</html>
