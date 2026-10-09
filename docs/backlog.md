@@ -29,8 +29,52 @@
 
 ### bug（先审，多数可快速定夺）
 
+## T-184 — 块库的分类标题是硬编码英文，中文界面里直接显示英文
+
+登记日期：2026-10-09
+来源：2026-10-09 会话评审 agent 助手入口 UI；画设计稿时照实画出来才发现；读 `src/utils/shared.js:1508` 与 `src/components/newtab/workflow/WorkflowBlockList.vue:9`
+现象：工作流编辑器侧栏那块库面板，分类标题显示 `Web interaction` / `Browser` / `General` / `Online services` / `Data` / `Control flow` / `Packages` —— 全是英文，且首字母被 CSS `capitalize` 处理过。同一面板里只有「已固定的块」是中文。
+证据：代码位置如上，**源码核对**。`categories` 的每个 `name` 是英文字面量，没有 locale 键；`WorkflowBlockList.vue:9` 直接 `{{ category.name }}`，整条链路上没有 `t()`。十个语言包里都没有对应键。
+**2026-10-09 用户实拍截图坐实**：块库面板实拍图里分类标题直接显示 `● General`（配一个黄色圆点与右侧 `−`），与同面板上方中文的「已固定的块」同屏混排。视觉观感不再是推断。
+影响：所有中文用户，工作流编辑器最常驻的一块面板里，分类标题全是英文；块的名字本身有中文（走 `workflow.blocks.*.name`），所以出现「英文分组 + 中文条目」混排。与本次入口改造无关，是既有缺陷。
+建议：给 `categories` 补 locale 键（`workflow.blockCategories.<id>`），`WorkflowBlockList` 走 `t()` 并保留英文兜底（`te()` 判存在，缺语言时回英文而不是显示键名）。改动小、无布局影响，可独立开工。
+状态：待审核
+
+## T-178 — `aria-role` 不是合法属性：整个 tab 栏没有 tablist / tab 语义
+
+登记日期：2026-10-09
+来源：2026-10-09 会话评审 agent 助手入口 UI；读 `src/components/ui/UiTabs.vue:7` 与 `src/components/ui/UiTab.vue:14`
+现象：两个组件写的是 `aria-role="tablist"` / `aria-role="tab"`。WAI-ARIA 里没有 `aria-role` 这个属性——`aria-*` 只承载状态与属性（`aria-label`、`aria-selected` 等），角色一律走 `role`。浏览器把 `aria-role` 当普通未知属性，读屏软件不认。结果：`ui-tabs` 不是 tablist，`ui-tab` 不是 tab；`UiTab.vue:3` 那个写对了的 `:aria-selected` 也就无处附着。键盘上只有 `:tabIndex` 在起作用。
+证据：**产物级实测** —— 对 `build/newtab.bundle.js` 等四个 bundle grep，`aria-role` 原样出现各 2 处，上下文为 `"aria-role":"tab"` 与 `"aria-role":"tablist"`，同一段里没有任何 `role="tablist"` / `role="tab"`。源码位置：`UiTabs.vue:7`、`UiTab.vue:14`。
+影响：全项目每一处 `ui-tabs`（工作流编辑器、包详情、设置页等）都受影响，不止 agent。读屏用户听到的是一排普通按钮，不会播报「第 2 个标签，共 4 个」；方向键也无法按 tablist 语义在标签间移动。
+建议：两处改名 `aria-role` → `role`。改完还需补 `aria-controls` / `role="tabpanel"` 的对应关系才算完整（有 `role="tab"` 却没有 tabpanel 会是另一个 a11y 警告），范围较大，建议单独立项评估。本轮只登记，不动代码。
+状态：待审核
 
 ### 改进
+
+## T-186 — `riMagicLine` 是全项目「AI 助手」的品牌图标，唯一语义不搭的是画布自动布局
+
+登记日期：2026-10-09
+来源：2026-10-09 会话实施 T-182 时**产物级核验 `riMagicLine` 计数**才浮出来；触发点 `src/newtab/pages/workflows/[id].vue:280`
+现象：T-182 登记时把「魔法棒撞图标」描述成「助手入口 vs 画布自动布局」两处事件。实施后 grep 全仓才发现，`riMagicLine` 在**四个地方**出现，其中三个都是「AI 助手」入口：设置页「AI 助手」导航项（`Settings.vue:52`）、工作流列表页的助手入口项（`Workflows.vue:60`，`t('workflow.agent.tab')`）、以及本轮刚改掉的侧栏 tab。真正语义不搭的是**第四处** —— 画布左下角的自动布局按钮，它跟 AI 没有半点关系，只是借了助手的面包屑。
+证据：**产物级实测** —— 对 `build/newtab.bundle.js` 计 `riMagicLine` 得 4 命中；回源码逐个定位为 `vRemixicon.js:106/205`（注册表 import + 注册项，两条被 terser 合并计一条命中之外的部分）、`[id].vue:280`（自动布局）、`Settings.vue:52`、`Workflows.vue:60`，全仓再无第五处（`src/` 下 `*.vue`/`*.js` 全文 grep 已跑）。
+影响：不是功能缺陷，是**图标语义一致性**。用户学到的「魔法棒 = AI」这条约定，会被画布上一个纯排版按钮持续违反；反过来，本轮把助手侧换成 `riChat3Line` 之后，「魔法棒 = AI」在助手入口这条链路上反而断了一处（设置页与列表页仍是魔法棒）。两种读法指向相反的修法，**必须由用户裁决，不能由我顺手定**。
+建议（两条互斥，代价都很小）：
+  1. **认魔法棒为 AI 品牌**，则改 `[id].vue:280` 自动布局 → 对齐类图标（`riAlignLeft` 一类）。侧栏 tab 也换回 `riMagicLine`。代价：改两处。
+  2. **认侧栏 tab 的语义优先**（当前实现）：`块 | 助手` 并排时，对话框比魔法棒更准；则把 `Settings.vue:52` 与 `Workflows.vue:60` 一并换成 `riChat3Line`，让「助手」在三个入口统一。代价：同样两处，但风险更低（都是 AI 入口，换成对话气泡不会误导任何人）。
+注：本条**不阻塞** T-182 的结论 —— 本轮已按建议 2 的局部形态（只改侧栏 tab）落地并通过守卫。若用户选 1，需同步改守卫 `panelUi.test.js:1901` 的断言方向（当前钉的是「`[id].vue` 里 `riMagicLine` 只剩 1 处」）。
+状态：待审核
+
+## T-185 — 侧栏卡头的工作流名称与描述，是顶栏重命名弹窗的重复第二份
+
+登记日期：2026-10-09
+来源：2026-10-09 会话评审 agent 助手入口 UI；读 `src/components/newtab/workflow/WorkflowDetailsCard.vue:1-50` 与 `src/components/newtab/workflow/editor/EditorLocalActions.vue:695-706`
+现象：侧栏块库面板顶上那行「图标 + 名称 + 描述」里，名称与描述**可以就地编辑**，而顶栏「更多 → 重命名」弹窗（`moreActions` 的 `rename` 项，`riPencilLine`）也能改同样两个字段 —— 同一件事两处入口，且顶栏那处在任何工作流下都在、侧栏那处要先展开侧栏。
+证据：代码位置如上。`renameWorkflow()` 写 `{name, description}`；`WorkflowDetailsCard` 的 `descriptionCollapsed` 点击展开与名称输入走 `updateWorkflow({...})`。**未实测**两处是否会互相覆盖或产生竞态。
+影响：用户可能在一处改了、另一处看到旧值；更重要的是它让「块库面板」这个叫法别扭 —— 主体是块库，顶上却挂着重复的工作流信息（这是「详情卡」这个名字名不副实的根源）。
+影响面补充：**图标不能跟着一起删**。全仓只有侧栏这一处能改工作流图标，`renameWorkflow` 只写 name/description，没有 icon 字段（已核实 `EditorLocalActions.vue` 全文无 icon 输入）。
+建议：若要收，去掉卡头的名称与描述两行，保留图标那一格；或者反过来把图标选择器并进顶栏重命名弹窗，然后整个卡头删掉 —— 后者还能给侧栏多让出约 44px 高度。**两者都不是必须的**，纯收益项，用户不碰这两处也不会怎样。
+状态：待审核
 
 ## T-155 — 下拉缺 a11y 语义与键盘导航
 
