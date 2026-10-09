@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent 工具卡设计稿 · 窄形态溢出与体量收敛</title>
+    <style>
+      :root {
+        --bg: #f4f5f7;
+        --surface: #ffffff;
+        --panel: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --faint: #9ca3af;
+        --border: #e5e7eb;
+        --border-soft: #f3f4f6;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+        --box: rgba(0, 0, 0, 0.04);
+        --code-bg: #f3f4f6;
+        --green-bg: rgba(34, 197, 94, 0.15);
+        --green-fg: #15803d;
+        --red-bg: rgba(239, 68, 68, 0.12);
+        --red-fg: #b91c1c;
+        --amber-bg: rgba(245, 158, 11, 0.15);
+        --amber-fg: #b45309;
+        --blue-bg: rgba(59, 130, 246, 0.15);
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.05);
+      }
+      body.dark {
+        --bg: #17181c;
+        --surface: #1f2126;
+        --panel: #1f2126;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --faint: #6b7280;
+        --border: #374151;
+        --border-soft: #2b2f36;
+        --accent: #f4f4f5;
+        --accent-fg: #18181b;
+        --box: rgba(255, 255, 255, 0.06);
+        --code-bg: #2b2f36;
+        --green-fg: #4ade80;
+        --red-fg: #f87171;
+        --amber-fg: #fbbf24;
+        --blue-bg: rgba(59, 130, 246, 0.22);
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 13px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", Roboto,
+          Helvetica, Arial, sans-serif;
+      }
+      .wrap {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px 20px 80px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 34px 0 12px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--border);
+      }
+      h3 {
+        font-size: 13px;
+        margin: 18px 0 8px;
+      }
+      .lede {
+        color: var(--muted);
+        margin: 0 0 4px;
+        max-width: 900px;
+      }
+      code {
+        background: var(--code-bg);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin: 14px 0 6px;
+        flex-wrap: wrap;
+      }
+      .toolbar button {
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .toolbar button:hover {
+        background: var(--box);
+      }
+      .grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        align-items: flex-start;
+      }
+      .case {
+        width: 320px;
+      }
+      .cap {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0 0 8px;
+      }
+      .cap b {
+        color: var(--text);
+      }
+
+      /* ---- 复刻 Agent 侧栏（窄形态 320px）---- */
+      .aside {
+        width: 320px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        height: 460px;
+      }
+      .aside-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .aside-head .dot {
+        width: 16px;
+        height: 16px;
+        border-radius: 5px;
+        background: var(--box);
+        display: inline-block;
+      }
+      /* transcript：flex 列 + 纵向滚动，和 AgentTranscript 一致 */
+      .transcript {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px;
+        overflow-y: auto;
+        overflow-x: auto;
+      }
+      .transcript.fixed {
+        overflow-x: hidden;
+      }
+      .msg {
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .msg.user {
+        align-self: flex-end;
+        background: var(--blue-bg);
+        border-radius: 8px;
+        padding: 6px 10px;
+        max-width: 100%;
+        white-space: pre-wrap;
+      }
+      .notice {
+        border-left: 2px solid var(--border);
+        background: var(--box);
+        border-radius: 4px;
+        padding: 6px 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      /* 工具卡：默认 self-start（紧凑） */
+      .tool {
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        align-self: flex-start;
+      }
+      .tool.fixed {
+        max-width: 100%;
+        min-width: 0;
+      }
+      .tool-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 8px 12px;
+        font-size: 14px;
+        text-align: left;
+      }
+      .tool.fixed .tool-head {
+        padding: 6px 12px;
+      }
+      .tool-head .name {
+        font-weight: 500;
+      }
+      .badge {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 12px;
+        background: var(--green-bg);
+        color: var(--green-fg);
+      }
+      .tool-body {
+        border-top: 1px solid var(--border);
+        padding: 8px 12px;
+        font-size: 12px;
+        max-height: 320px;
+        overflow: auto;
+      }
+      .tool.fixed .tool-body {
+        max-height: 224px;
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+      .tool-body pre {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        white-space: pre-wrap;
+        overflow-wrap: break-word; /* 旧：不参与 min-content 计算 */
+        overflow-x: auto;
+      }
+      .tool.fixed .tool-body pre {
+        overflow-wrap: anywhere; /* 新：参与 min-content，长串就地折断 */
+        overflow-x: visible;
+      }
+      .flag {
+        display: inline-block;
+        font-size: 11px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        margin-bottom: 8px;
+      }
+      .flag.bad {
+        background: var(--red-bg);
+        color: var(--red-fg);
+      }
+      .flag.good {
+        background: var(--green-bg);
+        color: var(--green-fg);
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        max-width: 900px;
+        font-size: 12px;
+        margin: 8px 0;
+      }
+      th,
+      td {
+        border: 1px solid var(--border);
+        padding: 6px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--box);
+        font-weight: 600;
+      }
+      .rule {
+        margin: 10px 0;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+      .rule b {
+        display: block;
+        margin-bottom: 2px;
+      }
+      .rule .why {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      ul {
+        margin: 6px 0;
+        padding-left: 20px;
+      }
+      li {
+        margin: 3px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Agent 工具卡设计稿 · 窄形态溢出与体量收敛</h1>
+      <p class="lede">
+        窄宿主（编辑器 320px 侧栏）下展开工具卡时，观察值里的长无空格串（
+        <code>file:///…</code>、<code>https://…</code>、长 tabId）会把卡片横向撑破，
+        正文区出现左右滚动条；同时展开体量过大（<code>max-h-80</code>=320px，超过面板一半）。
+        本稿给出四条规则，在不改变“工具卡紧凑、可与思考/通知卡区分”的前提下收敛。
+      </p>
+
+      <div class="toolbar">
+        <button id="theme">切换深浅</button>
+        <span class="cap" style="margin: 0"
+          >两边都是 320px 侧栏；<b>展开态</b>，观察值内容相同。</span
+        >
+      </div>
+
+      <h2>一、问题复现</h2>
+      <p class="lede">
+        观察值里有一条 <code>file://</code> 本地路径和一条长 URL，两行都无空格。
+        旧实现整列被撑宽 → transcript 出横向滚动条（下面左卡可直接左右拖动看横条）。
+      </p>
+      <div class="grid">
+        <div class="case">
+          <p class="cap"><span class="flag bad">改前</span> 卡片被内容撑宽</p>
+          <div class="aside">
+            <div class="aside-head"><span class="dot"></span> 查看页面 · 10-09 02:06</div>
+            <div class="transcript">
+              <div class="msg user">帮我看看这个页面能做什么</div>
+              <div class="tool" data-demo="bad">
+                <div class="tool-head">
+                  <span>▾</span><span class="name">list_tabs</span>
+                  <span class="badge">✓ 完成</span>
+                </div>
+                <div class="tool-body">
+                  <pre>可操作的标签页（focus_tab 用 tabId）：
+  - tabId 43366250 [Agent 会话历史设计稿]
+    file:///D:/project/automa/docs/agent-ui-session-history.html
+  - tabId 43366295 [下载]
+    https://agent.minimax.cn/download?os=win&amp;arch=x64&amp;ver=latest</pre>
+                </div>
+              </div>
+              <div class="notice">系统提示：目标页已经关闭，如需继续请先 list_tabs。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="case">
+          <p class="cap"><span class="flag good">改后</span> 长串就地折断、不外溢</p>
+          <div class="aside">
+            <div class="aside-head"><span class="dot"></span> 查看页面 · 10-09 02:06</div>
+            <div class="transcript fixed">
+              <div class="msg user">帮我看看这个页面能做什么</div>
+              <div class="tool fixed" data-demo="good">
+                <div class="tool-head">
+                  <span>▾</span><span class="name">list_tabs</span>
+                  <span class="badge">✓ 完成</span>
+                </div>
+                <div class="tool-body">
+                  <pre>可操作的标签页（focus_tab 用 tabId）：
+  - tabId 43366250 [Agent 会话历史设计稿]
+    file:///D:/project/automa/docs/agent-ui-session-history.html
+  - tabId 43366295 [下载]
+    https://agent.minimax.cn/download?os=win&amp;arch=x64&amp;ver=latest</pre>
+                </div>
+              </div>
+              <div class="notice">系统提示：目标页已经关闭，如需继续请先 list_tabs。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2>二、根因（为什么 break-words 没兜住）</h2>
+      <ul>
+        <li>
+          <b>卡片是 shrink-to-fit。</b> 工具卡在 transcript 的 flex 列里带
+          <code>self-start</code>（保持紧凑、不拉满整行）。非 stretch 的 flex 子项按
+          <code>fit-content</code> 定宽，而 fit-content 的下界是内容的
+          <b>min-content</b>。
+        </li>
+        <li>
+          <b><code>overflow-wrap: break-word</code> 不参与 min-content。</b>
+          它只在“行盒排不下”时断行，<b>不会</b>把一个长串的 min-content 宽度变小。
+          于是长路径/URL 的 min-content &gt; 320px 面板 → 卡片被撑到 min-content 宽 → 溢出。
+        </li>
+        <li>
+          <b><code>overflow-x-auto</code> 兜的是叶子，不是容器。</b> 当被撑宽的是
+          <b>容器本身</b>时，叶子上的横向滚动条救不了 —— 外层 flex 列直接横向溢出。
+        </li>
+        <li>
+          <b>体量。</b> 折叠行 <code>py-2</code>、展开体 <code>max-h-80</code>(320px)，
+          在约 540px 的面板里占去一半以上。
+        </li>
+      </ul>
+
+      <h2>三、方案：四条规则</h2>
+
+      <div class="rule">
+        <b>① 卡片永不比面板宽 —— <code>max-w-full min-w-0</code></b>
+        <div class="why">
+          给工具卡根节点上保险：即使内容再长，卡片宽度也被夹在 100% 以内，
+          <code>min-w-0</code> 解除 flex 子项默认的 min-content 下界。
+        </div>
+      </div>
+
+      <div class="rule">
+        <b>② 长串就地折断 —— <code>overflow-wrap: anywhere</code></b>
+        <div class="why">
+          与 <code>break-word</code> 的关键差别：<code>anywhere</code> <b>参与
+          min-content 计算</b>，所以容器不再被长串撑宽；正常文本仍优先在词边界换行，
+          只有“一个词长过一行”时才在任意处折断。这是本问题的正解，
+          <code>break-all</code>（任意字符都断）会破坏可读性，是次选。
+        </div>
+      </div>
+
+      <div class="rule">
+        <b>③ 展开体只允许纵向滚动 —— <code>overflow-y-auto</code></b>
+        <div class="why">
+          去掉 <code>overflow-auto</code> / <code>overflow-x-auto</code>：
+          横向溢出必须靠 <b>断行</b> 解决，而不是靠滚动条 —— 滚动条只是把
+          “看不见的内容”藏起来，窄形态下反而更糟。纵向保留滚动，超长观察值仍可看全。
+        </div>
+      </div>
+
+      <div class="rule">
+        <b>④ 体量收敛</b>
+        <div class="why">
+          折叠行 <code>py-2</code> → <code>py-1.5</code>（每张省 4px）；
+          展开体 <code>max-h-80</code>(320px) → <code>max-h-56</code>(224px)。
+          工具卡仍然保留 <code>self-start</code> 的紧凑形态，与思考卡（全边框+左箭头）、
+          通知卡（左竖线）继续可区分。
+        </div>
+      </div>
+
+      <h3>改动前后对照（AgentToolStep.vue）</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>位置</th>
+            <th>改前</th>
+            <th>改后</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>卡片根</td>
+            <td><code>rounded border …</code></td>
+            <td><code>max-w-full min-w-0 rounded border …</code></td>
+          </tr>
+          <tr>
+            <td>折叠行内边距</td>
+            <td><code>px-3 py-2</code></td>
+            <td><code>px-3 py-1.5</code></td>
+          </tr>
+          <tr>
+            <td>展开体外层</td>
+            <td><code>max-h-80 overflow-auto</code></td>
+            <td><code>max-h-56 overflow-y-auto overflow-x-hidden</code></td>
+          </tr>
+          <tr>
+            <td>参数/观察值 <code>&lt;pre&gt;</code></td>
+            <td><code>overflow-x-auto whitespace-pre-wrap break-words</code></td>
+            <td><code>whitespace-pre-wrap [overflow-wrap:anywhere]</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>同型长串隐患一并收口</h3>
+      <p class="lede">
+        用户气泡（<code>whitespace-pre-wrap</code> 无断行规则）与错误卡正文
+        （<code>break-words</code> 不收缩 min-content）会遇到同一类长串溢出。
+        统一加 <code>[overflow-wrap:anywhere]</code>，让“窄形态下长串不溢出”成为
+        聊天区的一条统一约束，而不是工具卡的单点补丁。
+      </p>
+
+      <h2>四、不改什么</h2>
+      <ul>
+        <li>
+          <b>保留 <code>self-start</code>。</b> 工具卡继续紧凑（内容短时不拉满整行），
+          本稿只让它“短则紧凑、长则换行、永不超过面板”。
+        </li>
+        <li>
+          <b>不动状态色与图标。</b> 绿/红/琥珀与 ✓/✕/⊗ 的语义（T-13、T-172）不变。
+        </li>
+        <li>
+          <b>不动展开交互。</b> 仍是按钮 + <code>aria-expanded</code>，点击展开/收起。
+        </li>
+      </ul>
+
+      <h2>五、顺带修正（同一轮复查出来的）</h2>
+      <p class="lede">
+        改完工具卡，按“每改必补守卫”的纪律重建 + 跑全量测试时，
+        <code>cssSpecificity</code> 守卫（T-171）报出一条既有冲突，与工具卡无关但同源：
+      </p>
+      <ul>
+        <li>
+          <b>composer 输入框的 <code>rounded-none</code> 没带 <code>!</code></b> ——
+          与同一元素上已有的 <code>!bg-transparent !px-1 !py-1</code> 不一致。
+          已统一为 <code>!rounded-none</code>（守卫推荐的“加 <code>!</code> 前缀”手法），
+          不再依赖 border-radius 工具类的产出顺序。
+        </li>
+        <li>
+          <b>守卫方向本身存疑（仅记录，本次未改）。</b> 该守卫判据是
+          <code>at(passed) &gt; at(base)</code>，即把“调用方排得更靠后”当成“输”；
+          但 CSS 同优先级下<b>后来者赢</b>，方向恰好相反 ——
+          本次实测 <code>.rounded-lg</code> 在 <code>.rounded-none</code> 之前，
+          后者实际获胜。把方向反过来会当场暴露两处<b>真实</b>既有 bug：
+          <code>TriggerElementOptions.vue</code> 与 <code>EditorLocalActions.vue</code> 里
+          <code>&lt;ui-input class="block"&gt;</code> 被组件自带的
+          <code>inline-block</code> 吃掉。是否修守卫与这两处，另立一项。
+        </li>
+      </ul>
+    </div>
+
+    <script>
+      const btn = document.getElementById('theme');
+      btn.addEventListener('click', () => {
+        document.body.classList.toggle('dark');
+      });
+    </script>
+  </body>
+</html>

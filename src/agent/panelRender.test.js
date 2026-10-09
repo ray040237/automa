@@ -8,6 +8,7 @@ const MD = 'src/components/newtab/workflow/agent/AgentMarkdown.vue';
 const LIST = 'src/components/newtab/workflow/agent/AgentSessionList.vue';
 const RING = 'src/components/newtab/workflow/agent/AgentContextRing.vue';
 const PANEL = 'src/components/newtab/workflow/agent/AgentPanel.vue';
+const STEP = 'src/components/newtab/workflow/agent/AgentToolStep.vue';
 
 const read = (p) => readFileSync(p, 'utf8');
 
@@ -339,6 +340,30 @@ test('T-171b：窄宿主渲染出 min-h-0 右栏 + shrink-0 composer（只有中
   assert.ok(
     narrow.includes('shrink-0'),
     '渲染结果里 composer 表单缺失 shrink-0 —— 窄宿主下输入框可能被压没'
+  );
+});
+
+test('T-174：工具卡渲染出的根节点带 max-w-full / min-w-0（长串撑不破窄面板）', async () => {
+  // 工具卡根节点的这两个 class 决定它在窄宿主（320px 侧栏）里会不会被长观察值
+  // 撑得比面板宽。展开体（v-if=expanded）SSR 渲染不到，那一半由 toolStepLayout.test.js
+  // 的源码守卫补，两条合起来才闭环。
+  const html = await renderSfc(STEP, {
+    props: {
+      step: {
+        name: 'list_tabs',
+        status: 'ok',
+        args: { detail: 'summary' },
+        observation: 'file:///D:/project/automa/docs/agent-ui-toolstep.html',
+      },
+    },
+  });
+  assert.ok(
+    html.includes('max-w-full'),
+    '工具卡根节点缺 max-w-full —— 长串会把卡片撑得比面板宽，出横向滚动条'
+  );
+  assert.ok(
+    html.includes('min-w-0'),
+    '工具卡根节点缺 min-w-0 —— flex 子项的 min-content 下界没解除'
   );
 });
 

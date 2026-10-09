@@ -1679,11 +1679,11 @@ test('T-171：覆盖 UiTextarea 的工具类必须加 !，否则被组件自身�
 
   // 输入框必须 flush：UiTextarea 根节点自带 rounded-lg，不中和掉就会在 composer
   // 卡片里又套一层圆角框 —— 与设计稿「一条边框包住整个输入区」冲突，且正是 T-171
-  // 同型的「边框里又有框」（只是这回是圆角不是底色）。rounded-none 是工具类，
-  // 落在 @layer utilities，必定覆盖 @layer components 里的 rounded-lg。
+  // 同型的「边框里又有框」（只是这回是圆角不是底色）。与上面 px/py/bg 三项同一手法：
+  // 一律带 `!`（T-174 复查时 cssSpecificity 守卫把无 `!` 的 rounded-none 判成冲突）。
   assert.ok(
-    cls.includes('rounded-none'),
-    '输入框必须 rounded-none —— UiTextarea 自带的 rounded-lg 会在 composer 卡片里再裹一层圆角，' +
+    cls.includes('!rounded-none'),
+    '输入框必须 !rounded-none —— UiTextarea 自带的 rounded-lg 会在 composer 卡片里再裹一层圆角，' +
       '与设计稿「一条边框包住整个输入区」冲突'
   );
 });

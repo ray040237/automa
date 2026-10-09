@@ -296,12 +296,14 @@
               比卡片略深的矩形（黑 5% / 白 5%），把「一条边框包住整个输入区」的设计
               拆成「边框里又有个框」。项目里已有 `!px-3` / `!py-2` 的用法
               （SettingsEvents.vue / EditorDebugging.vue），沿用同一手法。
+              `!rounded-none` 一并带 `!`：UiTextarea 根节点自带 `rounded-lg`，
+              统一用 `!` 压它，不依赖 border-radius 工具类的产出顺序。
             -->
             <ui-textarea
               ref="draftEl"
               v-model="draft"
               autoresize
-              class="w-full min-h-[60px] max-h-[128px] overflow-y-auto scroll scroll-xs rounded-none border-0 !bg-transparent !px-1 !py-1"
+              class="w-full min-h-[60px] max-h-[128px] overflow-y-auto scroll scroll-xs !rounded-none border-0 !bg-transparent !px-1 !py-1"
               :placeholder="t('workflow.agent.placeholder')"
               @keydown="onDraftKeydown"
             />

@@ -1,8 +1,10 @@
 <template>
-  <div class="rounded border border-gray-200 dark:border-gray-700">
+  <div
+    class="max-w-full min-w-0 rounded border border-gray-200 dark:border-gray-700"
+  >
     <button
       type="button"
-      class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+      class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm"
       :aria-expanded="expanded"
       @click="expanded = !expanded"
     >
@@ -22,20 +24,25 @@
 
     <div
       v-if="expanded"
-      class="max-h-80 overflow-auto border-t border-gray-200 px-3 py-2 text-xs dark:border-gray-700"
+      class="max-h-56 overflow-y-auto overflow-x-hidden border-t border-gray-200 px-3 py-2 text-xs dark:border-gray-700"
     >
-      <!-- T-157：观察值/参数里会出现长 URL、base64、data URI、单行压缩 JSON 这类
+      <!-- T-157 修了一件，T-174 补上另一件 —— 两者缺一不可。
+           T-157：观察值/参数里会出现长 URL、base64、data URI、单行压缩 JSON 这类
            **无空格长串**。`whitespace-pre-wrap` 只在空格处断行，断不了就横向撑开。
-           `break-words` 让它在中间断开；`overflow-x-auto` 兜住仍装不下的残留，
-           把滚动留在叶子内部 —— 外层 div 的 overflow-auto 因此不再产生横向滚动条。 -->
+           T-174：`break-words`（overflow-wrap: break-word）**不参与 min-content
+           计算** —— 工具卡在 flex 列里带 self-start，非 stretch 子项按 fit-content
+           定宽、其下界正是 min-content，于是长串把**卡片本身**撑到比面板还宽，
+           叶子上的 overflow-x-auto 救不了（被撑宽的是容器，不是叶子）。
+           改用 `[overflow-wrap:anywhere]` 参与 min-content，长串就地折断；
+           外层只留纵向滚动 —— 横向溢出必须靠断行解决，不靠滚动条藏起来。 -->
       <pre
         v-if="prettyArgs"
-        class="mb-2 overflow-x-auto whitespace-pre-wrap break-words"
+        class="mb-2 whitespace-pre-wrap [overflow-wrap:anywhere]"
         >{{ prettyArgs }}</pre
       >
       <pre
         v-if="displayObservation"
-        class="overflow-x-auto whitespace-pre-wrap break-words"
+        class="whitespace-pre-wrap [overflow-wrap:anywhere]"
         >{{ displayObservation }}</pre
       >
     </div>

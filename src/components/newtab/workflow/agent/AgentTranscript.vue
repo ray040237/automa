@@ -13,9 +13,12 @@
       @scroll.passive="onScroll"
     >
       <template v-for="(item, i) in items" :key="item.key">
+        <!-- T-174：用户可能贴进一条长 URL / 路径，气泡同样是 self-end（shrink-to-fit），
+             没有断行规则时会长串撑破窄面板。`[overflow-wrap:anywhere]` 参与 min-content
+             计算，与工具卡用同一条约束。 -->
         <div
           v-if="item.type === 'user'"
-          class="self-end whitespace-pre-wrap rounded-lg bg-blue-500/15 px-3 py-2 text-sm"
+          class="max-w-full self-end whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg bg-blue-500/15 px-3 py-2 text-sm"
         >
           {{ item.text }}
         </div>
@@ -112,7 +115,7 @@
                 </span>
               </div>
               <p
-                class="mt-1 whitespace-pre-wrap break-words text-xs text-red-700/90 dark:text-red-400/90"
+                class="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-xs text-red-700/90 dark:text-red-400/90"
               >
                 {{ item.text }}
               </p>
