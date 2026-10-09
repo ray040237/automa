@@ -325,6 +325,23 @@ test('T-169：宿主形态 —— 宽宿主左栏常驻历史，窄宿主走视�
   );
 });
 
+test('T-171b：窄宿主渲染出 min-h-0 右栏 + shrink-0 composer（只有中部滚动，输入框常驻底部）', async () => {
+  // 这两个 class 都在 AgentPanel 自己的模板里（不是被 stub 的子组件），
+  // 所以 SSR 渲染结果里能断言到。它们决定了窄宿主（320px 侧栏）里面板会不会
+  // 溢出固定高度的侧栏 → 整页滚动，以及输入框会不会被压没。
+  const narrow = await renderSfc(PANEL, {
+    props: { host: panelHost({ sessions: [] }) },
+  });
+  assert.ok(
+    narrow.includes('min-h-0'),
+    '渲染结果里右栏缺失 min-h-0 —— 整页滚动的根因没修'
+  );
+  assert.ok(
+    narrow.includes('shrink-0'),
+    '渲染结果里 composer 表单缺失 shrink-0 —— 窄宿主下输入框可能被压没'
+  );
+});
+
 test('T-153：模型名仍在会话列表里渲染（搬走水位时别把它一起丢了）', async () => {
   const html = await renderSfc(LIST, {
     props: {

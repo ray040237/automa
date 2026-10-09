@@ -37,7 +37,7 @@
       />
     </div>
 
-    <div class="flex min-w-0 flex-1 flex-col">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <!--
       header 只有两个控件：会话 chip（点开 = 切换 / 用量 / 删除当前）与新建。
       页面上下文不在这里 —— 它在下面的输入区顶上，见 §chip。
@@ -267,14 +267,14 @@
           }}
         </p>
 
-        <form class="p-2 pt-0" @submit.prevent="send">
+        <form class="shrink-0 p-2 pt-0" @submit.prevent="send">
           <!--
         T-166：composer 卡片。chip、输入框、底行共用一个边框 —— 目标页从「面板
         底部常驻的一行控件」变成「输入区里的一个附件」。省掉 chip 那一行约 30px，
         textarea 也从 256px 拿回全宽 288px（原结构里发送按钮与它并排抢宽）。
       -->
           <div
-            class="rounded-lg border border-gray-200 px-2 py-1.5 dark:border-gray-700"
+            class="rounded-lg border border-gray-200 bg-white px-2 py-1.5 dark:border-gray-700 dark:bg-gray-800"
           >
             <agent-tab-picker
               class="mb-1"
@@ -301,7 +301,7 @@
               ref="draftEl"
               v-model="draft"
               autoresize
-              class="w-full min-h-[60px] max-h-[128px] overflow-y-auto scroll scroll-xs border-0 !bg-transparent !px-1 !py-1"
+              class="w-full min-h-[60px] max-h-[128px] overflow-y-auto scroll scroll-xs rounded-none border-0 !bg-transparent !px-1 !py-1"
               :placeholder="t('workflow.agent.placeholder')"
               @keydown="onDraftKeydown"
             />

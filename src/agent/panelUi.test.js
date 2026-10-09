@@ -1396,7 +1396,7 @@ test('T-169：宽窄形态由宿主声明（host.layout），不许用视口断�
   // ③ 左栏里挂的得是历史列表本身（渲染桩是通用桩，认不出组件名，只能守源码）
   const sideAt = panel.indexOf('data-test="session-side"');
   assert.ok(sideAt > 0, '没找到左栏，守卫本身失效');
-  const rightAt = panel.indexOf('class="flex min-w-0 flex-1 flex-col"');
+  const rightAt = panel.indexOf('class="flex min-h-0 min-w-0 flex-1 flex-col"');
   assert.ok(rightAt > sideAt, '没找到右栏起点，守卫本身失效');
   assert.match(
     panel.slice(sideAt, rightAt),
@@ -1675,6 +1675,40 @@ test('T-171：覆盖 UiTextarea 的工具类必须加 !，否则被组件自身�
     [],
     '这些 padding/bg 类不带 !，在 UiTextarea 上随时会被组件自身的同名类吃掉：' +
       risky.join(' ')
+  );
+
+  // 输入框必须 flush：UiTextarea 根节点自带 rounded-lg，不中和掉就会在 composer
+  // 卡片里又套一层圆角框 —— 与设计稿「一条边框包住整个输入区」冲突，且正是 T-171
+  // 同型的「边框里又有框」（只是这回是圆角不是底色）。rounded-none 是工具类，
+  // 落在 @layer utilities，必定覆盖 @layer components 里的 rounded-lg。
+  assert.ok(
+    cls.includes('rounded-none'),
+    '输入框必须 rounded-none —— UiTextarea 自带的 rounded-lg 会在 composer 卡片里再裹一层圆角，' +
+      '与设计稿「一条边框包住整个输入区」冲突'
+  );
+});
+
+test('T-171b：面板高度必须被约束在侧栏内，否则窄宿主逼出整页滚动条', () => {
+  // 窄宿主（编辑器 320px 侧栏）根容器是固定高度（calc(100vh-40px)），侧栏 stretch
+  // 到这个高度。面板要老老实实待在里面、只有中部的 transcript 滚动，靠的是：
+  //   ① 右栏（对话主体）min-h-0 —— flex 列里子项默认 min-height:auto，不带它，
+  //      transcript 永远拿不到固定高度，整张面板随内容长高、溢出固定高度的侧栏；
+  //   ② composer 表单 shrink-0 —— 面板矮时压缩的是 transcript，输入框顶在底部
+  //      永远点得到，而不是被一起挤没。
+  // 两条丢了任意一条，表现都是「输入框乱跑 / 整页滚动」，而这两种毛病都在真浏览器
+  // 才看得出来，单测与 lint 完全无感 —— 所以钉在源码上。
+  const src = stripComments(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
+  );
+
+  assert.match(
+    src,
+    /class="flex min-h-0 min-w-0 flex-1 flex-col"/,
+    '右栏必须 min-h-0：否则中部展示区无法被高度约束，面板溢出侧栏、整页出现滚动条'
+  );
+  assert.ok(
+    src.includes('class="shrink-0 p-2 pt-0"'),
+    'composer 表单必须 shrink-0 —— 窄宿主下输入框要常驻底部、不能被压没'
   );
 });
 
