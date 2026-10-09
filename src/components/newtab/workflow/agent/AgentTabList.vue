@@ -60,7 +60,7 @@
 <script setup>
 import { computed, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { tabPickPayload } from '@/agent/at';
+import { tabPickPayload } from '@/agent/tab';
 
 /**
  * 标签页列表（无容器）：
@@ -110,8 +110,8 @@ function windowLabel(id) {
 }
 
 function pick(tab) {
-  // T-166：载荷形状交给 at.js（@ 菜单选中走的是同一个函数）——
-  // 两处各写一份的话，漏掉 favIconUrl 的那份会让 chip 永远显示地球图标。
+  // 载荷形状统一走 tabPickPayload（在 @/agent/tab，有单测）——
+  // 各处自己拼一份的话，漏掉 favIconUrl 的那份会让 chip 永远显示地球图标。
   emit('pick', tabPickPayload(tab));
 }
 </script>

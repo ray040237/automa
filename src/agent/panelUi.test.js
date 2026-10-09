@@ -1309,41 +1309,53 @@ test('T-164：目标页的解除键只在「用户固定且未失效」时出现
   }
 });
 
-test('T-166：@ 菜单挂在 composer 上方，与 / 互斥，且不把 @token 发给模型', () => {
-  const src = read('src/components/newtab/workflow/agent/AgentPanel.vue');
-
-  // 菜单在文档流内、输入框上方（与 / 菜单同一立场，T-06：不盖正文）
-  assert.match(src, /v-if="atMenuOpen"/, '要有 @ 菜单的开合条件');
-  assert.match(
-    src,
-    /data-test="at-menu"/,
-    '菜单要有 data-test —— 后续补交互测试时靠它定位'
-  );
-  assert.match(src, /data-test="at-trigger"/, '底行的 @ 入口要有 data-test');
-
-  // 互斥：/ 是整框态，优先于词内的 @
-  assert.match(
-    src,
-    /!slashMenuOpen\.value/,
-    'atMenuOpen 必须排除 slashMenuOpen —— 两个菜单同时开，Enter 归谁就说不清了'
+test('T-177：换目标页只剩一个入口（composer 顶部的 chip），@ 整套不许回来', () => {
+  const src = stripComments(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
   );
 
-  // 输入法：组合期间的按键不是最终文本，中文输入法下 @ 还在候选状态就判定会闪
+  // ① 换页入口有且仅有一处：composer 卡片里的 agent-tab-picker。
+  //    @ 菜单（含底行那个 @ 按钮）做的是同一件事 —— 自带第二份列表、
+  //    而「当前是哪一页」只有 chip 显示得出来。两处入口 = 半个界面在说谎。
+  assert.equal(
+    (src.match(/<agent-tab-picker/g) || []).length,
+    1,
+    '换页入口只能有一处 —— 两下并列的入口配两套列表，就是冗余'
+  );
+
+  for (const dead of [
+    'atMenuOpen',
+    'at-menu',
+    'at-trigger',
+    'parseAtDraft',
+    'stripAtToken',
+    'startAtMenu',
+    'pickAtTab',
+    '@/agent/at',
+  ]) {
+    assert.equal(
+      src.includes(dead),
+      false,
+      `@ 换页那套（${dead}）已随 T-177 删除：换页只留 chip 下拉，别再引回来`
+    );
+  }
+
+  // ② / 菜单的接线不受影响 —— 剥 @ 时别把它一起带走
+  assert.match(src, /v-if="slashMenuOpen"/, '/ 模板菜单应当保留');
+  assert.match(
+    src,
+    /pickCommand\(matchedCommands\.value\[highlightIndex\.value\]\)/,
+    '/ 菜单选中要接上'
+  );
+
+  // ③ 输入法：组合期间的按键不是最终文本，中文输入法下 / 还在候选状态就判定会闪
   assert.match(
     src,
     /e\.isComposing/,
     '键盘路由必须先看 isComposing —— 中文输入法下菜单会闪一下再消失'
   );
 
-  // 选中后摘掉把手：留着会把「@淘宝」一起送进模型
-  assert.match(
-    src,
-    /stripAtToken\(draft\.value, atToken\.value\)/,
-    '选中目标页后要把 @token 从草稿里摘掉 —— 它是输入时的把手，不是要说的话'
-  );
-  assert.match(src, /host\.pickTab\(tab\)/, '选中的副作用是改目标页');
-
-  // 文案键
+  // ④ 文案键：attach 是底行那个 @ 按钮的 title，按钮没了它也不该留
   for (const lang of ['zh', 'en']) {
     const { agent } = JSON.parse(
       read(`src/locales/${lang}/newtab.json`)
@@ -1351,8 +1363,8 @@ test('T-166：@ 菜单挂在 composer 上方，与 / 互斥，且不把 @token �
 
     assert.equal(
       typeof agent.pickTab.attach,
-      'string',
-      `${lang} 缺 workflow.agent.pickTab.attach`
+      'undefined',
+      `${lang} 还留着 workflow.agent.pickTab.attach —— 它的按钮已经删了`
     );
   }
 });

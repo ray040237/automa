@@ -7,6 +7,7 @@ import {
   normalize,
   originOf,
   targetHealth,
+  tabPickPayload,
 } from './tab';
 
 /** 构造一个可控的 browser.tabs 替身 */
@@ -255,4 +256,54 @@ describe('T-08：normalize 与 targetHealth', () => {
     const odd = { id: 7, url: 'not a url' };
     assert.equal(targetHealth({ id: 7, url: 'https://c.example/' }, odd), 'ok');
   });
+});
+
+// T-177：从 at.test.js 搬来 —— `@` 换页入口已删，但这个载荷函数还在（目标页
+// 下拉的选项靠它统一形状），所以测试跟着它搬到 tab.test.js。
+test('tabPickPayload：面板下拉的载荷形状（区别于 normalize 的内部快照）', () => {
+  // 名字避开上层那个 tab() 工厂 —— no-shadow 会拦
+  const item = {
+    id: 3,
+    url: 'https://a.com/x',
+    title: 'A',
+    windowId: 2,
+    favIconUrl: 'https://a.com/f.ico',
+  };
+
+  assert.deepEqual(tabPickPayload(item), {
+    id: 3,
+    url: 'https://a.com/x',
+    title: 'A',
+    windowId: 2,
+    favIconUrl: 'https://a.com/f.ico',
+  });
+
+  // 展平后的 tab 可能不带 windowId（分组上有），要能补回来
+  assert.equal(
+    tabPickPayload({ id: 4, url: 'https://b.com', windowId: undefined }, 9)
+      .windowId,
+    9,
+    'tab 自己没带 windowId 时用分组的那个'
+  );
+
+  // 图标缺失要是 undefined 而不是空串：chip 靠 v-if 判断画图标还是画地球
+  const noIcon = tabPickPayload({ id: 5, url: 'https://c.com' });
+  assert.equal(noIcon.favIconUrl, undefined, '空串会被当成「有图标」去加载');
+  assert.equal(noIcon.title, 'https://c.com', '没标题时用 URL 顶上');
+
+  assert.doesNotThrow(() => tabPickPayload(null), 'null 不该让列表崩掉');
+
+  // 与 normalize 的区别：normalize 缺图标时**不写这个键**，这里**写 undefined**。
+  // 两者在下游 `v-if` 下等价，但形状不同 —— 钉住它，免得有人「顺手统一」时
+  // 静默改掉一个被断言过的形状。
+  assert.equal(
+    'favIconUrl' in normalize({ id: 5, url: 'https://c.com' }),
+    false,
+    'normalize 不带 favIconUrl 键'
+  );
+  assert.equal(
+    'favIconUrl' in tabPickPayload({ id: 5, url: 'https://c.com' }),
+    true,
+    'tabPickPayload 显式带 undefined 键'
+  );
 });

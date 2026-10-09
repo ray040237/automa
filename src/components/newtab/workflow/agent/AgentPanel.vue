@@ -186,50 +186,16 @@
         />
 
         <!--
-      T-166：@ 菜单（选目标页）。与 / 菜单同一立场 —— 文档流内、输入框上方，
-      不盖正文（T-06），面板高度不够时压缩的是 transcript。键盘导航整套复用
-      onDraftKeydown 已有的 ↑↓ / Enter / Esc。
+      T-177：这里原先还有一个 `@` 菜单（词内态，`帮我对一下 @淘宝`）。它是
+      「换目标页」的**第二个入口** —— 与 composer 顶部那个 chip 下拉做同一件事，
+      而且自己又渲染了一份标签页列表（与 AgentTabList 重复）。已整块删除：
+      换页只留 chip 下拉一处。
 
-      目标页的**常驻 chip 不在这一行了**：它搬进了下面的 composer 卡片顶上
-      （见 §form），从「面板底部又一行控件」变成「输入区里的一个附件」——
-      Dia 的 composer 内 @ 与 Gemini 的 composer 左下角 + 都是这个结构。
+      删除理由（不改回）：@ 选中后会把 `@淘宝` 从草稿里**摘掉**，正文不留任何
+      痕迹 —— 形似「在句子里引用某页」，实为「悄悄改一个设置项」，且它展开的
+      列表连「当前项是哪个」都不标。两处入口 + 两套列表 + 一处可见状态显示，
+      收益只有「打字过滤」一条，不值。
     -->
-        <div
-          v-if="atMenuOpen"
-          class="mx-2 mb-1 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
-          data-test="at-menu"
-        >
-          <ul class="scroll max-h-48 overflow-y-auto py-1">
-            <li v-for="(tab, i) in matchedTabs" :key="tab.id">
-              <button
-                type="button"
-                class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm"
-                :class="i === atHighlight ? 'bg-box-transparent' : ''"
-                @click="pickAtTab(tab)"
-                @mousemove="atIndex = i"
-              >
-                <img
-                  v-if="tab.favIconUrl"
-                  :src="tab.favIconUrl"
-                  class="h-4 w-4 shrink-0 rounded-sm"
-                  :alt="t('workflow.agent.pickTab.faviconAlt')"
-                />
-                <v-remixicon
-                  v-else
-                  name="riEarthLine"
-                  size="16"
-                  class="shrink-0 text-gray-400"
-                />
-                <span class="min-w-0 flex-1 truncate">{{
-                  tab.title || tab.url
-                }}</span>
-                <span class="shrink-0 text-[10px] text-gray-400">
-                  {{ t('workflow.agent.pickTab.window', { n: tab.windowId }) }}
-                </span>
-              </button>
-            </li>
-          </ul>
-        </div>
 
         <!-- / 模板菜单（T-81a）：draft 以 / 开头时出现。放文档流里不盖正文，
          与确认卡同一立场（T-06）。回车/点击选中后整框替换为模板正文。 -->
@@ -303,7 +269,6 @@
               统一用 `!` 压它，不依赖 border-radius 工具类的产出顺序。
             -->
             <ui-textarea
-              ref="draftEl"
               v-model="draft"
               autoresize
               class="w-full min-h-[60px] max-h-[128px] overflow-y-auto scroll scroll-xs !rounded-none border-0 !bg-transparent !px-1 !py-1"
@@ -312,23 +277,14 @@
             />
 
             <!--
-          底行（T-166）：@ 入口 + 水位 + 快捷键提示 + 发送。
+          底行（T-166）：水位 + 快捷键提示 + 发送。
 
-          水位只在 >=80% 时出现（T-163），平时这一行只有 @ 与发送 —— 车道很空
+          水位只在 >=80% 时出现（T-163），平时这一行只有发送 —— 车道很空
           正是对的状态：没有坏事要汇报的时候，不该有东西占着视线。
+          T-177：这里原有的 `@` 入口已删 —— 换页统一走 composer 顶部的 chip，
+          不再有第二个入口。
         -->
             <div class="flex items-center gap-2">
-              <button
-                type="button"
-                class="shrink-0 rounded border border-gray-200 px-1.5 text-[11px] text-gray-500 hover:bg-box-transparent dark:border-gray-700 dark:text-gray-400"
-                :title="t('workflow.agent.pickTab.attach')"
-                :aria-label="t('workflow.agent.pickTab.attach')"
-                data-test="at-trigger"
-                @click="startAtMenu"
-              >
-                @
-              </button>
-
               <agent-dropdown
                 v-if="contextVisible"
                 v-model="contextOpen"
@@ -472,12 +428,6 @@ import {
   loadCommands,
   parseSlashDraft,
 } from '@/agent/customizations';
-import {
-  filterTabs,
-  parseAtDraft,
-  stripAtToken,
-  tabPickPayload,
-} from '@/agent/at';
 import AgentTranscript from './AgentTranscript.vue';
 import AgentTabPicker from './AgentTabPicker.vue';
 import AgentSessionList from './AgentSessionList.vue';
@@ -733,124 +683,27 @@ function pickCommand(c) {
   slashDismissed.value = true; // 正文本身以 / 开头时不能让菜单又弹回来
 }
 
-// —— @ 目标页菜单（T-166）——
-// 解析、过滤、载荷形状全在 @/agent/at（纯函数，有单测）；这里只做接线。
-
-const draftEl = ref(null);
-const atGroups = ref([]);
-const atIndex = ref(0);
-// 与 slashDismissed 同一件事：Esc 关掉之后，到 draft 离开触发态之前不再自动弹
-const atDismissed = ref(false);
+// T-177：此处原有的「@ 目标页菜单」整段（触发状态、打开条件、底行补把手、
+// 选中回填草稿）已删除。它做的是「换目标页」，与 composer 顶部的 chip 下拉
+// 重复，且自带一份列表与一处状态显示重复 —— 换页现只有 chip 一条路。
+//
+// 载荷函数 tabPickPayload 仍留在目标页模块 src/agent/tab.js（AgentTabList
+// 用它统一形状）：它与入口无关，所以入口没了它还在。
 
 /**
- * 光标处的 @ token。**不传 caret**（按草稿末尾算）：边打边筛的场景里光标本来
- * 就在末尾，而跟踪 selectionStart 要在 textarea 上挂额外的事件监听；
- * parseAtDraft 的 caret 参数留着，等真要做「光标停在句中」那天直接用。
- */
-const atToken = computed(() => parseAtDraft(draft.value));
-const atActive = computed(() => atToken.value !== null);
-
-// 展平成一维才能用 ↑↓ 高亮；windowId 由分组补上（列表项自己有时不带）
-const matchedTabs = computed(() =>
-  filterTabs(atGroups.value, atToken.value ? atToken.value.query : '').flatMap(
-    (g) => (g.tabs || []).map((tab) => tabPickPayload(tab, g.windowId))
-  )
-);
-const atHighlight = computed(() =>
-  Math.min(atIndex.value, matchedTabs.value.length - 1)
-);
-
-/**
- * 开合条件。
- *
- * `/` 优先：它是「整框以 / 开头」的**整框态**，语义强于词内的 @。两者在形状上
- * 本就不重叠（`/@` 里 @ 的前面是 `/` 不是空白，parseAtDraft 不认它），这里再
- * 显式挡一次，免得以后改任一侧的判定时撞车。
- */
-const atMenuOpen = computed(
-  () =>
-    atActive.value &&
-    !atDismissed.value &&
-    !slashMenuOpen.value &&
-    matchedTabs.value.length > 0
-);
-
-/** 进入触发态才拉一次 —— 与标签页下拉同一立场：打开时才读，列表随时会变。 */
-watch(atActive, (on) => {
-  if (!on) return;
-
-  atDismissed.value = false;
-  atIndex.value = 0;
-
-  Promise.resolve()
-    .then(() => props.host.listTabs())
-    .then((list) => {
-      atGroups.value = Array.isArray(list) ? list : [];
-    })
-    .catch(() => {
-      // 读不出来就当没有可选项：菜单本来就有「为空不弹」这条
-      atGroups.value = [];
-    });
-});
-
-/** 底行那个 @ 按钮：把把手补进草稿，焦点交回输入框 —— 接下来就是打字筛选。 */
-function startAtMenu() {
-  const needSpace = draft.value.length > 0 && !/\s$/.test(draft.value);
-  draft.value += needSpace ? ' @' : '@';
-  atDismissed.value = false;
-
-  const el = draftEl.value && draftEl.value.textarea;
-  if (el && el.focus) el.focus();
-}
-
-/**
- * 选中目标页。
- *
- * 与 `/` 不同：@ 的副作用是**改目标页**，正文里那个 `@淘宝` 只是输入时的把手，
- * 摘掉再发 —— 留着会把一串「@淘宝」一起送进模型。
- */
-function pickAtTab(tab) {
-  if (!tab) return;
-
-  props.host.pickTab(tab);
-  draft.value = stripAtToken(draft.value, atToken.value);
-  atDismissed.value = true;
-}
-
-/**
- * 输入框键盘路由。菜单开着时 ↑↓ 移高亮、回车选中、Esc 关闭；
+ * 输入框键盘路由。`/` 菜单开着时 ↑↓ 移高亮、回车选中、Esc 关闭；
  * 没开时回车 = 发送（与原 @keydown.enter.exact.prevent 等价：
  * 带修饰键的回车留给换行/浏览器默认行为）。
  */
 function onDraftKeydown(e) {
-  // 输入法组合期间的按键不是最终文本：中文输入法下 `@` 可能还停在候选状态，
+  // 输入法组合期间的按键不是最终文本：中文输入法下 `/` 可能还停在候选状态，
   // 这时就判定会让菜单闪一下再消失 —— compositionend 才是文本落定的时刻。
   if (e.isComposing) return;
 
   const plainEnter =
     e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
 
-  // / 优先（T-166 的互斥规则）：整框态强于词内的 @
   if (!slashMenuOpen.value) {
-    if (atMenuOpen.value) {
-      const n = matchedTabs.value.length;
-
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        const dir = e.key === 'ArrowDown' ? 1 : -1;
-
-        atIndex.value = (atHighlight.value + dir + n) % n;
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        atDismissed.value = true;
-      } else if (plainEnter) {
-        e.preventDefault();
-        pickAtTab(matchedTabs.value[atHighlight.value]);
-      }
-
-      return;
-    }
-
     if (plainEnter) {
       e.preventDefault();
       send();

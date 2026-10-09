@@ -1,7 +1,8 @@
 /**
  * 文案必须真的能被 vue-i18n 编译（T-170 回归）。
  *
- * 教训：给 pickTab.attach 写了 "@ 选择目标页"，vue-i18n 把开头的 `@` 当成
+ * 教训：曾给 `pickTab.attach`（那个键随 T-177 删掉了）写了 "@ 选择目标页"，
+ * vue-i18n 把开头的 `@` 当成
  * **链接消息**（`@:key` / `@.modifier:key`）的前缀 —— 编译报 "Invalid linked
  * format"；而 @intlify/vue-i18n-loader 处理编译错误时去读 `error.message`，
  * 读到 undefined，于是抛「Cannot read properties of undefined (reading

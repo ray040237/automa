@@ -285,7 +285,9 @@ test('T-169：宿主形态 —— 宽宿主左栏常驻历史，窄宿主走视�
     '左栏要有「历史」这一栏的标题（列表组件本身在 sfc-render 里是通用桩，认不出来）'
   );
   assert.ok(
-    wide.includes('data-test="at-trigger"'),
+    // 定位符原先是底行那个 @ 按钮的 data-test（T-177 已随 @ 整套删除）；
+    // 换成 composer 里必然存在的输入框 placeholder 键。
+    wide.includes('workflow.agent.placeholder'),
     '宽宿主 composer 必须一直在 —— 历史占的是左栏，不是正文区'
   );
   assert.equal(

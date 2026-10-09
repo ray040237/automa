@@ -190,3 +190,33 @@ export function targetHealth(liveTab, snapshot) {
 
   return 'ok';
 }
+
+/**
+ * 标签页 -> 面板「选目标页」列表的选项载荷。**纯函数**。
+ *
+ * 为什么不直接用上面的 normalize()：两者长得像，口径不同 ——
+ *   - normalize 产出的是 **runtime 内部快照**（写进 host，参与 pin / 漂移判定）；
+ *   - 这里产出的是 **UI 载荷**（点选后原样交给 host.pickTab）。差异有两处，
+ *     都是踩过坑才定下来的：windowId 要有兜底（列表项可能只从分组头上拿到
+ *     窗口号），favIconUrl 缺失时**显式写 undefined 而不是空串** —— chip 里
+ *     `v-if="faviconUrl"` 靠它决定画站点图标还是画地球，空串会走进「有图标」
+ *     那条路然后加载失败（T-08）。
+ *
+ * T-177：从 at.js 搬来（`@` 换页入口已删，那个文件随之删除）。搬过来是因为它
+ * 一直属于「目标页」这个主题，而不是属于某个入口 —— 入口没了，它还得在。
+ *
+ * @param {Object=} tab 列表项
+ * @param {number=} windowId 所属窗口；tab 自己带了就以它为准
+ * @returns {{id: number, url: string, title: string, windowId: number, favIconUrl: string|undefined}}
+ */
+export function tabPickPayload(tab, windowId) {
+  const t = tab || {};
+
+  return {
+    id: t.id,
+    url: t.url,
+    title: t.title || t.url,
+    windowId: t.windowId === undefined ? windowId : t.windowId,
+    favIconUrl: t.favIconUrl || undefined,
+  };
+}
