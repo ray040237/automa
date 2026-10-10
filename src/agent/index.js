@@ -58,7 +58,7 @@ import {
   originOf,
   normalize,
 } from './tab';
-import { isHttpUrl, loadConfig, saveConfig } from './config';
+import { isHttpUrl, loadConfig, loadConfigDoc, saveConfig } from './config';
 import {
   createSessionId,
   createSessionStore,
@@ -915,7 +915,7 @@ export const configIO = {
   decrypt: (v) => credentialUtil.decrypt(v),
 };
 
-export { loadConfig, saveConfig };
+export { loadConfig, loadConfigDoc, saveConfig };
 
 /** 会话存储的 IO 适配与默认实例（键布局见 sessions.js 顶部注释）。 */
 export const sessionIO = {

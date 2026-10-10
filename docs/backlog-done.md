@@ -3620,3 +3620,347 @@ if (process.env.OFFLINE_MODE === '1' && manifestObj.content_security_policy) {
 建议：`onUnpinTab` 拿到新页后同步给 runtime，用 `setTargetTab`（不重新 addPin）而非 `pickTab`（会又 pin 回去）。
 结论：`onUnpinTab` 与 `newAgentSession` 共用 `resetTargetToAuto()`，其中 `agent.runtime.setTargetTab(next)` 把新目标页回写闭包。守卫：`panelUi.test.js` 新增两条源码守卫 —— ① 目标页三件套只允许 `syncTarget` 写（扫全文件，除 syncTarget 体外不得出现 `agent.targetXxx =`）；② `resetTargetToAuto` 必须含 `runtime.setTargetTab(next)`、`openAgentSession` 必须从 runtime 读回 `targetPinned/targetState`。
 状态：已清（2026-10-10 完成）
+
+### T-199 — 把独立助手页从主面板标签页迁移到浏览器原生侧边栏（chrome.sidePanel）
+
+类型：新功能
+登记日期：2026-10-10
+来源：2026-10-10 会话讨论两个助手宿主形态；用户原话「把宽形态的这个助手对话取消掉，把它挪到应用的侧边栏上。本身这个对话无法操作工作流，所以在功能上无需和工作流的这个界面并存，只需要住进浏览器和页面交互的需求」。
+现象（当时的现状）：独立助手页是主面板的一个标签页（路由 `/workflows/agent`，`layout: 'wide'`），全局会话、无 canvas 组。它的工具集（page / context / tab 三组）全部面向「当前浏览器的页面」，与 Automa 主面板本身无关。用户必须先把主面板切到这一页，才能问「这个页面结构是什么 / selector 怎么写」，切回来又得再切一次 —— 而这个场景的主场恰恰是「正在看某个网页」。
+证据（**代码事实已实测**）：
+- 数据层天然跨页：会话存储走 `browser.storage.local`（`src/agent/index.js:920-927` 的 `sessionIO`），配置同源（`:909-916` 的 `configIO`）。任何扩展页面（含 sidepanel 页）都能直接读，不需要主面板先打开。这是本方案最大的有利条件 —— 用户最初担心的「侧栏要读主面板数据是不是得先开主面板」不成立。
+- runtime 与宿主无关：`agentHost.js` 顶部注释已写死「两个宿主面对的是同一个 runtime 契约和同一块面板」；`src/agent/` 下全部逻辑零改动即可服务第三个宿主。
+- 侧栏宿主现行可用内容宽度 320px，与 chrome.sidePanel 实际可用宽度量级一致 —— 故「窄形态 UI 与侧边栏 UI 可以大致相同」成立。
+- chrome.sidePanel 宽度不可由扩展控制（官方 issue GoogleChrome/chrome-extensions-samples#1011 答复「currently not supported」）。侧栏只能按「约 320–400px」设计。
+结论：**已实施（Chrome 侧）。** 分两步落地（先 demo 探针后实施，用户 2026-10-10 批准）：
+- 新建独立 sidepanel 入口：`src/sidepanel/{index.html,index.js,router.js,App.vue}`，宿主接线复用 `useAgentHost({ layout:'narrow', enabledGroups:['page','context','tab'], getWorkflowId:()=>null, getVariables:async()=>({bound:false}), getWorkflowContext:()=>null, onOpenSettings })`。
+- `webpack.config.js` 加 `sidepanel` entry 与 `HtmlWebpackPlugin` 出 `sidepanel.html`；`manifest.chrome.json` / `manifest.chrome.dev.json` 加 `"side_panel":{"default_path":"sidepanel.html"}` 与 `"sidePanel"` 权限。
+- **不用 `setPanelBehavior({openPanelOnActionClick})`**（会顶掉 popup），改为 popup Home 顶栏加「打开助手」按钮 → `sidePanel.open({windowId})`，失败兜底回 `/workflows/agent`。
+- 拆旧独立页：Chrome 下 `src/newtab/router.js` 不再注册 agent 路由（`IS_FIREFOX` 条件注册），`Workflows.vue` 的 `+` 助手入口加 `v-if="isFirefox"`，并清理 `localStorage['tabs']` 残留的 `/workflows/agent` / `/agent`。
+- UI 优化（有证据的两处，未动已钉死的像素决策）：`AgentTranscript.vue` 空态加 `flex-1 justify-center` 垂直居中；`AgentTabList.vue` / `AgentSessionList.vue` 补 dark 模式文字色缺口。
+- **i18n 修复**：`src/sidepanel/App.vue` 必须自己 `loadSettings()` → `loadLocaleMessages(locale, 'newtab')` → `setI18nLanguage(locale)`，否则 `workflow.agent.*` 等键名直显（漏掉即复现用户报告的「出现很多这种文字：workflow.agent.empty」）。语言包传 `'newtab'`，因为面板文案在 `locales/<locale>/newtab.json`。
+- 决策与备选见 `docs/adr/0005-agent-sidepanel-migration.md`。
+验收：`npm test` 775 tests / 774 pass / 1 skipped / 0 fail；lint 0 error；Chrome 构建产物 `sidepanel.html` + `sidepanel.bundle.js` 生成，语言包 chunk 已在 bundle 的动态 import 上下文映射内。
+状态：已清（2026-10-10 完成，Chrome；Firefox 形态欠账另立 B 编号条目）
+
+### T-199-fx — Firefox 上的助手形态仍为主面板标签页（与 Chrome 不一致）
+
+类型：欠账
+登记日期：2026-10-10
+来源：T-199 的实施决策（用户 2026-10-10 拍板「我不怎么使用 Firefox，你用最省事的方法处理就行」）。
+内容：`chrome.sidePanel` 是 Chrome 114+ 专有 API，Firefox 用的是另一套（MV2 `sidebar_action` / MV3 `sidebarAction`）。本次只在 Chrome 侧把助手迁到浏览器原生侧边栏；Firefox 上**保留原主面板标签页形态**（`src/newtab/router.js` 的 `agent` 路由仅在 `IS_FIREFOX` 时注册，`Workflows.vue` 的 `+` 助手入口 `v-if="isFirefox"`）。
+为什么缓：用户明确不使用 Firefox，双平台各写一套侧栏 API 的收益低于成本。
+重开的触发条件：① 用户开始实际使用 Firefox 版；② 有 Firefox 用户反馈「助手入口不一致」；③ Firefox 稳定支持 `sidebarAction` 且希望统一形态。
+状态：知悉欠账（不排期）
+
+### T-200 — 借鉴参考实现 sidepanel 的五项 UI 设计（圆角语义名 / 统一缓动 / 确认卡影响面分档 / 两段式停止 / 富文本复制）
+
+类型：改进
+登记日期：2026-10-10
+来源：2026-10-10 会话做「Automa AgentPanel vs pie-ai-agent SidePanel」UI 对比（产出 `docs/agent-sidepanel-ui-compare.html`），我在报告里列了十条借鉴项；用户原话「按你推荐的帮我改」= 批准推荐的前五条。
+现象（改之前的现状）：① 圆角按手感在 `rounded-lg`(8) / `rounded`(4) / `rounded-md`(6) 之间挑，没有名字可依据；② 面板只有 5 处零散 transition，各自发明参数，没有公共语言；③ 所有确认卡长一个样，看不出「在页面里跑 JS」与「开个标签页」的影响面差别；④ 停止按钮一发即停，而忙碌时它正好在手指下面；⑤ 复制只给纯文本，助手最常产出的表格粘到 Word/Notion 结构全散。
+证据：**代码事实 + 产物级核验**（无一项是推断）——
+- 圆角：`src/components/newtab/workflow/agent/*.vue` 全文 grep 得 lg/md/裸 rounded 三类并存；`tailwind.config.js` 只有 `rem2px(defaultTheme.borderRadius)`，无语义档。
+- 缓动：`AgentPanel.vue:82` / `AgentTranscript.vue:259` / `AgentTable.vue:41` 三处 transition 无统一时长与曲线。
+- 确认卡：`AgentConfirmCard.vue` 只有一套 `border-accent/40 bg-accent/5`，不区分 kind。
+- 停止：`AgentPanel.vue` 的 `@click="host.abort()"` 直连，一段式。
+- 复制：`AgentMarkdown.vue` 只调 `navigator.clipboard.writeText(text)`。
+- 产物核验：新类 `.rounded-chip{border-radius:6px}` / `.rounded-control{8px}` / `.rounded-card{14px}` 已在 `build/newtab.css` 里逐条确认产出（写了名字但 Tailwind 不产出的话表现是元素变直角，与 T-171 同一类静默失效）。
+建议（实施时的重要偏离，记录下来以防后人"纠正"回去）：
+- **确认卡没有照搬参考实现的 warning/accent 双色相。** 参考实现用琥珀表示「触及本机执行」，本仓**不能**：`src/agent/semanticColor.test.js` 把琥珀钉死给「工具被用户拒绝」一个语义（T-172），再拿它表示第二件事就退回 T-152 的老问题。改为**同色相内的强度差**：local = `!border-accent !bg-accent/10`，browser = 基线 `/40 + /5`；再配两个不同的图标（盾牌 / 罗盘）与徽标文案，构成三条并行通道 —— 色觉障碍用户靠后两条同样能分。
+- **缓动曲线取自参考实现，但没引入它的动画库**（framer-motion 是 React 库），也没搬 Tailwind v4 的 `@theme` 写法（本仓是 v3 + config），只搬了 token 的命名与取值。
+结论：**已实施（2026-10-10，一次批准一次落地）。** 五个子项各自的落点（将来要单独回退时按此定位）：
+1. **圆角语义名** —— `tailwind.config.js` 的 `extend.borderRadius` 加 `chip:6px / control:8px / card:14px`（刻意不与默认刻度重名，避免既有用法漂移）；agent 面板 10 个 .vue 全部换完，面板内已无 `rounded-lg/md/xl`。favicon 的 `rounded-sm` 与胶囊的 `rounded-full` 是不在语义档内的特例，保留。
+2. **统一缓动** —— `src/assets/css/tailwind.css` 的 `:root` 加 `--ease-panel: cubic-bezier(0.32,0.72,0,1)` 与 `--dur-fast/base/slow`（140/200/260ms）；config 加 `ease-panel` 与 `duration-*`；三处既有 transition 挂上 token（否则 Tailwind 不为它产出 CSS，等于没做）。另加 `@media (prefers-reduced-motion: reduce)` 全局兜底，**单独把 `.animate-spin` 放回来** —— 加载转圈是「还在跑」的唯一指示，压掉会让人以为卡死。
+3. **确认卡影响面分档** —— 判定放进 `src/agent/confirm.js` 的纯函数 `confirmScope(kind)`（`.vue` 里的分支测不到）；selector/url → browser，code/canvas/未知 → local（未知按重的一档，与 `validateTools` 的保守方向一致）。新增 i18n 键 `confirm.scopeLocal` / `scopeBrowser`（zh/en）。
+4. **两段式停止** —— `AgentPanel.vue` 的 `requestStop()`：首触只置 `stopArmed`（按钮变 accent 浓色 + 文案换 `stopArmed`），2 秒内二次才 `host.abort()`；Esc 走同一入口；busy 结束与面板卸载各有一个解除点（timer 挂的是 setTimeout，不摘会对已卸载组件写 ref）。
+5. **富文本复制** —— `AgentMarkdown.vue` 用 `ClipboardItem` 一次写 `text/html`（渲染后、克隆并摘掉复制按钮的 innerHTML）+ `text/plain`（**仍是 markdown 原文**，粘回编辑器保留标记更有用）；无 `ClipboardItem` 时退回 `writeText`。代码块复制仍只给纯文本。
+守卫（新增 6 条，`npm test` 全绿）：`semanticColor.test.js` 加「确认卡两档不许引入第二个色相 + 局部变量与图标必须不同 + 两个 locale 键齐」；`panelUi.test.js` 加「圆角不许回到刻度名、三档必须真定义」「动效 token 不许是死定义（没人用就不产出 CSS）+ reduced-motion 兜底 + spinner 例外」「停止两段式的四个要件 + stopArmed 键齐」「复制双通道 + plain 仍是原文 + 摘按钮 + 降级」；`confirm.test.js` 加 `confirmScope` 的四条单测（含「真实注册表里两档都得有工具落在上面」）。
+验收：`npm test` **784 tests / 783 pass / 0 fail / 1 skipped**（基线 775/774，新增 9 条全过）；`npm run lint` 0 error（10 warnings 均为基线已有的 no-console）；`npm run check:i18n` 通过；`npm run build` 产物已重建（构建撞 `build/` 清空守卫，按 AGENTS.md 把目录改名挪开后在空目录重建，已核验 `build/newtab.css` 含三条圆角规则与 reduced-motion 块）。
+状态：已清（2026-10-10 完成）
+
+### T-207 — 借鉴参考实现 sidepanel 的三项**布局**设计（整页未配置引导 / 会话 chip 统一 / composer 顶部渐隐）
+
+类型：改进
+登记日期：2026-10-10
+来源：2026-10-10 会话 UI 对比的后续。第一版对比报告把重心放在五条「容易落地的视觉细节」（即 T-200），布局只提了宽窄轴一句带过；用户原话「**它的UI布局不值得学习吗**」——这是对的纠正：布局可能比那五条细节更值钱。随后我在报告里补了三项布局借鉴，用户以「做」批准。
+现象（改之前的现状）：① 未配置 Key 时保留一个能打字、能回车、但永远发不出去的 composer + 顶部一条红色小横幅 —— 把「环境没准备好」说成了一个小提示；② 会话/历史两个 header 各有一套标题与开关，同一块区域有两套进入方式；③ composer 顶部是一条 1px 实边框，消息滚到边界像被「切断」（T-204 登记过的原生问题）。
+证据：**代码事实** ——
+- 未配置：`AgentPanel.vue` 的红横幅 `v-if="!configured"` + composer 无条件渲染、发送按钮 `disabled`；设置入口 `goToSettings` 全面板只有横幅这一处调用点（正是 T-203）。
+- 会话：`AgentPanel.vue` 里 chat header 与 history header 分列两段模板，各带一个开/关按钮，`data-test="open-history"` 是当时的锚。
+- composer：`rounded-card border border-gray-200` 实线卡片，无渐隐层。
+建议（实施记录，含刻意偏离）：
+- **未配置态用「整页引导页」而不是横幅** —— 走与空态相同的形态（居中、图标、说明、一个动作）。理由不是好看，是**语义**：空态已经在做「这里能问什么」，缺配置只是同一个问题的更前置版本（连问都还轮不到）；两者本就不该长得不一样。顺带一次性解决 T-203：引导页本身就常驻设置入口，且它是该状态的**唯一**形态，"入口随配置成功而消失"的根因没了。
+- **会话 chip 统一** —— 把 chat/history 两个 header 合成一个 toggle chip（`data-test="session-chip"`，`:aria-pressed="inHistory"`），标题在 `session.placeholder` 与 `session.backToChat` 之间切。消掉的是 T-177 那一类「同一件事两套入口」。
+- **composer 顶部渐隐** —— 落实 T-204：`data-test="composer-fade"` 的 `pointer-events-none absolute inset-x-0 -top-5 h-5`，form 改 `relative` 承载它。
+结论：**已实施（2026-10-10）。** 三项各自的落点：
+1. **整页引导** —— `AgentPanel.vue` 的 `v-if="!configured"` 分支改为 `data-test="not-configured-guide"` 的整块容器（`flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center`），内含图标 + 标题 + 提示 + `ui-button variant="accent"` 主按钮（`data-test="not-configured-cta"`）。原红横幅与「未配置时仍渲染的 composer」一并删除；composer 的守卫条件收紧为 `v-if="!inHistory && configured"`。新增 i18n 键 `notConfiguredHint` / `session.backToChat`（zh/en）。
+2. **会话 chip** —— 见上。
+3. **composer 渐隐** —— 见上。新增守卫锚点 `composer-fade`。
+**视觉语言的迁移（有意，且被守卫如实记录）**：
+- T-172 原先约定「阻塞=红」，未配置横幅正是红的。改成引导页后，红在这一支上被**收掉**了 —— 阻塞不再靠一个色相表达，而靠「整页占位 + 不能再输入」这个**形态**表达。守卫 `semanticColor.test.js` 的 `unset` 档因此从 `red` 变为 `accent`（锚点从横幅移到引导页的主按钮，它带 `text-accent`），并新增两条断言：`confirm/unset` 是唯一允许共用 `accent` 的一对（靠形态区分），且全表**不得再出现 red**。这不是把守卫放宽，而是让它记录「红退出本语义」这个决定。
+- **图标尺寸**：引导页的 `riKey2Line` 用 16 而非 24 —— T-175 把 24 只留给 `ui-button` 内的两个图标（`riArrowRightLine`/`riStopLine`），引导页图标是布局图标不是按钮图标，改小是**对的改法**，不是给守卫开绿灯。
+- **T-187 左边缘针脚**：红横幅删除后，那条「整列级元素左边缘 16px」的针脚改锚 `data-test="not-configured-guide"`；composer form 因新增 `relative` 使类串变化，针脚同步更新为 `relative shrink-0 px-4 pb-2.5 pt-0`（刻意保留精确匹配 —— composer 的左边缘与 py 值是 T-187 当初要钉死的，允许它无声漂移反而失去意义）。
+验收：`npm test` **784 tests / 783 pass / 0 fail / 1 skipped**；`npm run lint` 0 error（10 warnings 均为基线 no-console）；`npm run check:i18n` 通过；`npm run build` 产物重建，`build/newtab.css` 已核验含 `rounded-chip/control/card`、`ease-panel`、`duration-fast/base`、`bg-accent\/10`、`text-accent`。
+状态：已清（2026-10-10 完成）
+
+### T-205 — 用户长文本超过一屏时自动折叠
+
+类型：改进
+登记日期：2026-10-10
+来源：2026-10-10 会话 UI 对比；参考实现 `pie-ai-agent/src/sidepanel/components/CollapsibleText.tsx`（`COLLAPSED_MAX_PX = 240`）。用户以「做」批准与 T-206 一并实施。
+现象（改之前）：用户气泡只有 `[overflow-wrap:anywhere]`（防长串撑破已做），**没有高度上限**。侧栏 360px 宽时，一条长的用户提问（贴一段日志、贴一整段页面文本）能把一屏占满，助手的回答要滚很久才看得到。
+证据：**代码事实** —— `AgentTranscript.vue` 用户气泡 `max-w-full self-end whitespace-pre-wrap [overflow-wrap:anywhere] rounded-card bg-blue-500/15 px-3 py-2 text-sm`，无 max-height、无折叠。
+影响：助手场景下「贴一大段东西进来问」是高频用法（贴报错、贴 HTML、贴表格），长输入把对话区挤掉比短输入更常见。
+结论：**已实施（2026-10-10）。**
+1. **判定抽成纯模块** `src/agent/foldText.js`：`USER_FOLD_MAX_PX = 240` + `foldDecision({ measuredPx, expanded, maxPx })` → `{ foldable, collapsed }`。沿用 `usage.js` 那套「判定在纯模块、组件只消费」的做法（本仓无组件测试基建，`.vue` 里的分支测不到）。模块头注写清了三个只有单测能钉的边界：① 未量到高度（0/NaN/负）**不折**（防首帧闪折叠）；② 已展开时不再看高度（防「展开瞬间高度又超阈值 → 立刻弹回」）；③ `maxPx` 非法退化为不折。
+2. **用户气泡抽成组件** `AgentUserBubble.vue`：量 `scrollHeight`（**不是** `offsetHeight` —— 折叠态外层被 `max-height` 夹住，`offsetHeight` 永远等于阈值，量不出真高）；折叠时 `max-height:240px` + `overflow-hidden` + 底部 32px 渐隐（`data-test="user-bubble-fade"`，`from-blue-500/15`）+ `data-test="user-bubble-toggle"` 开关（带 `aria-expanded`）。文本原地变化时重置 `expanded`（更保守的一侧，避免留下悬空展开态）。
+3. **`AgentTranscript.vue`** 的用户气泡改用 `<agent-user-bubble :text="item.text" />`。原来的 `max-w-full self-end ... [overflow-wrap:anywhere]` 约束搬进新组件（T-174 的针脚随之改读新文件）。
+4. **i18n**：新增 `workflow.agent.expandUserMessage` / `collapseUserMessage`（zh/en）。
+**未做**：登记建议里没提、但 T-206 建议②涉及的消息级「重试」—— 见 T-206 记录，未一并做。
+守卫（新增 7 条）：`foldText.test.js` 5 条单测（未测量不折 / 边界等于阈值不折 / 展开态不弹回 / maxPx 非法不折 / 默认阈值 240）；`panelUi.test.js` 加「组件接线（阈值来自纯模块 + 量 scrollHeight + maxHeight + 渐隐 + 开关 + aria-expanded + 两语言键）」与「用户气泡必须走 AgentUserBubble，旧裸 div 不许回来」；`toolStepLayout.test.js` 的 T-174 用户气泡约束改读 `AgentUserBubble.vue`。
+验收：`npm test` **792 tests / 791 pass / 0 fail / 1 skipped**；`npm run lint` 0 error；`npm run check:i18n` 通过。
+状态：已清（2026-10-10 完成）
+
+### T-206 — 消息级操作只有「复制全文」一个按钮，且它压在首行上
+
+类型：改进
+登记日期：2026-10-10
+来源：2026-10-10 会话 UI 对比；触发点 `src/components/newtab/workflow/agent/AgentMarkdown.vue:13-23`。用户以「做」批准与 T-205 一并实施。
+现象（改之前）：助手消息上唯一的操作是悬停才显形的「复制全文」，绝对定位在右上角。参考实现 hover 时会用底色**高亮将被复制的那段内容**，本仓只给按钮自己加底色 —— 长对话里多条消息各带一个同款按钮，用户不知道自己会复制到哪一段。
+证据：**代码事实** —— 按钮 `absolute right-0 top-0 ...`，正文是它后面的兄弟块；无 `peer` / `peer-hover`。
+影响：分不清复制范围；纯观感问题，不阻塞可用性。
+结论：**已实施（2026-10-10）—— 只做建议①。**
+1. 复制按钮加 `peer`；把全部正文块包进一个 `data-test="copy-scope"` 的容器，该容器挂 `peer-hover:bg-accent/5 peer-focus:bg-accent/5`（+ `transition-colors duration-fast ease-panel`）。hover **或键盘聚焦**按钮时，整条消息得到一层极淡的 accent 底。
+2. **顺序是关键**：`peer-hover` 只认**前面的兄弟**，所以按钮必须在 `copy-scope` 之前。这个顺序一旦被调回去，高亮会**静默失效**（CSS 不报错、控制台无警告）—— 守卫单列一条断言钉死顺序 + 按钮带 `peer`，正是为这个静默失效准备。
+3. 平时完全不可见（静态消息不加视觉重量）；`peer-focus` 保证键盘用户不被漏掉。
+**建议②（补「重试」）未做，且有理由**：错误卡的「重试」（`AgentTranscript.vue`）语义是「这一轮失败了，重发」；消息级重试是「这一条我不满意，重来」，两者前置条件与后果不同，后者还要处理「从哪一条重试、其后的历史怎么办」——属**数据模型改动**，不是加个按钮。要做请单独立项，不在本条顺手实现（遵循 AGENTS.md「控制在当前范围内」）。
+守卫（新增 1 条，含 4 个断言）：`panelUi.test.js` 的 T-206 —— 按钮带 `peer`、按钮在 `copy-scope` **之前**、容器挂 `peer-hover:bg-accent/5` 与 `peer-focus:bg-accent/5`。产物侧：`bg-accent\/5` / `peer-hover\:bg-accent\/5` / `peer-focus\:bg-accent\/5` 已核验存在于 `build/newtab.css`（Tailwind 只为用到的类产出 CSS，写了不产出就是静默失效 —— T-171 同类）。
+验收：`npm test` **792 tests / 791 pass / 0 fail / 1 skipped**；`npm run lint` 0 error；`npm run check:i18n` 通过；`npm run build` 产物重建并核验新类。
+状态：已清（2026-10-10 完成）
+
+### T-208 — 复刻 pie 观感第一步：加「三层底色 + 语义分隔线」token，用底色代替边框分层
+
+类型：改进
+登记日期：2026-10-10
+来源：2026-10-10 会话评估「能不能复刻 pie 界面」（产出 `docs/agent-pie-ui-clone-assessment.html`）；用户原话「先做第一步」= 批准该评估里建议的第一步（**只改 token 层，不碰组件结构**）。
+现象（改之前）：本仓助手面板是「一块白底 + 到处画 `border-gray-*`」——层级靠 1px 边框表达。agent 目录里 `border-gray-200/700` 共 20 处、`bg-gray-*` 共 34 处，边框是主要分隔手段。参考实现 pie 用三层几乎等亮的灰（canvas #FAFBFC / surface #FFFFFF / field #F4F6F8）表达同一套层级，整屏没有一条边框却层次清楚。
+证据：**源码统计** —— `grep -ro "border-gray-[0-9]*" src/components/newtab/workflow/agent/` 共 20 命中；token 参考值逐条核对自 `pie-ai-agent/src/sidepanel/index.css:55-108`（`--c-canvas/surface/field/line`，每个都是具体 hex，非估计）。
+影响：观感层面 —— 边框用得多时整屏都是线，显得「拼装」而非「一体」；窄面板（320px）里尤其明显。不阻塞任何功能。
+**关键约束：不改 `gray` 别名。** `tailwind.config.js:56` 把 `gray` 指向 `colors.zinc`，全项目都在用（单 agent 目录就有 20 `border-gray-*` + 34 `bg-gray-*`），动它会波及整个应用。故**新增**语义 token 与旧类并存，可逐个替换、可回退。
+结论：**已实施（2026-10-10）—— 只做第一步（token 层 + 底壳换色），未碰组件结构、未动布局。**
+1. **`tailwind.config.js`** `extend.colors` 加四档语义色 `canvas / surface / field / line`，走 CSS 变量（`withOpacityValue('--color-x')`，与本仓既有 `primary/accent` 同款）—— 这样 `bg-canvas/80` 这类透明度写法仍可用。
+2. **`src/assets/css/tailwind.css`** 的 `:host, :root` 与 `.dark` 各补一套值（**每套都是空格分隔的 RGB 三元组**，不是 hex —— hex 之下透明度写法静默失效，属 T-171 同类）。亮：canvas `250 251 252` / surface `255 255 255` / field `244 246 248` / line `228 232 236`；暗：canvas `11 13 16` / surface `20 23 28` / field `26 30 37` / line `34 39 47`。**暗色是重新选的一套**，不是把亮色取反（pie 的暗色 accent 也是重选而非取反）。
+3. **`AgentPanel.vue`**：根节点 `bg-gray-50 dark:bg-gray-900` → `bg-canvas`；左栏右分隔 `border-r border-line`；两处顶栏 `border-b border-line bg-surface`（浮起的面）；slash 菜单卡与 composer 卡 `border-line bg-surface`；composer 渐隐层 `from-gray-50 dark:from-gray-900` → `from-canvas`（T-204 那条）；context 的 `<hr>` 走 `border-line`。
+4. **`AgentTranscript.vue`**：turn divider `bg-gray-200 dark:bg-gray-700` → `bg-line`（2 处）；thinking 卡 → `border-line bg-surface`（浮起面）；compaction 卡 → `border-dashed border-line bg-field`（凹陷面）—— **两者落在不同的面上**，这是 T-154 那条「不许糊成一块」的 token 版表达。
+**有意未动（留待后续步骤，非遗漏）**：notice 行、badge（T-172 钉了它们的 `gray`，且当轮只做底壳）；transcript 里其余 `text-gray-*` 文字档（本次只换面、没换文字色阶，语义文字档 `fg-1/2/3` 是评估里的第二组 token，留第二步）。
+**连锁变红（有意迁移，逐条判断，不批量放宽）**：
+- `T-187` 顶栏计数守卫：class 串加了 `border-b border-line bg-surface`，精确串匹配失效。改为**不变量正则**（钉 `flex / items-center / gap-1.5 / px-4 / py-1` 五个不变量），不再锁整串。
+- `T-154` compaction-vs-thinking 守卫：`bg-gray-50` → `bg-surface`、`bg-gray-100` → `bg-field`，原「grays 深浅」断言失效。改按 token 重表达同一不变量（`bg-field` vs `bg-surface`，仍必须落在不同的面）。
+- `T-172` 产物守卫：新增 `bg-canvas / bg-surface / bg-field / border-line` 到「必须存在于构建 CSS」清单（写了不产出就是静默失效）。
+守卫（新增 2 条）：`panelUi.test.js` —— ①「三层 token 必须在 tailwind.css 成对定义」（四变量 × 亮暗 = 8 条，且每条必须是 RGB 三元组）；②「面板底壳必须换上三层底色」（根挂 `bg-canvas`、两处顶栏挂 `bg-surface`+`border-b`、左栏 `border-r border-line`、composer 卡 `border-line bg-surface`）。顶栏计数用 **lookahead** 钉两个 class 同时存在、不锁前后顺序（class 串顺序本就自由，锁顺序会把无害重排判成回归）。
+验收：`npm test` **794 tests / 793 pass / 0 fail / 1 skipped**；`npm run lint` 0 error（仅剩 10 条既有 `no-console` warning）；`npm run check:i18n` 通过；`npm run build` 产物重建，`build/newtab.css` 已核验含 `bg-canvas` / `bg-surface` / `bg-field` / `border-line` 四个类 + 8 条 `--color-*` 变量定义。
+状态：已清（2026-10-10 完成）
+
+### T-209 — 复刻 pie 观感第二步：把三层底色贯彻到卡片与输入区
+
+类型：改进
+登记日期：2026-10-10
+来源：2026-10-10 用户实拍反馈「现在这个页面UI和你的设计稿长得不一样啊」。根因：T-208 只做了第一步（底壳换色），而设计稿 §5 画的是三步做完的终态。用户批准「做第二步：把三层底色贯彻到底」。
+现象（改之前）：T-208 之后面板根是 canvas、顶栏/composer 卡是 surface，但正文区里的卡片、输入区、下拉菜单都还是旧面 —— 工具卡仍是 `border-gray-200/700`、代码块仍是 `bg-gray-100 dark:bg-gray-800`、下拉菜单仍是 `bg-white dark:bg-gray-800`；**最要紧的一处**是 composer 输入区是 `!bg-transparent`（透出白卡），「凹陷的 field 面」完全没出来。
+证据：**源码事实** —— `grep -rn "bg-gray-50\|bg-gray-100\|bg-white\|border-gray-200\|border-gray-700"` 在 agent 目录命中工具卡/代码块/表格/下拉/表头多处；`AgentPanel.vue` 的 `<ui-textarea>` class 含 `!bg-transparent`。**渲染实测** —— 用本仓 `utils/sfc-render.mjs` 把工具卡/代码块/用户气泡渲成 HTML、挂真实 `build/newtab.css`、Playwright 截图核验（`.scratch/three-layer-audit.{html,png}`，一次性脚本不入库）。
+影响：观感 —— 面板壳换了、里面还是旧语言，整体不统一；用户一眼看出「设计稿跟实际不一样」。不阻塞功能。
+结论：**已实施（2026-10-10）—— 只做第二步（配色贯彻），仍未碰布局结构。**
+1. **surface（浮起的面）**：`AgentToolStep.vue` 工具卡外壳 `border-line bg-surface`、内部分隔线 → `border-line`；`AgentDropdown.vue` 下拉菜单 → `border-line bg-surface`（并同步改了组件头注里对底色的描述）。
+2. **field（凹陷的面）**：`AgentMarkdown.vue` 代码块 `bg-field`（复制按钮底 → `bg-field/95`）、`hr` → `border-line`；`AgentTable.vue` 表头 `bg-field`、单元格 → `border-line`；**composer 输入区** `<ui-textarea>` → `!bg-field` + `!rounded-control`（从 `!bg-transparent` + `!rounded-none` 迁移）+ `!px-2 !py-1.5`；composer 卡 padding 收紧为 `p-1.5`（输入区自带 padding 后不再双层内边距）。
+3. **徽标/底纹**：`AgentTranscript.vue` 能力徽标 `bg-gray-100 dark:bg-gray-800` → `bg-field`；`AgentSessionList.vue` 模型名脚注 `border-t border-gray-200/700` → `border-line`。
+**有意未动**：用户气泡（蓝灰，独立语义）、notice 行（advisory 灰，T-172 钉死）、确认卡（accent 分档）。**未做（留第三步）**：语义文字色阶（fg-1/2/3）、形态层（顶栏统一/会话抽屉）。
+**连锁变红（有意迁移，逐条判断）**：
+- `T-171` 的 `MUST_OVERRIDE` 清单：`['px-4','!px-1'] → ['px-4','!px-2']`、`['py-2','!py-1'] → ['py-2','!py-1.5']`、`['bg-input','!bg-transparent'] → ['bg-input','!bg-field']`。**被盖掉的 base 一个没变，变的只是面板给的值** —— 清单钉的是「必须带 ! 才能盖掉组件自身」这条不变量，改 want 列即可，断言逻辑一行没动。
+- `!rounded-none` 断言：迁移成「必须是带 ! 的圆角类」(`/^!rounded-/`)。钉的仍是「圆角由面板一侧 `!` 接管」，不是某个具体档位（输入区现在自己也该有圆角）。
+- `T-172` 产物清单：新增 `\\!bg-field`（带 ! 的 importance 变体是独立类名 `.\!bg-field`，与 `bg-field` 不同）。
+守卫（新增 2 条）：
+- `panelUi.test.js` **T-209**：① composer 输入区必须 `!bg-field`（且不许退回 `!bg-transparent`）；② thinking 卡 = surface、compaction 卡 = field；③ 工具卡 = `border-line bg-surface` 且内部不许再有 `border-gray-200/700`；④ 下拉菜单 = `border-line bg-surface`；⑤ 代码块 = `bg-field`。
+- `panelUi.test.js` **T-210**：模板里不许有孤立的 `>`/`<` 文本节点（判定：某行只含 `>` 且上一非空行已以 `>` 结尾）。
+验收：`npm test` **796 tests / 795 pass / 0 fail / 1 skipped**；`npm run lint` 0 error（仅 10 条既有 `no-console` warning）；`npm run check:i18n` 通过；`npm run build` 产物重建，`build/newtab.css` 核验含 `!bg-field` / `bg-field` / `bg-surface` / `border-line` / `rounded-control`。渲染实测截图见 `.scratch/three-layer-audit.png` —— field 凹陷面（输入区/代码块）与 surface 浮起面（工具卡）肉眼可分。
+状态：已清（2026-10-10 完成）
+
+### T-210 — composer 卡片里有一个孤立的 `>` 文本节点，渲染成可见乱码字符
+
+类型：bug
+登记日期：2026-10-10
+来源：2026-10-10 用户实拍截图 —— composer 卡片上沿浮着一个孤零零的「<」字符。用户确认「是 bug，一起查」。
+现象：`AgentPanel.vue` 的 composer 卡片里，紧跟开标签之后有一个**孤立的 `>`**。它落在已经闭合的标签之后，被 Vue 当成**文本节点**渲染出来，成了一个可见的乱码字符。
+证据：**代码事实** —— 模板里该行只含一个 `>`，上一行是已闭合的 `<div class="rounded-card border border-line bg-surface ...">`。**全量扫描** —— 对 agent 目录 12 个 .vue 跑「上一非空行以 `>` 结尾 + 本行只含 `>`」判定，仅此一处命中（其余 `>` 都是合法多行标签的收尾）。
+影响：纯观感 —— 用户看到输入框上方有个莫名其妙的符号，会以为界面坏了。不阻塞输入。
+结论：删除该字符；补守卫 `panelUi.test.js` T-210（与扫描同一判定）防它回来。
+**为什么值得单独立一条守卫**：这类失效 **lint / prettier 都不拦** —— 它们把 `>` 当普通文本；构建也不报错；只有渲染或肉眼才发现。与 T-171（写了不产出）、T-209②（class 串顺序）同属「静默失效」家族。
+验收：`npm test` 含 T-210 通过；`npm run lint` 0 error。
+状态：已清（2026-10-10 完成）
+
+### T-211 — 复刻 pie 观感第三步：加语义文字色阶 fg-1/2/3，消掉 dark: 双写
+
+类型：改进
+登记日期：2026-10-10
+来源：2026-10-10 会话「继续」—— 承接 T-208/T-209，做评估稿「观感三件套」的最后一件。用户以「继续」批准。
+现象（改之前）：面板文字色全靠 `text-gray-500 dark:text-gray-400` 双写。agent 目录里「次要」双写 14 处、「弱」双写 19 处；另有 8 处**单边** `text-gray-400`（无 dark 对应值 —— 暗色下这些图标/占位色是错的）。三层**面**已经分了 canvas/surface/field，字却还是「第几级灰」，不配套。
+证据：**源码统计** —— 双写组合 `grep -rc` 见登记；单边 `text-gray-400` 8 处。参考值逐条核对自 `pie-ai-agent/src/sidepanel/index.css:55-108`。
+影响：① 同一件事两处声明，漏一处就在某个主题下看不清；② 单边 `text-gray-400` 暗色下是错的；③ 面/字语义不配套。
+结论：**已实施（2026-10-10）。**
+1. `tailwind.config.js` 加 `fg: { 1, 2, 3 }` 三档（`withOpacityValue('--color-fg-N')`，保留 `text-fg-2/70` 透明度写法）。
+2. `tailwind.css` 亮暗各补一套（亮 `20 24 29`/`90 100 112`/`152 161 172`，暗 `229 232 236`/`138 146 158`/`82 89 101`，取自 pie 的 `--c-fg-*`）。
+3. **迁移**：33 处双写（14 次要 + 19 弱）+ 8 处单边 `text-gray-400` + 若干 `text-gray-600/700/800/900` 上下文色 → `text-fg-1/2/3`。逐档映射：正文/内容 → fg-1；时间戳/说明/工具摘要/状态次要 → fg-2；占位符/图标/极淡元信息 → fg-3。**成果**：agent 目录 `text-fg-*` 共 57 处，无一处 `text-gray-*` + `dark:text-gray-*` 双写残留。
+**有意未动**：红/绿/accent 等语义色；`AgentTable.vue` 的滚动提示徽标 `bg-gray-700/80 text-gray-100`（深底浅字的高对比覆盖层，不是文字档位）。
+**连锁变红（有意迁移）**：`panelUi.test.js:136` 的「下拉必须显式给字色」守卫原本分两条断言 `text-gray-\d+` + `dark:text-gray-\d+`；字色形态换成单一 `text-fg-1` 后，两条合并为一条 —— **不变量没变**（下拉必须显式给字色，否则菜单项继承成底色同色看不见），只是现在一个类覆盖亮暗两档。
+守卫（新增 1 条）：`panelUi.test.js` **T-211** —— ① 三档变量亮暗成对（6 条定义）；② 每条是 RGB 三元组；③ **扫描 agent 目录，不许再有 `text-gray-*` + `dark:text-gray-*` 双写**（正是这一步要消灭的）。`semanticColor.test.js` T-172 产物清单加 `text-fg-1/2/3`。
+**对比度实测（诚实记录）**：暗色对 surface `#14171C`，fg-1 ≈ 14.6（远超 AA）、fg-2 ≈ 5.7（过 AA 4.5）、fg-3 ≈ 2.6（低于 AA）。fg-3 偏低是**刻意的** —— 只用于非正文（占位/图标/极淡元信息），WCAG 对非必要文字放宽到 3:1，且该值取自参考实现（保持观感一致）。同时暗色下 surface↔canvas 的分界只有 1.08 —— 这是三层底色哲学（层间 ~3% 明度差）在暗色的固有代价，与 pie 一致。若将来反馈「暗色提示看不清」，调 fg-3 一个变量即可。
+验收：`npm test` **797 tests / 796 pass / 0 fail / 1 skipped**；`npm run lint` 0 error（仅 10 条既有 no-console warning）；`npm run check:i18n` 通过；`npm run build` 产物重建，`build/newtab.css` 核验含 `text-fg-1/2/3` 三类 + 6 条 `--color-fg-*` 变量。真实渲染截图（`.scratch/fg-audit.png`，一次性脚本不入库）亮暗两主题三档可分。
+状态：已清（2026-10-10 完成）
+
+### T-212 — 修面板「观感三件套」之外的几处具体丑
+
+类型：改进
+登记日期：2026-10-10
+来源：2026-10-10 用户实拍反馈「UI太丑了」（截图见会话记录 —— 浏览器侧栏态）。根因：T-208/209/210/211 解决了「token + 三层底色 + 语义文字色」这些**基底**问题，但具体组件里还有几处「基底有 token 不用、退而画边框/画胶囊」的旧形态 —— 观感的最后一公里。
+用户的选择：(1) 全部修（推荐）—— 7 处全改；(2) 面板根改深色（推荐）—— 侧栏宿主单独走 dark shell。
+现象（按截图逐条）：
+1. **用户气泡** `bg-blue-500/15` —— 蓝色透明是「标签/通知」语义色，用户自己的提问用它就把"我说了什么"读成"系统提示"。换 `bg-accent/10`。
+2. **工具状态徽标** `bg-green-500/15 text-green-700` + `rounded-chip` —— 三个「完成/失败/完成」并排像「表单错误列表」。徽标去底色 + 去边框，**只留字色 + 图标**（绿/红/琥珀/灰 fg-2）。
+3. **工具卡外壳** `border-line + bg-surface` —— 三个带边框的 surface 卡并排在 canvas 底上仍像「独立卡片」。改 `bg-field`（最暗一档）：「这一行和正文不一样」的信号靠底色差，不再画外框。
+4. **composer 卡** `border-line + bg-surface` 套 `bg-field` 输入区 —— 两层矩形嵌套。composer 外框去掉：canvas→surface→field 三层关系靠**底色差**看得出，不必再画实线。
+5. **composer 底行「Enter 发送」提示** 与发送按钮同行 —— 视觉重量相当，用户分不清哪个是文案哪个可点。挪到 composer 顶上一行 `text-[10px] text-fg-3`，底行只剩「圆环 + 发送按钮」两个控件。
+6. **侧栏面板根** `bg-canvas` 在浏览器 chrome 上面是「白卡浮在深壳上」像弹窗。新增 `bg-shell` token（亮 `#F0F2F5` / 暗 `#1F2125`，**暗色与 chrome 几乎同色**），侧栏 `App.vue` 根容器铺 `bg-shell` 续上 chrome，面板根在 dark 宿主下走透明 —— 透出父级，**消除「白卡浮在深壳上」的弹窗感**。独立页 / 编辑器侧栏宿主无此父级，仍走 `bg-canvas`。
+7. **宿主形态声明** —— 给 `useAgentHost` 加 `deps.shell: 'light' | 'dark'`，写到 `host.shell`；面板根根据 `host.shell` 决定透明 / `bg-canvas`。侧栏 App.vue 显式 `shell: 'dark'`。**不让面板自己读 prefers-color-scheme** —— 那是页面主题，与「宿主是不是侧栏」无关。
+证据：T-211 之后所有 token 已就位（canvas/surface/field/line + fg-1/2/3），但截图暴露的几处都是「有 token 不用、退而画边框/画胶囊」的旧形态。设计稿 `docs/agent-pie-ui-clone-assessment.html` §5 画的是「三步做完的终态」观感，截图与终态的差距全部在这 7 项里。
+影响：截图里的「island 感」是问题 6 单独造成的；「表单错误列表」感是问题 2 单独造成的；「白卡套白卡」感是问题 4 单独造成的 —— 这三项是用户感知最强的；其余是「观感」层面的细节。
+结论：**已实施（2026-10-10）。**
+1. **用户气泡** `AgentUserBubble.vue`：`bg-blue-500/15` → `bg-accent/10`；`px-3 py-2` → `px-3.5 py-2.5`（多 4px 内边距后文字才像在「说」不在「贴」）；折叠态底部渐变 `from-blue-500/15` → `from-accent/10` 同步。
+2. **工具卡** `AgentToolStep.vue`：外壳 `rounded-control border border-line bg-surface` → `rounded-control bg-field`（去外框 + 退到 field 凹陷面）；状态徽标 `rounded-chip + bg-green-500/15 + text-green-700` → 透底 + 仅 `text-green-700 dark:text-green-400`（红/琥珀/灰 fg-2 同理）；同步 `STATUS_STYLE` 表与 computed 改名 `statusClass` → `statusTextClass`。
+3. **composer 卡** `AgentPanel.vue`：`rounded-card border border-line bg-surface` → `rounded-card bg-surface`（去 border）。
+4. **composer 提示**：`AgentPanel.vue` 的 form 内、composer 卡上方加 `<p v-if="configured" class="mb-1 text-[10px] text-fg-3" data-test="composer-hint">{{ inputHint / interjectHint }}</p>`；底行原来的 `<span class="ml-auto min-w-0 truncate text-[11px] text-fg-3">` 删除。提示文案**还在** `t('workflow.agent.inputHint')` / `t('workflow.agent.interjectHint')` —— `T-153 重设计` 渲染守卫（T-153「空闲态要写清 Enter 发送 / Shift+Enter 换行 / 忙碌态插话提示」）继续过，因为 `t()` 出来的键名仍出现在 SSR HTML 里。
+5. **侧栏 App.vue 根**：`src/sidepanel/App.vue:6` 的 `<div class="h-screen w-full">` 加上 `bg-shell`，让父级铺壳色续上 chrome。
+6. **面板根根据 shell 切**：`AgentPanel.vue:13` `class="flex h-full bg-canvas text-fg-1"` → `class="flex h-full text-fg-1"` 加 `:class="[shell === 'dark' ? '' : 'bg-canvas', ...]"`。
+7. **useAgentHost 新增 deps.shell**：`src/composable/agentHost.js` 增 `shell: deps.shell === 'dark' ? 'dark' : 'light'` 写入 `reactive agent`。
+8. **sidepanel App.vue 显式声明**：`useAgentHost({ shell: 'dark', ... })`。
+9. **新增 `bg-shell` token**：`tailwind.config.js` extend.colors 加 `shell: withOpacityValue('--color-shell')`（与 canvas/surface/field 同源，保留 `bg-shell/50` 透明度写法）；`tailwind.css` `:root` 加 `--color-shell: 240 242 245;`（`#F0F2F5`，亮模式占位，**当前**独立页/编辑器侧栏不挂 shell，留给将来「白壳」场景），`.dark` 加 `--color-shell: 31 33 37;`（`#1F2125`，与 Chrome 侧栏 chrome 几乎同色）。
+
+**有意未动**：
+- AgentTable 滚动提示徽标 `bg-gray-700/80 text-gray-100`（深底浅字的高对比覆盖层，不是文字档位 —— T-211 已在「有意未动」段记过）。
+- `bg-box-transparent`（项目通用「可点盒子」底色，70+ 处在用，T-208 已经把 chip 一支迁走）—— 不在这一轮观感里。
+- header chip 的视觉：用户截图里没明确说它丑，它是「可点击的盒子」语义，T-208 之后已经在 surface header 上层 + box-transparent 容器底，**可点性可读**。
+
+**连锁变红（有意迁移，逐条判断）**：
+- `T-208` 守卫 `panelUi.test.js`：面板根断言从「`bg-canvas` 或 `bg-shell`」改成「至少有 `bg-canvas` + `shell === 'dark' ?` 三元式（dark 透父级）」。T-212 是有意迁移，不锁具体 class。
+- `T-208` 守卫：composer 卡断言从 `rounded-card border border-line bg-surface` → `rounded-card bg-surface`（去 border 这一项是 T-212 的新形态）。
+- `T-209` 守卫：工具卡外壳从 `rounded-control border border-line bg-surface` → `rounded-control bg-field`；新增两条：① 工具徽标根不许带 `rounded-chip`（去框）；② 状态字色必须 `text-green/red/amber-N dark:text-N`（钉「语义靠字色 + 图标」这条不变量）。
+
+**对比度诚实记录**：
+- 暗色 shell `#1F2125` 对 chrome（实测 ~`#1F2125`）几乎同色 —— 「白卡浮在深壳上」消除。
+- shell 表面（无 class）= 透出父级 chrome；surface（composer / header）= `#14171C`，比 shell **深一档**（暗色下「卡片是凹进去的」）；field（输入区 / 工具行）= `#1A1E25`，比 surface **又浅一档**（暗色下「输入区是关注的」）。三层关系完整。
+- 暗色下 surface↔shell 的分界只有 1.04 —— 与 canvas↔surface 的 1.25 比更小，是 chrome 本身偏暗导致的固有代价。若反馈「暗色 composer 看不清」，单调 `--color-surface` 一个变量即可（调到 `#1A1E25` 这一档就与 field 齐平），不动其他档。
+
+守卫（新增 1 条，修改 2 条）：
+- `panelUi.test.js` **T-208** 改造：① 根节点断言从 `bg-canvas|bg-shell` 二选一改成「至少有 `bg-canvas` + `shell === 'dark' ?` 三元式」；② composer 卡从 `rounded-card border border-line bg-surface` 改成 `rounded-card bg-surface`。
+- `panelUi.test.js` **T-209** 改造：工具卡外壳从 `rounded-control border border-line bg-surface` 改成 `rounded-control bg-field`；新增「工具徽标根不许带 rounded-chip」「状态字色必须有 text-green/red/amber」。
+- `panelUi.test.js` **T-212** 新增：① 用户气泡必须 `bg-accent/10` 且不许再用 `bg-blue-*`；② composer 顶部必须有 `<p data-test="composer-hint">`、底行不许再渲染 inputHint span；③ 面板根必须按 `host.shell` 切（钉三元式 + 读 `host.shell`）；④ useAgentHost 必须读 `deps.shell`；⑤ sidepanel App.vue 必须显式 `shell: 'dark'` + 容器挂 `bg-shell`；⑥ `--color-shell` 在 :root/.dark 各一次（RGB 三元组）。
+
+**真实渲染存证**：`.scratch/audit-t212.{html,png}` —— 用构建产物 `build/newtab.css` 渲染亮 / 暗两个版本，左侧 sidepanel（dark，shell=transparent + 父级铺 bg-shell）、右侧独立页（light，shell=bg-canvas），裸手写 DOM 反映 T-212 之后的真实 className。`AgentTranscript` / `AgentToolStep` / `AgentUserBubble` 的真实 SSR 不会渲染（子组件是 stub），所以走手写 DOM 这条路；**className 与 token 一一对应**，能验证「白岛消失 / 三层关系成立 / 徽标退到字色」。
+
+验收：`npm test` **798 tests / 797 pass / 0 fail / 1 skipped**（新增 1 条 T-212 守卫）；`npm run lint` 0 error（仅 10 条既有 `no-console` warning）；`npm run check:i18n` 通过；`npm run build` 产物重建，`build/newtab.css` 核验含 8 条 `--color-*` 变量（canvas/surface/field/line/shell + fg-1/2/3）+ 10 个新 class（bg-canvas/surface/field/shell + border-line + text-fg-1/2/3 + bg-accent）。
+
+**留待下一轮**：
+- 「侧栏宿主的顶部 chip 在 surface header 上贴边（chip 紧贴 panel 边）」—— 用户未提，留作观察项。
+- 「亮模式独立页 editor sidebar 与 sidepanel 视觉一致 / 不一致」—— 独立页 light 主题下，shell=#F0F2F5 是「比 canvas 更深一档」占位但当前不挂，编辑器的 `bg-canvas` 是 #FAFBFC 接近父级 `#F9FAFB`，与 T-212 之前一致，没有 island 感。
+- 「暗色 chip 的可见度」—— T-212 不动 chip，待用户反馈。
+
+状态：已清（2026-10-10 完成）
+
+### T-213 — 优化 header 与 composer 下半部（输入框 / 发送键 / 标签页切换 / 上下文状态 / 模型状态）
+
+类型：观感重排 + 一个功能新增（模型选择器）
+登记日期：2026-10-10
+来源：2026-10-10 会话，用户原话「我给你讲几个点，一个是优化 header 区域，另外一个是优化下半部输入框和发送键、标签页切换、上下文状态、模型状态」
+设计稿：`docs/agent-ui-header-composer-redesign.html`（同日三轮设计讨论定稿，§7 六步落地）
+
+现象：T-208~T-212 解决的是「基底」（三层底色、语义文字色、去边框），但**两个区域的骨架**还是旧的：
+- **header**：单行、`bg-surface`、只有「会话 chip + 新建」。与参考实现「header = canvas、正文卡 = surface」的层级相反。
+- **composer 底行**：`<div class="flex items-center gap-2">` 里只有上下文圆环 + 发送/停止，**缺 `<div class="flex-1">` 撑开**，控件贴左边缘而不是靠右。
+- **标签页切换** `AgentTabPicker`：整个挂在 composer 卡片**顶部**，占着输入区最贵的一行（约 30px 正文高度）。
+- **上下文状态** `AgentContextRing`：14×14 + **常驻 `{pct}%` 文字**。参考实现的圆环 16×16 **不带数字**。
+- **模型状态**：面板内完全没有（原 T-201）。这是本票唯一的功能新增。
+
+证据：读源码逐项核对（`AgentPanel.vue` / `AgentTabPicker.vue` / `AgentContextRing.vue` / `AgentDropdown.vue` / `UiButton.vue` / `UiTextarea.vue`）；对照实现 `pie-ai-agent/src/sidepanel`。
+
+拍板（2026-10-10 下午，用户逐条决定；同日二次修订 + 「好的，制定计划开工」）：
+1. **header 两行** —— 行 1 图标（`v-remixicon`：`riChatHistoryLine` + `riAddLine`）+ **可点的标题** + 新建；行 2 标签页切换（整行宽 chip）。
+2. **标题即会话下拉** —— 点标题弹出会话列表（popover 模式）：切换 / 删除 / 底部「查看全部历史会话」。**「会话管理」不再单独占一行。**
+3. **标签页 chip 三态** —— 已固定（`surface` 底 + `line` 边 + 徽标）/ 自动（`bg-box-transparent` + `riFlashlightLine`）/ 失效（`bg-danger/15` + 红字 + `重选` + `riErrorWarningLine`）。
+4. **composer 整块凹陷 + focus 描边** —— 卡片 `bg-field` + `border-line` + `focus-within:border-accent`；内部 textarea 改回透明（否决 T-212 的无边框）。
+5. **上下文只用圆环、不带文字** —— 16px，弧长即水位，颜色三档（fg-2 / warn ≥60% / danger ≥80%）；悬停才出 `{pct}%`。
+6. **不用服务商图标** —— 模型芯片只剩等宽模型名 + 箭头。
+7. **换模型的生效时机文案** —— 弹层底部固定小字「换模型后从下一轮开始生效，当前会话不重放」。
+
+**实施要点**：
+- **删 `--color-shell`**（`tailwind.css` 两处 + `tailwind.config.js` 的 `colors.shell` + `host.shell` + `AgentPanel` 的 `shell` computed + `sidepanel/App.vue` 的 `bg-shell`），面板根统一回 `bg-canvas` —— 让「按宿主壳色切透明」这个补丁机制彻底退场。
+- **新增两档语义色** `--color-danger`（亮 `217 84 74` / 暗 `240 113 103`）、`--color-warn`（亮 `224 122 74` / 暗 `224 138 90`）。淡底不另设 token，走 Tailwind 透明度修饰符。
+- **模型选择器 `AgentModelPicker.vue`（新，T-201 合并落地）**：按连接分组、无 Key 的连接标 `noKey`、当前项打勾。`host.modelCatalog` 由 `loadConfigDoc` 映射而来（**显式剥掉 key**，只留 `{id, label, hasKey, models}`），`src/agent/index.js` 因此多导出一个 `loadConfigDoc`（导出面 16 → 17）。生效时机是结构事实：`index.js:488` 每轮 `send()` 重读 `getConfig()`，所以「下一轮生效」是陈述而非承诺，无需重启。
+
+**踩坑（本票最值钱的一条）**：起初写的是 `bg-danger/12`，而 **12 不在 Tailwind 默认透明度刻度里**（只有 0/5/10/15/20/25…）。结果是 class **不报错、但产物里根本不生成那条规则** —— 标签页失效态的整块底色与删除按钮的 hover 底色静默消失。这是「写了不等于生效」（T-171）的**第二次**复发，且比第一次更隐蔽（无告警）。修法：改用 `/15`，并把 `semanticColor.test.js` 的产物清单从「钉 token 名」扩到**钉每一个用到的组合**。
+
+**真实渲染存证**：`.scratch/t213-impl.{mjs,html,png}` + 局部放大 `t213-{zoom,composer}-{light,dark}.png` —— 用构建产物 `build/newtab.css` 渲染亮 / 暗两块面板，核验两行 header、三态 chip、三态圆环、凹陷 composer、底行 `flex-1` 分到两端。
+自检时又发现一处**存证自身的 bug**：harness 里用 `F(x)+'0.12'` 拼透明度，产出 `rgb(var(--x))0.12` 这种畸形值 → 暗色面板的「已关闭/重选」显示成灰绿而不是红。是渲染图把它抓出来的 —— 印证「不带真实渲染的观感迁移就是嘴上说说」。
+
+守卫（新增 / 改造）：
+- `semanticColor.test.js` 产物清单扩至含 `text-danger` / `text-warn` / `bg-danger\/15` / `hover:bg-danger\/15` / `hover:text-danger` / `focus-within:border-accent` / `min-h-[74px]`；并修掉守卫自身的 bug —— 原来只认 `'.' + esc + ' {'`，带变体的类在产物里是 `.hover\:x:hover {`（后跟伪类不是空格），会被误判成「没产出」。
+- `panelUi.test.js`：T-208 ① 改成「面板根是 `bg-canvas`」单条 + 反向断言无 `bg-shell`；② 两行 header 均为 `bg-canvas`；④ composer 改 `bg-field`；T-209 的 `MUST_OVERRIDE` 从 `!bg-field` 改为 `!bg-transparent`（base 侧未变，只动 want 列）；T-212 整条改为「壳色机制已退场」的反向断言；T-207 chip 必须排在 `<form>` 之前；新增 clickable 静止底色的断言。
+- `panelRender.test.js`：圆环常驻文字退场、`aria-label` 承接、warn/danger 档位；`composer-hint` 必须**不存在**（并入 `title`）。
+- `iconSize.test.js`：允许 18px（新的发送键），24px 必须为 0。
+- `index.test.js`：导出面 16 → 17（`loadConfigDoc`）。
+
+验收：`npm test` **798 tests / 797 pass / 0 fail / 1 skipped**；`npm run lint` 0 error（仅 10 条既有 `no-console` warning）；`npm run check:i18n` 通过；`npm run build` 产物重建，`build/newtab.css` 核验：`--color-shell` 零条存活声明，`text-danger` / `text-warn` / `bg-danger\/15` / `hover:bg-danger\/15` / `hover:text-danger` / `focus-within:border-accent` / `min-h-[74px]` 全部产出。
+
+状态：已清（2026-10-10 完成）
+
+> **T-213 追加微调（2026-10-10 傍晚，用户看实施截图反馈）**：
+> ①「header 太挤」—— 行 1 `py-1→py-1.5`、`gap-1.5→gap-2`、标题钮 `px-2 py-1.5→px-2.5 py-2`，行 2 `mb-1.5→mb-2`，两行 header 总高 74 → 82px（左栏 `min-h-[82px]` 跟着对齐）。
+> ②「输入框留得太大」—— composer 未激活收成**一行**（`min-h-0` + autoresize 的内联行高 ≈32px），聚焦或已有草稿时撑回 56px（`min-h-[56px]` 压过内联 height），带 200ms 过渡。`composerActive = 聚焦 ‖ 有草稿`——塌缩只发生在「失焦且已清空」。过渡类必须带 `!`（UiTextarea 自带裸 `transition` 会整组吃掉它们，`cssSpecificity` 守卫当场拦下）。
+> 验收同上（798 / 797 pass / 0 fail），产物核验五个新工具类全部产出。
+
+---
+
+### T-215 — 跟随态实际不跟随：解除固定后切换标签页，目标页纹丝不动
+
+类型：bug
+登记日期：2026-10-10
+来源：2026-10-10 用户实测反馈「现在切换到跟随态但是实际上无法跟随」；同日源码核对定位根因
+现象：在标签页 chip 上解除固定（回到自动跟随态）之后，切换浏览器的活动标签页 —— chip 显示的目标页不变，助手实际读取的页面也不变。自动态只在「解除 / 固定的那一瞬间」解析一次，此后冻结。
+证据：**源码核对** —— `src/composable/agentHost.js` 只挂了两个标签页事件监听：`browser.tabs.onRemoved` 与 `browser.tabs.onUpdated`（且只对**当前 targetTab 的 id** 响应、只调 `markTargetHealth` 判健康，从不换页）。**全文件没有 `tabs.onActivated`** —— 「用户切到了另一个标签页」这一最直接的跟随信号，根本没有任何监听者在听。
+影响：自动态的语义名存实亡 —— 它不是「跟随当前页」，而是「解除那一刻的页面快照」。且 T-214 会给自动态挂「跟随」徽标，等于 UI 在明示一个不成立的行为 —— 说谎的 UI 比没有 UI 更糟。
+根因：跟随语义从未被实现过。降级链 `resolveTarget` 只在 pin/unpin/init/openSession 六个入口各跑一次，「激活标签页变化 → 重解析」这条实时路径不存在。
+
+结论：`src/agent/tab.js` 新增**纯函数 `targetFollowPlan({pinned, event, targetTabId, eventTabId, urlChanged})`** → `'skip' | 'reresolve' | 'health'`，三个 tabs 监听器统一问它拿动作，判定矩阵集中一处、node 可测：固定态一律 `health`（pin 的纪律就是不跟）；自动态 `removed` → `reresolve`（读的页没了就跟下一个）；自动态 `activated` → 换页 `reresolve`、激活的就是目标页 `skip`；自动态 `updated` 且 url 变 → `reresolve`（同页签导航是跟随语义的一部分，不再标 drift）、仅 title/favicon → `health`。`agentHost.js` 补挂 `tabs.onActivated`（T-08 以来第三个监听）并在卸载时成对摘除；`followOrHealth` 辅助让 reresolve 路径统一带 `.catch` 兜底。监听块定义在 `resetTargetToAuto` 之后（本文件 lint `no-use-before-define` 约束，与 syncTarget 注释同款）。`windows.onFocusChanged`（跨窗口跟随）按原计划暂不做。
+测试：`tab.test.js` 追加 4 条判定矩阵用例（22/22）；`agentHost` 三监听注册/摘除由 T-08 守卫扩为三事件成对断言。
+状态：已清（2026-10-10 完成，与 T-214 同轮）
+
+---
+
+### T-214 — 标签页切换组件重构：徽标即解除、自动态说人话、下拉去「窗口 N」组标
+
+类型：UI（新功能）
+登记日期：2026-10-10
+来源：2026-10-10 用户实施截图反馈两条 —— ①「已固定（不可交互）后面又带一个可交互的 X，颇为混乱」；②「窗口+数字的标签建议显示为"标签页"的指示文字」
+现象：固定态 chip 右侧三个"胶囊"打架（徽标不可点 / hover ✕ 可点解除 / hover 箭头开列表）；解除后自动态失去一切标注，看起来像"没了目标页"；下拉组标「窗口 N」在侧栏场景是纯噪音。
+设计稿：`docs/agent-tab-picker-redesign.html`（v1 → v2 用户提议「三态统一徽标」→ v2.1 徽标去图标，✕ 保留为动作线索）
+最终方案（用户提议 + v2.1 修订全部落地）：
+1. **三态统一徽标**：自动态「跟随」灰描边（`border-line text-fg-3`，**只显示**）；固定态「已固定 ✕」`accent/15` 实底 **button**，hover 整块转 danger，点击 = 解除；失效态「已关闭/已跳转」`danger/15` 红底只显示。三态同一骨架「图标+标题+徽标」，只有颜色深浅与可点性不同。
+2. **解除动作只剩一条路**：T-164 的独立 ✕ 按钮（与 `showUnpin` computed）删除 —— 它与"徽标不可点"是三信号打架的根因；固定态徽标本尊就是解除键（`data-test="unpin-target"` 保留，`@click.stop` 防冒泡开列表）。
+3. **失效态撤「重新选择」文字**：红徽标把话说完，点 chip 开列表就是重选；locale 键 `pickTab.reselect` 删除（防孤儿）。
+4. **下拉节标改「标签页 · N」**（新键 `pickTab.tabsLabel`）：单窗口不分组（`AgentTabList` 摊平 `flatTabs`）；多窗口窗口号降级为行内右缀小徽标，**首个窗口不打标**（通常是当前窗口，无需自报家门）。顺带清掉残留的 `v-close-popover`（popover 时代遗物）。
+5. **解除后 toast「已回到自动跟随」**（新键 `pickTab.unpinToast`，设计稿 §7 拍板项 = 要；`agentHost.onUnpinTab` 在 `resetTargetToAuto()` 成功后 `toast.success`）。
+6. **徽标内不放状态图标**（v2.1，回应用户「要么都加图标要不都不加」）：⚡ 撤掉；✕ 是唯一例外 —— 动作线索非状态图标。chip 主体的闪电兜底（无 favicon 的自动态）保留。
+
+结论：`AgentTabPicker.vue` trigger 重构为「主体 button + 状态徽标 + 箭头」三兄弟（嵌套 button 无效 HTML；箭头移出主体与设计稿 §3 顺序一致）；`AgentTabList.vue` 单层节标 + 扁平行 + 多窗口行内徽标；`agentHost.js` 加 unpin toast；locale 增 `followBadge`（跟随/Following）/ `tabsLabel`（标签页 · {n}/Tabs · {n}）/ `unpinToast`（已回到自动跟随/Back to auto-follow），`reselect` 两语同删，`pinnedHint`/`staleClosed`/`staleDrift` 文案随徽标形态改短。守卫迁移（逐条改写、不放松）：`panelUi.test.js` T-164 测试改写为「T-164/T-214 解除只剩点徽标一条路」（反向钉死 `showUnpin` 不许回来、`v-if="stale"` → `v-else-if="pinned"` → `v-else` 三兄弟分支、四条新 locale 键 + reselect 必须不存在 + unpinToast 必须被引用）；`affordance.test.js` T-173「auto 态不贴徽标」改写为「三态统一徽标」。`iconSize.test.js` 抓到 ✕ 图标 11px 违反 12/14/16/18 约定 → 改 12。
+验收：`npm test` **802 tests / 801 pass / 0 fail / 1 skipped**；`npm run lint` 0 error（仅 10 条既有 no-console warning）；`npm run check:i18n` 通过；`npm run build` 产物重建。
+
+**构建故障插曲（本票附带的根修，2026-10-10）**：重建时全部 66 个 Vue SFC 样式块同时报 `You forgot to add 'mini-css-extract-plugin' plugin`，而 tailwind.css 等普通 css 幸存 —— 与本票源码无关（HEAD 同样炸）。逐层探针（编译器 tap 清单 → NormalModule loader hook → require 缓存）定位根因：**Windows 盘符大小写把同一个包加载成两个实例** —— 本配置 require 插件拿到 `D:\`（大写）实例，而 enhanced-resolve 为 vue-loader 克隆规则重新解析 loader 路径时产出 `d:\`（小写）实例；Node require 缓存按字符串精确匹配，两个实例各持一个 `pluginSymbol`，插件用大写实例打标记、SFC 样式链上的小写 loader 读不到 → pitch 报「忘了加插件」。修法（`webpack.config.js`）：把已加载的 mini-css 缓存条目按两种盘符大小写各注册一份别名，任何大小写的 require 都命中同一实例。附带修复：`eventContract.test.js` 的 T-40 守卫按 `\n` 切行 + `//.*$` 剥注释，JS 正则 `.` 不匹配 `\r`，autocrlf 工作区里注释被误报成违规 —— 改为先归一 CRLF。
+状态：已清（2026-10-10 完成，与 T-215 同轮）

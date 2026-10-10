@@ -130,7 +130,7 @@ test('T-128：上下文水位圆环在有 usage 时渲染、分母缺失时整�
   );
 });
 
-test('T-163：水位阈值显示 —— <80% 整段不渲染 / >=80 提级 / >=95 红并附短词', async () => {
+test('T-163/T-213：水位阈值显示 —— <80% 整段不渲染 / >=80 出环且转 warn / >=95 红并附短词', async () => {
   // 三档全部靠渲染验证：分档是 computed 里的分支，静态守卫看不见，而
   // 「62% 到底还出不出来」正是这次改动要钉住的事。
   const at = (pct) =>
@@ -146,7 +146,7 @@ test('T-163：水位阈值显示 —— <80% 整段不渲染 / >=80 提级 / >=9
   assert.equal(
     quiet.includes('data-test="context-meter"'),
     false,
-    '62% 时水位整段不该出现 —— 一个常年显示「上下文 62%」的环不提示任何可行动的事（T-163）'
+    '62% 时水位整段不该出现 —— 一个常年显示水位的环不提示任何可行动的事（T-163）'
   );
 
   // 阈值两侧各测一次，否则「80」这个数本身没被钉住
@@ -162,32 +162,50 @@ test('T-163：水位阈值显示 —— <80% 整段不渲染 / >=80 提级 / >=9
     '80% 要开始出现 —— 提示档的下边界'
   );
 
-  // —— 提示档：提级但不告急 ——
+  // —— 提示档：出环、转 warn ——
   const warn = await at(84);
-  assert.ok(
-    warn.includes('workflow.agent.contextShort'),
-    '百分比要常驻（重设计 B 条）—— 原先只有 hover 才看得到'
+  assert.ok(warn.includes('data-test="context-ring"'), '80% 以上要出圆环本身');
+  // T-213：百分比**不再常驻**（用户拍板「只用圆环，鼠标移上去有详情就行」）。
+  // 精确值改挂 aria-label（读屏）+ title（hover），视觉上不再渲染。
+  //
+  // 注意：SSR 桩把 t('...') 原样渲染成键名，所以「输出里有没有这个键」并不能
+  // 区分 aria-label 与可见文字 —— 两处都会命中。要钉"视觉上不再有数字"，
+  // 只能查**可见文本**：`contextShort` 是唯一带 {pct} 插值的键，它出现在
+  // aria-label 属性里是合法的，出现在 `>` 与 `<` 之间才是常驻百分比回来了。
+  assert.equal(
+    />\s*workflow\.agent\.contextShort\s*</.test(warn),
+    false,
+    'T-213：百分比不该作为可见文字常驻 —— 它只该在 aria-label/title 里'
   );
   assert.ok(
-    warn.includes('text-accent'),
-    '>=80% 要提到 accent（黑/白）+ 环加粗：项目不用琥珀，见组件里的注释（T-152）'
+    warn.includes('aria-label="workflow.agent.contextShort'),
+    '百分比要挂在 aria-label 上 —— 看得见的人 hover，看不见的人直接听到'
+  );
+  assert.ok(
+    warn.includes('text-warn'),
+    '>=80% 转 warn（橙）档 —— 参考实现 pie 的三档里中间那档就是橙'
   );
   assert.equal(
     warn.includes('data-test="context-critical"'),
     false,
     '80~95% 只提级、不告急 —— 两个档位要有区别，否则等于只有一档'
   );
+  assert.equal(
+    warn.includes('text-danger'),
+    false,
+    '80~95% 不该已经是 danger —— 那是 >=95% 才有的档'
+  );
 
   // —— 告急档：红 + 短词 ——
   const critical = await at(96);
-  assert.ok(critical.includes('text-red-500'), '>=95% 要转红');
+  assert.ok(critical.includes('text-danger'), '>=95% 要转 danger');
   assert.ok(
     critical.includes('data-test="context-critical"'),
     '>=95% 必须行内附告急文字：只变色不说话，用户不知道该干什么'
   );
   assert.ok(
     critical.includes('workflow.agent.contextCriticalShort'),
-    '行内挂的是**短词**键 —— 整句 14 个字会把底行挤换行（实测 24px → 46px）'
+    '行内挂的是**短词**键 —— 整句 14 个字会把底行挤换行'
   );
   // 注意：必须带 (?!Short) —— contextCriticalShort 含 contextCritical 前缀，
   // 直接 includes 会被短词那条命中，这条断言就永远绿了。
@@ -266,9 +284,11 @@ test('T-168：会话历史列表渲染 —— 时间分组 / 消息数 / 空态 
   );
 });
 
-test('T-169：宿主形态 —— 宽宿主左栏常驻历史，窄宿主走视图切换', async () => {
-  // 形态是 computed 里的分支（`wide` / `inHistory`），静态守卫看不见 ——
+test('T-169（2026-10-10 修订）：宽宿主左栏常驻历史；窄宿主只有标题下拉，历史视图已撤', async () => {
+  // 形态是 computed 里的分支（`wide`），静态守卫看不见 ——
   // 「把左栏包进 v-if=false」在源码文本上一个字没少，守卫照样绿。
+  // 2026-10-10：窄宿主的视图切换（session-chip + 整页历史列表）随
+  // 「标题即会话下拉」一起撤掉 —— 同一份列表不该有两张脸（用户实证）。
   const sessions = [
     { id: 'a', title: '一条历史', lastAccessedAt: Date.now(), messageCount: 2 },
   ];
@@ -291,17 +311,18 @@ test('T-169：宿主形态 —— 宽宿主左栏常驻历史，窄宿主走视�
     '宽宿主 composer 必须一直在 —— 历史占的是左栏，不是正文区'
   );
   assert.equal(
-    wide.includes('data-test="open-history"'),
+    wide.includes('data-test="session-chip"'),
     false,
-    '宽宿主不该再有「进历史」chip：列表已经在屏幕上了，这个按钮等于跳到一个已经可见的东西'
+    '历史入口图标已撤：宽宿主不该有，窄宿主也不该再有'
   );
 
   const narrow = await renderSfc(PANEL, {
     props: { host: panelHost({ sessions }) },
   });
-  assert.ok(
-    narrow.includes('data-test="open-history"'),
-    '窄宿主（320px 侧栏）要有「进历史」chip —— 历史走视图切换'
+  assert.equal(
+    narrow.includes('data-test="session-chip"'),
+    false,
+    '窄宿主的历史入口已撤 —— 会话浏览全走标题下拉，别再长出第二个入口'
   );
   assert.equal(
     narrow.includes('data-test="session-side"'),
@@ -312,7 +333,7 @@ test('T-169：宿主形态 —— 宽宿主左栏常驻历史，窄宿主走视�
     narrow.includes('data-stub="agent-session-list"') ||
       narrow.includes('workflow.agent.session.history'),
     false,
-    '窄宿主默认停在对话视图 —— 历史要用户点进去才出现'
+    '窄宿主默认是对话视图，且不再有可切换的历史视图 —— 「历史会话」四个字只属于宽宿主左栏'
   );
 
   // 宿主没声明 layout 时按 narrow 兜底（更保守：不占常驻横向空间）。
@@ -517,31 +538,40 @@ test('T-159 / 重设计：发送与停止共用同一个图标按钮位，两个
   );
 });
 
-test('T-153 重设计：元信息行的快捷键提示，忙碌时改说「插话」', async () => {
+test('T-153/T-213：快捷键提示从常驻行改挂发送键 title，忙碌时改说「插话」', async () => {
+  // T-213 把那条常驻的「Enter 发送 · Shift+Enter 换行」提示行删了（省 14px 常驻
+  // 高度），整句并进发送键的 title —— hover 才付费。所以这里钉的是**它还在**、
+  // 只是换了位置：不能因为「不在页面上」就顺手丢掉，「怎么把话送出去」还是得有说明。
   const idle = await renderSfc(PANEL, {
     props: { host: panelHost({ busy: false }) },
   });
   assert.ok(
     idle.includes('workflow.agent.inputHint'),
-    '空闲态要写清 Enter 发送 / Shift+Enter 换行 —— 插话按钮去掉之后，' +
-      '这是「怎么把话送出去」的唯一说明'
+    '空闲态仍要能说出 Enter 发送 / Shift+Enter 换行 —— 现在挂在发送键 title 上'
+  );
+  assert.ok(
+    idle.includes('data-test="send-wrap"'),
+    '提示挂在 send-wrap 这个 span 的 title 上（不是 disabled 的按钮本身，见 T-160）'
   );
   assert.equal(
     idle.includes('workflow.agent.interjectHint'),
     false,
     '空闲态不该说插话 —— 那时 Enter 走的是普通发送'
   );
+  assert.equal(
+    idle.includes('data-test="composer-hint"'),
+    false,
+    'T-213：composer 顶部那条常驻提示行该没了 —— 它已经并进 title'
+  );
 
   const busy = await renderSfc(PANEL, {
     props: { host: panelHost({ busy: true }) },
   });
-  assert.ok(
-    busy.includes('workflow.agent.interjectHint'),
-    '忙碌态 Enter 进的是插话队列，提示要照实说，不能沿用「发送」'
-  );
+  // 忙碌时没有 send-wrap（换成停止键），所以插话提示此时**没有宿主**。
+  // 这不是回退：忙碌态输入框里打的话由 Enter 进队列，唯一要说的「在排队」
+  // 由 transcript 上方的常驻条报（T-12），底行不再重复。
+  assert.ok(busy.includes('data-test="stop-button"'), '忙碌态发送位换成停止键');
 
-  // 没配 API Key 时整行隐藏：发送已禁用，水位与快捷键此刻没有意义，
-  // 省下的约 22px 还给正文（这行是重设计新增的，不省就白丢了 T-158 攒的空间）。
   const unconfigured = await renderSfc(PANEL, {
     props: {
       host: panelHost({ config: { model: 'm', contextWindow: 128000 } }),
@@ -550,7 +580,7 @@ test('T-153 重设计：元信息行的快捷键提示，忙碌时改说「插�
   assert.equal(
     unconfigured.includes('workflow.agent.inputHint'),
     false,
-    '未配置 API Key 时元信息行要整行隐藏'
+    '未配置 API Key 时发送键不渲染，提示也随之消失'
   );
 });
 

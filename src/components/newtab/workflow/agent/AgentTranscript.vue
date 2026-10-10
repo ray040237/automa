@@ -18,27 +18,24 @@
       <template v-for="(item, i) in items" :key="item.key">
         <!-- T-174：用户可能贴进一条长 URL / 路径，气泡同样是 self-end（shrink-to-fit），
              没有断行规则时会长串撑破窄面板。`[overflow-wrap:anywhere]` 参与 min-content
-             计算，与工具卡用同一条约束。 -->
-        <div
-          v-if="item.type === 'user'"
-          class="max-w-full self-end whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg bg-blue-500/15 px-3 py-2 text-sm"
-        >
-          {{ item.text }}
-        </div>
+             计算，与工具卡用同一条约束。
+             T-205：这里换成 AgentUserBubble —— 长提问（贴日志/HTML/表格）自动折叠，
+             折叠判定在 `@/agent/foldText`，组件只量高度与摆位置。 -->
+        <agent-user-bubble v-if="item.type === 'user'" :text="item.text" />
 
         <!-- T-09：轮次分隔线。刻意做得很轻（一条线 + 时间），长会话里每轮都
              要有一条锚点，太重会盖过正文；「第 n 轮」那种更强的锚点等真需要
              再说（已登记的取舍）。 -->
         <div
           v-else-if="item.type === 'turn'"
-          class="flex items-center gap-2 pt-1 text-[11px] text-gray-400 dark:text-gray-500"
+          class="flex items-center gap-2 pt-1 text-[11px] text-fg-3"
           data-test="turn-divider"
         >
-          <span class="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+          <span class="h-px flex-1 bg-line" />
           <time v-if="item.at" :datetime="new Date(item.at).toISOString()">
             {{ clockAt(item.at) }}
           </time>
-          <span class="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+          <span class="h-px flex-1 bg-line" />
         </div>
 
         <agent-markdown v-else-if="item.type === 'text'" :raw="item.raw" />
@@ -46,30 +43,27 @@
         <!-- 思考过程默认折叠：它解释模型怎么想，但通常不该抢正文的位置 -->
         <div
           v-else-if="item.type === 'thinking'"
-          class="rounded border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/40"
+          class="rounded-control border border-line bg-surface"
         >
           <button
             type="button"
-            class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-500 dark:text-gray-400"
+            class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-fg-2"
             :aria-expanded="item.open"
             @click="toggleThinking(item)"
           >
             <v-remixicon
               :name="item.open ? 'riArrowDropDownLine' : 'riArrowRightLine'"
               size="16"
-              class="shrink-0 text-gray-400 dark:text-gray-500"
+              class="shrink-0 text-fg-3"
             />
             <span class="shrink-0">{{ thinkingLabel(item, i) }}</span>
-            <span
-              v-if="!item.open"
-              class="ml-2 truncate text-gray-400 dark:text-gray-500"
-            >
+            <span v-if="!item.open" class="ml-2 truncate text-fg-3">
               {{ previewOf(item) }}
             </span>
           </button>
           <div
             v-if="item.open"
-            class="border-t border-gray-200 px-3 py-2 text-gray-600 dark:border-gray-700 dark:text-gray-300"
+            class="border-t border-line px-3 py-2 text-fg-2"
           >
             <agent-markdown :raw="item.raw" />
           </div>
@@ -90,7 +84,7 @@
              有展开箭头）撞形状。 -->
         <div
           v-else-if="item.type === 'notice'"
-          class="rounded border-l-2 border-gray-300 bg-gray-500/5 px-3 py-2 text-xs text-gray-600 dark:border-gray-600 dark:bg-gray-500/10 dark:text-gray-300"
+          class="rounded-control border-l-2 border-gray-300 bg-gray-500/5 px-3 py-2 text-xs text-fg-2 dark:border-gray-600 dark:bg-gray-500/10"
         >
           {{ item.text }}
         </div>
@@ -102,7 +96,7 @@
              「重试」用出错这一轮之前最近的那条用户消息，不是重新打一遍。 -->
         <div
           v-else-if="item.type === 'error'"
-          class="rounded border border-red-500/40 bg-red-500/10 px-3 py-2"
+          class="rounded-control border border-red-500/40 bg-red-500/10 px-3 py-2"
         >
           <div class="flex items-start gap-2">
             <v-remixicon
@@ -162,11 +156,11 @@
              「上面那些消息」的摘要，展开看内容的人是少数 -->
         <div
           v-else-if="item.type === 'compaction'"
-          class="rounded border border-dashed border-gray-300 bg-gray-100 dark:border-gray-600 dark:bg-gray-800/60"
+          class="rounded-control border border-dashed border-line bg-field"
         >
           <button
             type="button"
-            class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-500 dark:text-gray-400"
+            class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-fg-2"
             :aria-expanded="item.open"
             @click="item.open = !item.open"
           >
@@ -177,7 +171,8 @@
                  （判断助手为什么忘了前面的内容）。
                  三处区分，全部零色彩成本（不引入新的色相）：
                  ① 虚线边框 —— 形状上就和实线的 thinking 卡不同；
-                 ② 灰底深一档（bg-gray-50 → bg-gray-100）；
+                 ② 底色深一档（thinking 是 surface 面 → compaction 是 field 面，
+                    T-208 后不再用 gray-50/gray-100，改走语义面）；
                  ③ 前置档案图标 + 箭头移到右侧（thinking 卡是左箭头、无前置图标）。 -->
             <v-remixicon name="riHistoryLine" size="16" class="shrink-0" />
             <span class="shrink-0">{{
@@ -191,7 +186,7 @@
           </button>
           <div
             v-if="item.open"
-            class="border-t border-dashed border-gray-300 px-3 py-2 text-gray-600 dark:border-gray-600 dark:text-gray-300"
+            class="border-t border-dashed border-line px-3 py-2 text-fg-2"
           >
             <agent-markdown :raw="item.raw" />
           </div>
@@ -203,12 +198,15 @@
            删掉了 —— 键还在 locale 里，全仓却零引用。
            示例点击只填入草稿（pick-example），**不自动发送**：示例是猜的，
            用户得能先改再决定发不发。
-           放在滚动容器内：内容少时它就落在可视区中间，而不是贴在顶上。 -->
+           T-199：加 `flex-1 justify-center` —— 它现在是 scroller 唯一的直接子
+           元素（items 为空时才渲染），撑满后居中。窄宿主（侧栏）正文区常有 500px+
+           高，原先靠 py-8 让这一块落在顶部附近、下方大片空白，看着像「加载没完成」；
+           居中后它明确读作「这里等你开口」。（有消息时这个分支不渲染，不影响正文。） -->
       <div
         v-if="items.length === 0"
-        class="flex flex-col items-center gap-3 py-8 text-center"
+        class="flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center"
       >
-        <p class="text-sm text-gray-500 dark:text-gray-400">
+        <p class="text-sm text-fg-2">
           {{ t('workflow.agent.empty') }}
         </p>
 
@@ -216,7 +214,7 @@
           <li v-for="ex in examples" :key="ex.id">
             <button
               type="button"
-              class="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              class="w-full rounded-control border border-line bg-surface px-3 py-1.5 text-left text-xs text-fg-2 hover:bg-field"
               @click="emit('pick-example', ex.text)"
             >
               {{ ex.text }}
@@ -232,7 +230,7 @@
           <li
             v-for="g in groups"
             :key="g.id"
-            class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+            class="rounded-chip bg-field px-1.5 py-0.5 text-[11px] text-fg-2"
           >
             {{ t('workflow.agent.group.' + g.id) }}
           </li>
@@ -240,10 +238,7 @@
       </div>
 
       <!-- 工具跑完到下一个字之间是空窗期，不给点反馈用户只能去看输入框才知道还在跑 -->
-      <div
-        v-if="pendingHint"
-        class="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500"
-      >
+      <div v-if="pendingHint" class="flex items-center gap-2 text-xs text-fg-3">
         <v-remixicon name="riLoader4Line" size="14" class="animate-spin" />
         {{ t('workflow.agent.thinking') }}
       </div>
@@ -253,7 +248,7 @@
     <button
       v-if="items.length > 0 && !stickToBottom"
       type="button"
-      class="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center rounded-full border border-gray-200 bg-white px-3 py-1 text-xs shadow-sm transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700"
+      class="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center rounded-full border border-line bg-surface px-3 py-1 text-xs shadow-sm transition duration-fast ease-panel hover:bg-field"
       @click="jumpToLatest"
     >
       <v-remixicon name="riArrowDownLine" size="14" class="mr-1" />
@@ -272,6 +267,8 @@ import { createFolder } from '@/agent/fold';
 import AgentMarkdown from './AgentMarkdown.vue';
 // T-09：时刻格式化在纯模块里（有单测），组件只负责摆位置
 import AgentToolStep from './AgentToolStep.vue';
+// T-205：长用户气泡自动折叠（判定在 @/agent/foldText，此处分量一个组件承载测量）
+import AgentUserBubble from './AgentUserBubble.vue';
 
 const props = defineProps({
   events: { type: Array, default: () => [] },

@@ -20,6 +20,7 @@
       "name": "Element selector",
       "noAccess": "Don't have access to this site"
     },
+    "openAgent": "Open assistant",
     "workflow": {
       "new": "New workflow",
       "rename": "Rename workflow",

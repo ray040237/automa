@@ -8,6 +8,7 @@ import {
   originOf,
   targetHealth,
   tabPickPayload,
+  targetFollowPlan,
 } from './tab';
 
 /** 构造一个可控的 browser.tabs 替身 */
@@ -305,5 +306,82 @@ test('tabPickPayload：面板下拉的载荷形状（区别于 normalize 的内�
     'favIconUrl' in tabPickPayload({ id: 5, url: 'https://c.com' }),
     true,
     'tabPickPayload 显式带 undefined 键'
+  );
+});
+
+// ═══════════════════════════════════════════════════════════════
+// T-215：跟随态的动作判定（targetFollowPlan）
+//
+// 背景：跟随态此前只在 pin/unpin/init 各解析一次，之后冻结 —— 没有任何
+// 监听者在听「用户切换了标签页」。agentHost 的三个监听器（activated /
+// removed / updated）现在统一问本函数拿动作，这里钉住判定矩阵。
+// ═══════════════════════════════════════════════════════════════
+
+test('T-215：固定态三个事件都只判健康 —— pin 的纪律就是不跟', () => {
+  for (const event of ['activated', 'removed', 'updated']) {
+    assert.equal(
+      targetFollowPlan({
+        pinned: true,
+        event,
+        eventTabId: 7,
+        urlChanged: true,
+      }),
+      'health',
+      event + ' 在固定态必须 health（origin 才是真身份，不自动换页）'
+    );
+  }
+});
+
+test('T-215：自动态 activated —— 换页重解析，激活的就是目标页则跳过', () => {
+  assert.equal(
+    targetFollowPlan({
+      pinned: false,
+      event: 'activated',
+      targetTabId: 3,
+      eventTabId: 5,
+    }),
+    'reresolve',
+    '用户切到另一页：跟随语义就是跟过去'
+  );
+  assert.equal(
+    targetFollowPlan({
+      pinned: false,
+      event: 'activated',
+      targetTabId: 5,
+      eventTabId: 5,
+    }),
+    'skip',
+    '激活的就是当前目标页：解析结果不会变，省一次 tabs 查询'
+  );
+});
+
+test('T-215：自动态 removed —— 读的页没了就跟下一个（不再挂着 closed）', () => {
+  assert.equal(
+    targetFollowPlan({ pinned: false, event: 'removed' }),
+    'reresolve',
+    '自动态目标页被关：按降级链重解析，chip 不该停在「已关闭」'
+  );
+});
+
+test('T-215：自动态 updated —— 同页签导航才重解析，title/favicon 只判健康', () => {
+  assert.equal(
+    targetFollowPlan({
+      pinned: false,
+      event: 'updated',
+      targetTabId: 3,
+      urlChanged: true,
+    }),
+    'reresolve',
+    '同一页签导航到新页面是跟随语义的一部分，目标应更新而不是报 drift'
+  );
+  assert.equal(
+    targetFollowPlan({
+      pinned: false,
+      event: 'updated',
+      targetTabId: 3,
+      urlChanged: false,
+    }),
+    'health',
+    'title / favicon 变化无关跟随，照旧判健康'
   );
 });

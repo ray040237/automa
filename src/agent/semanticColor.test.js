@@ -78,7 +78,7 @@ test('T-172：琥珀/黄在面板里只能出现在「工具被拒」一处', ()
 });
 
 // —— ② 四张语义卡的配色必须互不相同 ——
-test('T-172：notice / 确认门 / 未配置横幅 / 工具被拒，四者配色两两不同', () => {
+test('T-172：notice / 确认门 / 未配置入口 / 工具被拒，四者配色两两不同', () => {
   /**
    * 取出某个语义点用的那串 class。
    *
@@ -98,8 +98,19 @@ test('T-172：notice / 确认门 / 未配置横幅 / 工具被拒，四者配色
   };
 
   const notice = paletteOf('AgentTranscript.vue', "item.type === 'notice'");
-  const confirm = paletteOf('AgentConfirmCard.vue', 'class="rounded border');
-  const unset = paletteOf('AgentPanel.vue', 'v-if="!configured"');
+  // T-200：圆角换成了语义名（rounded-card），标记跟着改。找的是「卡片那串
+  // class」，不是某个圆角值 —— 值变了不该让守卫失去锚点。
+  const confirm = paletteOf(
+    'AgentConfirmCard.vue',
+    'class="rounded-card border'
+  );
+  // T-207：未配置态从「一条红横幅」改成了「整页引导」。
+  // 语义没变（仍然是阻塞：不配 Key 就发不出话），但承载它的不再是一块
+  // 红底，而是一整页占位 + 一个 accent 主按钮 —— 红被收掉了。
+  // 守卫锚到那个主按钮（它带 text-accent），而不是引导页容器（容器刻意
+  // 无彩色）。这一改是**有意的**：它正好记录了「阻塞红 → 引导页」这个
+  // 视觉语言的迁移，不是偷偷放宽。
+  const unset = paletteOf('AgentPanel.vue', 'data-test="not-configured-cta"');
   const rejected = paletteOf('AgentToolStep.vue', 'TOOL_STATUS.REJECTED');
 
   // 按「色相」归类。accent 在本仓=近黑/近白（--color-accent: 24 24 27 /
@@ -116,22 +127,88 @@ test('T-172：notice / 确认门 / 未配置横幅 / 工具被拒，四者配色
     rejected: scheme(rejected),
   };
 
-  // advisory 不需要颜色 → 中性灰；要用户裁决 → accent；阻塞 → 红；被拒 → 琥珀。
+  // advisory 不需要颜色 → 中性灰；要用户裁决 → accent；入口阻塞 → accent 主按钮；
+  // 被拒 → 琥珀。未配置与确认门同为 accent，靠**形态**（整页占位 vs 卡内分档）
+  // 区分，而不是靠再加一个色相 —— 这正是「一种颜色只能表示一件事」的背面：
+  // 一个语义也不该被迫多占一个色相。
   assert.deepEqual(
     got,
-    { notice: 'gray', confirm: 'accent', unset: 'red', rejected: 'amber' },
+    { notice: 'gray', confirm: 'accent', unset: 'accent', rejected: 'amber' },
     '四种语义的配色发生了漂移。当前约定：advisory=灰、需裁决=accent、' +
-      '阻塞=红、被拒=琥珀。改动是允许的，但必须是有意的 —— ' +
+      '未配置入口=accent（靠整页形态区分，不再用红）、被拒=琥珀。' +
+      '改动是允许的，但必须是有意的 —— ' +
       `实测 ${JSON.stringify(got)}`
   );
 
-  // 再加一条：四者两两不同（防止又退化回共用）
+  // 再加一条：四个语义里，唯一允许共用色相的是 accent（confirm 与 unset），
+  // 且它们必须靠形态区分，不能都长成一张卡。其余色相仍然一一对应。
   const values = Object.values(got);
   assert.equal(
     new Set(values).size,
-    values.length,
-    '有语义共用了同一个色相：' + JSON.stringify(got)
+    values.length - 1,
+    '除 confirm/unset 这两个 accent 形态外，不该再有语义共用色相：' +
+      JSON.stringify(got)
   );
+  assert.equal(
+    values.filter((v) => v === 'red').length,
+    0,
+    '阻塞态已经不再用红：未配置走整页引导（accent），别把红加回来 —— ' +
+      '红在本面板没有语义位置了'
+  );
+});
+
+// —— ②b 确认卡内部的影响面分档（T-200）——
+test('T-200：确认卡按影响面分 local / browser 两档，且不引入第二个色相', () => {
+  const src = strip(
+    read('src/components/newtab/workflow/agent/AgentConfirmCard.vue')
+  );
+
+  // ① 判定必须住在纯函数模块里（.vue 里的分支一条都测不到）
+  assert.match(
+    src,
+    /confirmScope\(kind\.value\)/,
+    '作用域判定要调 @/agent/confirm 的 confirmScope，不能就地 switch'
+  );
+
+  // ② 两档的 class 串必须不一样，否则「分档」只是个没落地的变量
+  const local = (src.match(/'!border-accent[^']*'/) || [])[0];
+  assert.ok(
+    local,
+    'local 档的加强类不见了（border-accent 实色 + 深一档的底）—— 两档退回一档'
+  );
+  assert.ok(
+    /border-accent/.test(local) && /bg-accent/.test(local),
+    `local 档要同时加强边框与底色，实际：${local}`
+  );
+  // 加强串里不许出现别的色相 —— accent 是本档唯一允许的颜色
+  for (const hue of ['amber', 'yellow', 'red', 'green']) {
+    assert.ok(
+      !new RegExp(`(?:bg|border|text)-${hue}`).test(local),
+      `local 档出现了 ${hue}：琥珀已归「工具被拒」、红归「阻塞」、绿归「成功」，` +
+        '确认卡内部的分档只能走 accent 的强度差（T-172 的纪律）'
+    );
+  }
+
+  // ③ 两个图标必须不同 —— 色觉障碍用户靠图标与文案分档，颜色不是唯一通道
+  const icons = [...src.matchAll(/'(ri[A-Za-z0-9]+)'/g)].map((m) => m[1]);
+  assert.ok(
+    icons.length >= 2 && new Set(icons).size === icons.length,
+    `两档的图标要各不相同，实际：${icons.join(', ')}`
+  );
+
+  // ④ 徽标文案两种语言都得有，否则界面上显示裸 key
+  for (const lang of ['zh', 'en']) {
+    const { confirm } = JSON.parse(read(`src/locales/${lang}/newtab.json`))
+      .workflow.agent;
+
+    for (const key of ['scopeLocal', 'scopeBrowser']) {
+      assert.equal(
+        typeof confirm[key],
+        'string',
+        `${lang}/newtab.json 缺 workflow.agent.confirm.${key}`
+      );
+    }
+  }
 });
 
 // —— ③ 两个折叠卡不能长得一样（T-154）——
@@ -159,10 +236,23 @@ test('T-154：thinking 卡与 compaction 卡的区分点必须还在', () => {
     'thinking 卡不该用虚线，否则两者又混了'
   );
 
-  // ② 灰底深一档
+  // ② 底色分层（T-208 后从 gray-50/gray-100 改走语义面）
+  //
+  // 原来钉的是「compaction 比 thinking 深一档」（bg-gray-50 → bg-gray-100）。
+  // T-208 把这两张卡换成语义面：thinking = surface（浮起，最亮），
+  // compaction = field（凹陷，深一档）。**不变量没变**（compaction 更深），
+  // 但具体的 class 名变了 —— 所以改成钉语义名，并把「两者不同面」也钉上。
   assert.ok(
-    /bg-gray-100/.test(compaction) && !/bg-gray-100/.test(thinking),
-    'compaction 卡要比 thinking 卡的 bg-gray-50 深一档'
+    /bg-field/.test(compaction),
+    'compaction 卡用 field 面（比 thinking 的 surface 深一档）—— 这是两卡的底色区分'
+  );
+  assert.ok(
+    /bg-surface/.test(thinking) && !/bg-field/.test(thinking),
+    'thinking 卡用 surface 面；若它也用 field，两张卡底色就一样了（T-154 的原始症状）'
+  );
+  assert.ok(
+    !/bg-field/.test(thinking),
+    'thinking 与 compaction 必须落在不同的面上'
   );
 
   // ③ 档案图标在前 + 箭头移到右侧
@@ -203,8 +293,61 @@ test('T-172：语义色 class 必须真的存在于构建 CSS（别写了个空�
     'bg-gray-500\\/5',
     'border-red-300',
     'bg-gray-100',
+    // T-200：语义圆角名是新加的 borderRadius 档位。写了名字但 Tailwind 没产出，
+    // 表现是元素变直角 —— 与 T-171 同一类「静默失效」，必须钉在产物上。
+    'rounded-chip',
+    'rounded-control',
+    'rounded-card',
+    // T-208：三层底色 + 分隔线是本轮新增的语义色 token（走 CSS 变量）。与圆角
+    // 同理 —— 写了名字但 Tailwind 没产出，表现是「元素没有底色 / 线消失」，
+    // 属于 T-171 那类静默失效，必须钉在产物上。
+    'bg-canvas',
+    'bg-surface',
+    'bg-field',
+    'border-line',
+    // T-209：composer 输入区改成 `!bg-field`（带 ! 的 importance 变体）。Tailwind
+    // 对带 ! 的类产出的是 `.\!bg-field`，与不带 ! 的 `bg-field` 是两个不同的
+    // 类名 —— 写了 `!bg-field` 而上游没产出，输入区就退回透明（静默失效）。
+    '\\!bg-field',
+    // T-211：三档语义文字色。写了 text-fg-2 而 Tailwind 没产出，表现是文字
+    // 继承父级色（通常太深或太浅），与 T-171 同类静默失效。
+    'text-fg-1',
+    'text-fg-2',
+    'text-fg-3',
+    // T-213：危险/警戒两档语义色。这里是**第二次**踩到同一类坑：本票起初
+    // 写的是 `bg-danger/12`，而 12 不在 Tailwind 默认的透明度刻度里
+    // （默认只有 0/5/10/15/20/25…）。结果是 class 静默失效 ——
+    // 标签页失效态与删除按钮的 hover 底色整块不见了，且**不报任何错**。
+    // 所以语义色的**每一个用到的组合**都必须钉在产物上，不能只钉 token 名。
+    'text-danger',
+    'text-warn',
+    'bg-danger\\/15',
+    'hover\\:bg-danger\\/15',
+    'hover\\:text-danger',
+    // T-213：composer 卡片凹陷 + 聚焦时描边提亮。同样是首次使用的组合。
+    'focus-within\\:border-accent',
+    // T-213：两行头部里，左列（历史列表）的头部要钉到与右列同高，
+    // 靠的就是这个任意值高度。写错了不会报错，只会「两列头顶不齐」。
+    // （2026-10-10「太挤」反馈后 74px → 82px。）
+    'min-h-\\[82px\\]',
+    // 2026-10-10「输入框留得太大」反馈：composer 未激活收一行、激活撑回
+    // 56px，靠动态切 min-h + 过渡。transition-[min-height] 是新引入的
+    // 任意值工具类 —— 同样属于「写了但没产出就静默失效」家族（没产出的
+    // 表现是塌/撑瞬间跳变，没有过渡）。带 `!` 是因为 UiTextarea 自带裸
+    // `transition`（cssSpecificity 守卫抓出来的：不加强调会被它整组吃掉）。
+    '\\!transition-\\[min-height\\]',
+    '\\!duration-base',
+    '\\!ease-panel',
+    'min-h-\\[56px\\]',
   ];
-  const missing = need.filter((esc) => !css.includes('.' + esc + ' {'));
+  // 带变体的类（hover: / focus-within: / peer-hover: …）在产物里长的是
+  // `.hover\:bg-danger\/15:hover {` —— 选择器后面跟的是伪类，不是空格。
+  // 原来只认 `'.' + esc + ' {'`，于是所有带变体的项都会被误判成「没产出」。
+  // 这里放宽到「后面跟 { 或 :」两种形态；仍然要求**选择器开头**精确匹配，
+  // 所以 `bg-danger\/15` 不会因为 `hover:bg-danger\/15` 存在而被误认为通过。
+  const emitted = (esc) =>
+    css.includes('.' + esc + ' {') || css.includes('.' + esc + ':');
+  const missing = need.filter((esc) => !emitted(esc));
   assert.deepEqual(
     missing.map((m) => m.replace(/\\/g, '')),
     [],

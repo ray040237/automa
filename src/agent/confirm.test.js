@@ -12,6 +12,7 @@ import {
   nextSessionAuth,
   normalizeAnswer,
   shouldSkipConfirmation,
+  confirmScope,
 } from './confirm';
 import { TOOLS } from './tools';
 
@@ -358,4 +359,51 @@ test('createSessionAuth：planSwitch 给出「先拒挂起再失效」的动作'
   assert.equal(auth.pending, null);
   auth.invalidate();
   assert.equal(auth.authorized, false);
+});
+
+/* ---------------- 影响面作用域（T-200） ---------------- */
+
+test('confirmScope：只在浏览器里做动作的两种 kind 归 browser', () => {
+  // selector 是「给你正在看的页面描边」，url 是「开个标签页」——
+  // 后果都在浏览器窗口内，随时能撤销。
+  assert.equal(confirmScope('selector'), 'browser');
+  assert.equal(confirmScope('url'), 'browser');
+});
+
+test('confirmScope：动到用户数据与执行环境的归 local', () => {
+  assert.equal(confirmScope('code'), 'local');
+  assert.equal(confirmScope('canvas'), 'local');
+});
+
+test('confirmScope：未知 kind 按 local 处理（危险面不清楚时按重的一档）', () => {
+  // 与 validateTools 同一个保守方向：分类缺失一律按需要确认处理。
+  // 新工具加了 kind 却忘了登记作用域时，界面上显示的是更醒目的那一档。
+  assert.equal(confirmScope('generic'), 'local');
+  assert.equal(confirmScope('some_future_kind'), 'local');
+  assert.equal(confirmScope(''), 'local');
+  assert.equal(confirmScope(undefined), 'local');
+});
+
+test('confirmScope：真实工具注册表里每个 write 工具都能分出档', () => {
+  // 新增 write 工具时如果 confirmDetail 给了一个没登记过的 kind，
+  // 这里不会红（按 local 兜底是对的），但下面这条保证**已知**的都分得开。
+  const kinds = new Set();
+  for (const tool of TOOLS) {
+    if (tool.class !== 'write') continue;
+    const c = buildConfirmation({ name: tool.name, args: {}, tool });
+    kinds.add(c.kind);
+  }
+
+  assert.ok(
+    kinds.size >= 2,
+    `write 工具的 kind 只有 ${kinds.size} 种，分档无从谈起`
+  );
+
+  const scopes = new Set([...kinds].map((k) => confirmScope(k)));
+  assert.equal(
+    scopes.size,
+    2,
+    `分档结果只有 ${[...scopes]} —— 两档里有一档没有任何工具落在上面，` +
+      `说明分类写错了或某个 kind 拼错了（实测 kinds=${[...kinds]}）`
+  );
 });

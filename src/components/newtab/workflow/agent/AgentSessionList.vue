@@ -12,7 +12,11 @@
     它 —— 只能靠静态 grep。搬出下拉之后，它是真实节点了。
   -->
   <div class="flex h-full min-h-0 flex-col" data-test="session-history">
-    <div class="px-4 pb-2">
+    <!-- T-213：mode='popover' 时不渲染搜索框。
+         搜索是「在几十条里找一条」的工具，而下拉是「看最近几条、挑一条接着聊」
+         的入口 —— 塞进去会让浮层高出一行，且列表通常只有 5~8 条，
+         用不着搜。要看全部 / 要搜，走底部的「全部历史会话」。 -->
+    <div v-if="mode === 'view'" class="px-4 pb-2">
       <ui-input
         v-model="query"
         :placeholder="t('workflow.agent.session.searchPlaceholder')"
@@ -20,10 +24,13 @@
       />
     </div>
 
-    <div class="scroll min-h-0 flex-1 overflow-y-auto px-2">
+    <div
+      class="scroll min-h-0 flex-1 overflow-y-auto"
+      :class="mode === 'view' ? 'px-2' : 'px-1'"
+    >
       <p
         v-if="total === 0"
-        class="px-2 py-6 text-center text-sm text-gray-500"
+        class="px-2 py-6 text-center text-sm text-fg-2"
         data-test="session-empty"
       >
         {{ t('workflow.agent.session.empty') }}
@@ -33,15 +40,18 @@
            用户会以为搜索坏了。 -->
       <p
         v-else-if="groups.length === 0"
-        class="px-3 py-6 text-center text-xs leading-relaxed text-gray-500"
+        class="px-3 py-6 text-center text-xs leading-relaxed text-fg-2"
         data-test="session-search-limit"
       >
         {{ t('workflow.agent.session.searchLimit') }}
       </p>
 
       <template v-for="g in groups" :key="g.key">
+        <!-- 分组小标与模型弹层的规范形态统一（text-[10.5px] + font-medium +
+             tracking-wide，2026-10-10「不要长长短短」）。px-2 不动：
+             view 模式下 8+8=16px、popover 模式下 4+8=12px，与行的有效缩进对齐。 -->
         <p
-          class="px-2 pb-1 pt-2 text-[10px] text-gray-400"
+          class="px-2 pb-1 pt-2 text-[10.5px] font-medium uppercase tracking-wide text-fg-3"
           :data-test="'session-group-' + g.key"
         >
           {{ groupLabel(g.key) }}
@@ -55,7 +65,7 @@
         <div
           v-for="s in g.items"
           :key="s.id"
-          class="flex items-start gap-1 rounded"
+          class="session-row group/row flex items-start gap-1 rounded-chip"
           :class="{ 'bg-box-transparent': s.id === currentSessionId }"
           :title="disabled ? t('workflow.agent.session.busyHint') : ''"
         >
@@ -63,50 +73,69 @@
             type="button"
             :disabled="disabled"
             :title="disabled ? t('workflow.agent.session.busyHint') : ''"
-            class="hoverable flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded px-2 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-60"
+            class="hoverable flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-chip px-2 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-60"
             @click="emit('select', s.id)"
           >
             <span
               class="w-full truncate text-[13px]"
-              :class="{ 'text-gray-400': !s.title }"
+              :class="{ 'text-fg-3': !s.title }"
               >{{ titleOf(s) }}</span
             >
-            <span class="text-[10.5px] text-gray-400">{{ subOf(s) }}</span>
+            <span
+              class="text-[10.5px] text-fg-3 transition duration-fast ease-panel group-hover/row:opacity-0"
+              >{{ subOf(s) }}</span
+            >
           </button>
 
-          <span
-            v-if="s.id === currentSessionId"
-            class="mt-2 shrink-0 text-[11px] text-accent"
-            >✓</span
-          >
+          <!-- T-213：当前会话的 ✓ 与删除键**占同一个位置**（都是右侧 22px），
+               所以悬停时 ✓ 让位给删除键，而不是两个并排把标题挤窄。
+               这是参考实现 pie 的做法：常态只给「哪条是当前」，
+               鼠标进来才把「能删」露出来。
 
-          <button
-            type="button"
-            class="mt-1 shrink-0 rounded p-1.5 text-gray-500 hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-400 dark:hover:text-red-400"
-            :disabled="disabled"
-            :title="
-              disabled
-                ? t('workflow.agent.session.busyHint')
-                : t('workflow.agent.session.deleteOne')
-            "
-            :aria-label="
-              disabled
-                ? t('workflow.agent.session.busyHint')
-                : t('workflow.agent.session.deleteOne')
-            "
-            @click="emit('delete', s.id)"
+               2026-10-10 用户实证的 bug：这个槽位容器**必须自己有尺寸**。
+               ✓ 只给当前会话渲染，删除键又是 absolute —— 于是在非当前会话
+               的行里，容器里没有任何静态内容，塌成 0×0，`inset-0` 跟着
+               0×0：删除键存在、hover 态也对，但点击区域是零，**怎么点都
+               点不到**。表现为「只有当前会话那行能删，别的行悬停没反应」。
+               给容器钉死 h-5 w-5，✓ 和删除键各自填满同一格。 -->
+          <div
+            class="relative mr-1 mt-1 flex h-5 w-5 shrink-0 items-center justify-center"
           >
-            <v-remixicon name="riDeleteBin7Line" size="14" class="shrink-0" />
-          </button>
+            <span
+              v-if="s.id === currentSessionId"
+              class="grid h-5 w-5 place-items-center text-[11px] text-accent transition duration-fast ease-panel group-hover/row:opacity-0"
+              >✓</span
+            >
+            <button
+              type="button"
+              class="absolute inset-0 grid place-items-center rounded-chip text-fg-3 opacity-0 transition duration-fast ease-panel hover:bg-danger/15 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40 group-hover/row:opacity-100"
+              :disabled="disabled"
+              :title="
+                disabled
+                  ? t('workflow.agent.session.busyHint')
+                  : t('workflow.agent.session.deleteOne')
+              "
+              :aria-label="
+                disabled
+                  ? t('workflow.agent.session.busyHint')
+                  : t('workflow.agent.session.deleteOne')
+              "
+              @click="emit('delete', s.id)"
+            >
+              <v-remixicon name="riDeleteBin7Line" size="14" class="shrink-0" />
+            </button>
+          </div>
         </div>
       </template>
     </div>
 
     <!-- T-09②：模型名是会话级信息，跟着列表走（换 provider / 换模型后要能确认
-         「这个答案是谁写的」）。T-153 之后水位不在这里了 —— 它在输入区的圆环上。 -->
+         「这个答案是谁写的」）。T-153 之后水位不在这里了 —— 它在输入区的圆环上。
+         T-213：mode='popover' 时不渲染 —— 下拉底部那行要留给「全部历史会话」，
+         而模型状态已经搬到 composer 底行的模型芯片上，不必两处都显示。 -->
     <p
-      v-if="model"
-      class="truncate border-t border-gray-200 px-3 py-2 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400"
+      v-if="model && mode === 'view'"
+      class="truncate border-t border-line px-3 py-2 text-xs text-fg-2"
       :title="model"
       data-test="model-name"
     >
@@ -140,6 +169,19 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   // T-09②：当前 provider 的模型名（config.model）
   model: { type: String, default: '' },
+  /**
+   * T-213：两种密度。
+   *   'view'    = 面板正文里的整块历史视图（默认）：带搜索框 + 底部模型名。
+   *   'popover' = 标题下拉里的列表：去掉搜索与模型名，行更紧，底部留给
+   *               「全部历史会话」。
+   * 同一个组件吃两种密度，是为了让「列表长什么样」只有一处实现 ——
+   * 下拉与视图里的行高、两行结构、删除交互保持一致。
+   */
+  mode: {
+    type: String,
+    default: 'view',
+    validator: (v) => ['view', 'popover'].includes(v),
+  },
 });
 
 const emit = defineEmits(['select', 'delete']);

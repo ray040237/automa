@@ -17,15 +17,95 @@
   }
 }
 
-:host, :root {
+:host,
+:root {
   --color-primary: 59 130 246;
   --color-secondary: 96 165 250;
   --color-accent: 24 24 27;
+
+  /* T-208：助手面板的三层底色 + 分隔线（借自参考实现 pie-ai-agent 的
+     --c-canvas/surface/field/line，值取自其 index.css）。三档几乎等亮的灰
+     代替 1px 边框来分层次：整屏没有一条边框，但面板底 / 浮起的卡 / 凹陷的
+     输入区各有各的深浅。RGB 三元组写法与本仓既有 primary/accent 一致
+     （配 withOpacityValue，支持 bg-surface/50 这种带透明度的用法）。 */
+  --color-canvas: 250 251 252; /* #FAFBFC 面板最底 */
+  --color-surface: 255 255 255; /* #FFFFFF 浮起的面（顶栏 / composer） */
+  --color-field: 244 246 248; /* #F4F6F8 凹陷的面（输入区） */
+  --color-line: 228 232 236; /* #E4E8EC 分隔线 */
+
+  /* T-213：删掉 T-212 的 --color-shell。
+     当初引入它是想「面板根与 chrome 同色、消除白卡浮在深壳上」，但实际观感
+     是把三层底色家族劈成两套（shell 一套、canvas/surface/field 一套），
+     顶栏降到 shell 之后与 canvas 之间又多出一层。现在面板根统一回 canvas，
+     靠 canvas→surface→field 三层自己分层，不再引入第五个底色。 */
+
+  /* T-211：三档语义文字色（借自参考实现 pie-ai-agent 的 --c-fg-*，值取自其
+     index.css）。配合三层底色用：一档文字配一档面，跨主题稳定，不必再写
+     `text-gray-500 dark:text-gray-400` 这种双声明。
+     fg-1 = 正文 #14181D / fg-2 = 次要 #5A6470 / fg-3 = 弱 #98A1AC */
+  --color-fg-1: 20 24 29;
+  --color-fg-2: 90 100 112;
+  --color-fg-3: 152 161 172;
+
+  /* T-213：危险 / 警戒两档语义色（借自参考实现 pie 的 --c-* 命名）。
+     原先这两档全靠 `text-red-500 dark:text-red-400` 双声明散落在各处，
+     同一件事写两遍、漏一处就在某个主题下看不清 —— 与 fg-* 要解决的问题
+     一模一样。这里给三件东西：
+       danger   = 文字/描边/图标（对 surface 与 field 都要够对比）
+       warn     = 水位圆环的中档（≥60%），比 danger 浅一档
+     淡底不用单独的 token —— 直接写 `bg-danger/15`，Tailwind 的透明度修饰符
+     会走 withOpacityValue 那条路（变量本身必须是裸三元组，见下）。
+     注意透明度档位只能用 Tailwind 默认存在的刻度（/5 /10 /15 /20 …）：
+     写成 /12 这类自定义值不会报错、但产物里**根本不会生成**那条规则，
+     于是 class 静默失效。本票就踩过一次（标签页失效态整块底色不见了）。
+     T-213 只在圆环三档与标签页失效态用了它们；存量那些双声明**没有**顺手
+     全量迁移 —— 那是一次独立的可验收改动，混进本票会让 diff 说不清。 */
+  --color-danger: 217 84 74;
+  --color-warn: 224 122 74;
+
+  /* 动效的统一语言（T-200）：一条曲线 + 三档时长。
+     对应 tailwind.config.js 的 ease-panel / duration-fast|base|slow。
+     曲线取自参考实现 sidepanel：末端减速明显、没有回弹，
+     在 320px 的窄面板里比 ease-out 更"贴"，不会显得内容在飘。 */
+  --ease-panel: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-fast: 140ms;
+  --dur-base: 200ms;
+  --dur-slow: 260ms;
 }
 .dark {
   --color-primary: 96 165 250;
   --color-secondary: 59 130 246;
   --color-accent: 244 244 245;
+
+  /* T-208 暗色：**重新配的，不是亮色的反相**（见评估文档第三条）。
+     参考实现的暗色 accent 是亮灰蓝 #B8C8D6，而不是把亮色的灰蓝压暗。
+     这里同理：三层底各自的明度差被保留（canvas 最深 → surface 次之 →
+     field 最浅），线仍比底亮一档，这样暗色下也靠底色分层而非边框。 */
+  --color-canvas: 11 13 16; /* #0B0D10 */
+  --color-surface: 20 23 28; /* #14171C */
+  --color-field: 26 30 37; /* #1A1E25 */
+  --color-line: 34 39 47; /* #22272F */
+
+  /* T-213 暗色：同亮色，删掉 --color-shell。面板根回到 canvas (#0B0D10)，
+     与侧栏 chrome 之间不再强求同色 —— 靠自身三层底色分层即可。 */
+
+  /* T-211 暗色 fg：同样是重配不是反相。fg-1 取参考实现给的 #E5E8EC ——
+     纯反相 #14181D 会得到刺眼的近白，压不住与 #14171C 面之间的强对比。
+     实测 WCAG 对比度（对 surface #14171C）：fg-1 ≈ 14.6（远超 AA）、
+     fg-2 ≈ 5.7（过 AA 4.5）、fg-3 ≈ 2.6（低于 AA）。
+     fg-3 偏低是**刻意的**：它只用于占位符 / 图标 / 极淡元信息这类非正文，
+     WCAG 对非必要文字放宽到 3:1，且这个值取自参考实现（保持观感一致）。
+     若将来有用户反馈「暗色下提示看不清」，调这里即可，不必动亮色。 */
+  --color-fg-1: 229 232 236; /* #E5E8EC */
+  --color-fg-2: 138 146 158; /* #8A929E */
+  --color-fg-3: 82 89 101; /* #525965 */
+
+  /* T-213 暗色 danger / warn：重配而不是反相。
+     亮色 danger #D9544A 在暗底上偏暗、发闷；暗色提到 #F07167（更亮更饱和），
+     这是"警示色在深底上要提亮"的常规做法，与 T-208/T-211 对暗色的处理一致。
+     warn 同理 #E08A5A。 */
+  --color-danger: 240 113 103; /* #F07167 */
+  --color-warn: 224 138 90; /* #E08A5A */
 }
 
 * {
@@ -36,7 +116,8 @@ html.dark {
   @apply bg-gray-900;
 }
 
-body, :host {
+body,
+:host {
   font-family: 'Inter var', sans-serif !important;
   font-size: 16px !important;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
@@ -68,7 +149,6 @@ select:focus,
   text-overflow: ellipsis;
 }
 
-
 .custom-table thead {
   @apply bg-box-transparent;
 }
@@ -85,13 +165,11 @@ select:focus,
   @apply divide-y;
 }
 
-
-
 pre {
   font-size: 15px;
 }
 
-.scroll, 
+.scroll,
 .scroll .cm-scroller {
   &::-webkit-scrollbar {
     width: 7px;
@@ -111,7 +189,6 @@ pre {
   }
 }
 
-
 .tippy-box[data-theme~='tooltip-theme'] {
   @apply px-2 py-1 bg-gray-900 dark:bg-gray-200 dark:text-black text-sm text-gray-200 rounded-md;
 }
@@ -126,9 +203,33 @@ pre {
   height: auto;
 }
 .ProseMirror img.ProseMirror-selectednode {
-  outline: 3px solid #68CEF8;
+  outline: 3px solid #68cef8;
 }
 
 .input-label {
   @apply ml-1 text-sm text-gray-600 dark:text-gray-200;
+}
+
+/* T-200：系统级「减少动态效果」兜底。
+   开了这个偏好的用户（前庭功能障碍 / 单纯嫌晃）不该被界面追着动。
+   压到 0.01ms 而不是 0：0 会让 transitionend 不触发，
+   依赖该事件收尾的逻辑会卡住（这是标准做法里那条容易漏的注释）。
+
+   一个例外：加载转圈（animate-spin）是「还在跑」的**唯一**指示，
+   压掉它用户看到的是一个静止的圈，会以为界面卡死 —— 它是功能性指示，
+   不是装饰，所以单独放回来。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-spin {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
+  }
 }

@@ -52,7 +52,10 @@
             <v-remixicon name="riFlowChart" class="mr-2" />
             {{ t('workflow.new') }}
           </ui-list-item>
+          <!-- T-199：助手入口只在 Firefox 保留。Chrome 上助手是浏览器侧边栏
+               （popup 里有入口），主面板不再有它的标签页。 -->
           <ui-list-item
+            v-if="isFirefox"
             v-close-popover
             class="cursor-pointer"
             @click="openAgentTab()"
@@ -79,12 +82,17 @@ import { onMounted, reactive, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import Draggable from 'vuedraggable';
+import { IS_FIREFOX } from '@/common/utils/constant';
 
 let tabTitleTimeout = null;
 
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
+
+// T-199：Chrome 上助手已迁到浏览器侧边栏，主面板不再有它的标签页与入口；
+// Firefox 因无 sidePanel API 仍保留这套形态（见 docs/t199-sidepanel-plan.md §4）。
+const isFirefox = IS_FIREFOX;
 
 const state = reactive({
   tabs: [],
@@ -194,12 +202,31 @@ watch(
 );
 
 onMounted(() => {
-  const tabs = parseJSON(localStorage.getItem('tabs'), null);
+  let tabs = parseJSON(localStorage.getItem('tabs'), null);
   if (tabs) {
-    // 兼容旧数据：助手标签页曾被误存为 /agent（该路由不存在，会导致白屏）
-    tabs.forEach((tab) => {
-      if (tab.path === '/agent') tab.path = '/workflows/agent';
-    });
+    if (isFirefox) {
+      // 兼容旧数据：助手标签页曾被误存为 /agent（该路由不存在，会导致白屏）。
+      // Firefox 仍保留助手标签页，这条迁移继续有效。
+      tabs.forEach((tab) => {
+        if (tab.path === '/agent') tab.path = '/workflows/agent';
+      });
+    } else {
+      // T-199：Chrome 上助手标签页的路由已随迁移撤除。老用户 localStorage 里
+      // 可能残留一条 path='/workflows/agent' 的 tab —— 不过滤掉的话，它指向一个
+      // 已删除的命名路由，点开就是白屏。这里静默剔除（用户感知为「那个标签页
+      // 自己没了」，比打开一片空白好）。**必须过滤而不是改路径**：Chrome 侧已无
+      // 可改去的落点。
+      tabs = tabs.filter(
+        (tab) => tab.path !== '/workflows/agent' && tab.path !== '/agent'
+      );
+
+      // 被删的若是当前激活页，激活态会指向一个不存在的 id —— 顺带回落到第一页。
+      const activeTab = localStorage.getItem('activeTab');
+      if (activeTab && !tabs.some((tab) => tab.id === activeTab)) {
+        localStorage.removeItem('activeTab');
+      }
+    }
+
     state.tabs = tabs;
 
     const activeTab = localStorage.getItem('activeTab');
@@ -207,7 +234,7 @@ onMounted(() => {
   }
 
   if (route.path === '/agent') {
-    router.replace('/workflows/agent');
+    router.replace(isFirefox ? '/workflows/agent' : '/workflows');
   }
 
   if (state.tabs.length !== 0) {

@@ -13,7 +13,7 @@
     -->
     <div
       v-if="modelValue"
-      class="absolute z-50 rounded-lg border bg-white shadow-xl text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+      class="absolute z-50 rounded-card border border-line bg-surface shadow-xl text-fg-1"
       :class="panelClass"
     >
       <slot></slot>
@@ -32,9 +32,9 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
  * 定位与宽度都不受本列约束（实测三条症状，见模板里的注释）。这里改成留在本列内、
  * absolute 定位 —— 宽度由本列决定，物理上顶不出去，也不会挤动布局。
  *
- * 颜色也在这里显式定死（text-gray-800 / dark:text-gray-100）：菜单底色是
- * bg-white / dark:bg-gray-800，若不显式给字色就会跟着父级继承成「底色同色」，
- * 菜单项看不见 —— 这正是删除按钮消失的原因。
+ * 颜色也在这里显式定死（text-fg-1）：菜单底色是 bg-surface（亮 = 白 / 暗 =
+ * #14171C，T-209 起归三层灰家族），若不显式给字色就会跟着父级继承成
+ * 「底色同色」，菜单项看不见 —— 这正是删除按钮消失的原因。
  */
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

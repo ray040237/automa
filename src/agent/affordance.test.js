@@ -48,19 +48,32 @@ test('T-173：目标页 chip 的 title 要随 pinned 变化，不能是恒定文
   );
 });
 
-test('T-173：auto 态不贴徽标，pinned 态才贴且用 accent', () => {
+// —— T-173 / T-214：三态统一徽标 ——
+test('T-214：三态统一徽标 —— 跟随（只显示）/ 已固定 ✕（可点）/ 已关闭（只显示）', () => {
   const src = strip(read(`${AGENT}/AgentTabPicker.vue`));
 
+  // T-214 修订 T-173 的「auto 态不贴徽标」：三态都贴 —— 有没有徽标曾是
+  // 视觉断层（固定/失效贴、自动不贴，"自动"用户读不懂），三态连续谱由
+  // 颜色深浅 + 可点性区分。
+  assert.ok(/v-if="stale"/.test(src), '失效态徽标（danger 只显示）不见了');
   assert.ok(
     /v-else-if="pinned"/.test(src),
-    '徽标那块应该是 v-else-if="pinned" —— auto 态这一格留空（默认跟随是常态，' +
-      '常态不需要标注；原先两态都贴徽标，auto 那个「自动」用户读不懂）'
+    '固定态徽标（v-else-if="pinned"，可点解除）不见了'
+  );
+  assert.ok(
+    /pickTab\.followBadge/.test(src),
+    '自动态要有「跟随」灰描边徽标（pickTab.followBadge）—— ' +
+      'T-214 之前 auto 态不贴标签，与另外两态形成"有没有徽标"的断层'
   );
   // 注意用 (?!Hint)：朴素的 includes('pickTab.auto') 会被 pickTab.autoHint
   // 这个子串命中 —— 守卫的假阳性（第一版就是这么红的）。
   assert.ok(
     !/pickTab\.auto(?!Hint)/.test(src),
     'pickTab.auto 不该再被引用 —— 「自动」这个词已经不用了'
+  );
+  assert.ok(
+    !/pickTab\.reselect/.test(src),
+    '「重新选择」已随 T-214 删除 —— 红徽标把话说完，点 chip 就是重选'
   );
 
   // pinned 徽标要能与其它徽标一眼分开（原先两态同灰 bg-gray-500/15）

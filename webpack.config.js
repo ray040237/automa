@@ -6,6 +6,31 @@ const { VueLoaderPlugin } = require('vue-loader');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+
+// T-214 构建修复（Windows 专属，2026-10-10 实证）：
+//
+// enhanced-resolve 在为 vue-loader 克隆规则重新解析 loader 路径时，会把盘符
+// 归一成小写（d:\...），而上一行 require 插件拿到的是大写（D:\...）。Node 的
+// require 缓存按字符串精确匹配，于是**同一个包被加载成两个实例** —— 两个
+// 不同的 pluginSymbol。插件用大写实例在 loaderContext 上打标记，SFC 样式链上
+// 挂的却是小写实例的 loader，pitch 读不到自己的 Symbol，报「You forgot to add
+// 'mini-css-extract-plugin' plugin」—— 全部 66 个 SFC 样式块同时炸掉，而
+// tailwind.css 等普通 css 走原始规则（大写路径）幸存，极具迷惑性。
+// 修法：把已加载的 mini-css 模块缓存条目按两种盘符大小写各注册一份别名，
+// 让后续任何大小写的 require 都命中同一实例（Symbol 随之统一）。
+const Module = require('module');
+// 先把 loader.js 也拉进缓存（它依赖的 index.js / utils.js 已随上一行加载）
+require('mini-css-extract-plugin/dist/loader');
+
+Object.keys(Module._cache).forEach((key) => {
+  if (!/[/\\]mini-css-extract-plugin[/\\]/.test(key)) return;
+
+  const twin = /^[a-z]/.test(key)
+    ? key[0].toUpperCase() + key.slice(1)
+    : key[0].toLowerCase() + key.slice(1);
+  if (!Module._cache[twin]) Module._cache[twin] = Module._cache[key];
+});
+
 const TerserPlugin = require('terser-webpack-plugin');
 const env = require('./utils/env');
 const { applyOfflineCsp } = require('./utils/manifestCsp');
@@ -44,6 +69,7 @@ const options = {
     sandbox: path.join(__dirname, 'src', 'sandbox', 'index.js'),
     execute: path.join(__dirname, 'src', 'execute', 'index.js'),
     newtab: path.join(__dirname, 'src', 'newtab', 'index.js'),
+    sidepanel: path.join(__dirname, 'src', 'sidepanel', 'index.js'),
     popup: path.join(__dirname, 'src', 'popup', 'index.js'),
     params: path.join(__dirname, 'src', 'params', 'index.js'),
     background: path.join(__dirname, 'src', 'background', 'index.js'),
@@ -210,6 +236,15 @@ const options = {
       template: path.join(__dirname, 'src', 'newtab', 'index.html'),
       filename: 'newtab.html',
       chunks: ['newtab'],
+      cache: false,
+    }),
+    // T-199：浏览器侧边栏页面（chrome.sidePanel）。Chrome 侧栏由
+    // manifest.side_panel.default_path 指到这个 html；Firefox 不用它
+    // （Firefox 保留主面板标签页形态，见 docs/t199-sidepanel-plan.md §4）。
+    new HtmlWebpackPlugin({
+      template: path.join(__dirname, 'src', 'sidepanel', 'index.html'),
+      filename: 'sidepanel.html',
+      chunks: ['sidepanel'],
       cache: false,
     }),
     new HtmlWebpackPlugin({

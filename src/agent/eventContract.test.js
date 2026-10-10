@@ -68,7 +68,10 @@ test('错误事件只从 errorEvent() 出（T-40）', () => {
   for (const f of allSources) {
     if (f.replace(/\\/g, '/').endsWith('src/agent/events.js')) continue;
     const src = readFileSync(f, 'utf8');
-    const lines = src.split('\n');
+    // 先归一 CRLF（Windows 工作区 autocrlf 会把行尾漂成 \r\n；JS 正则的
+    // `.` 不匹配 \r，行尾带 \r 时下面那句注释剥离会静默失效 —— 2026-10-10
+    // 实测把注释里的历史说明误报成了违规）。
+    const lines = src.replace(/\r\n/g, '\n').split('\n');
     lines.forEach((line, idx) => {
       // 去掉行注释，避免注释里的说明文字误报
       const code = line.replace(/\/\/.*$/, '');

@@ -106,10 +106,18 @@ _Avoid_: 把它叫"闸门/校验失败"。
 
 **宿主(host)**:
 agent 的挂载点,共两个,共用 `src/composable/agentHost.js` 的接线与 `AgentPanel.vue`:
-① **独立助手页**(主面板标签页 `/workflows/agent`)——无画布,canvas 组不注册,
-会话归属全局(`getWorkflowId: () => null`);② **编辑器侧栏**(`workflows/[id].vue`
+① **浏览器侧栏**(Chrome,`src/sidepanel/`,`sidePanel` API)——无画布,canvas 组不注册,
+会话归属全局(`getWorkflowId: () => null`),面向当前网页;② **编辑器侧栏**(`workflows/[id].vue`
 右侧可拖拽 sidebar)——握着画布句柄,canvas 组开放,会话按 `workflowId` 过滤。
 两者差别只在 `enabledGroups` 与有没有 `canvas` 那四个句柄。
+Chrome 下不再有「独立助手页」(`/workflows/agent` 路由未注册);Firefox 不支持
+`sidePanel`,保留主面板标签页形态(路由 `agent` 仅在 `IS_FIREFOX` 时注册),见 ADR 0005。
+侧栏是独立 HTML 入口,不吃 newtab/popup 的启动链,**必须自己加载语言包**
+(`loadLocaleMessages(locale, 'newtab')` + `setI18nLanguage(locale)`,先 `store.loadSettings()`
+拿用户选的 locale)—— 漏掉这一步的表现是所有 `t('...')` 把键名当文案直显。
+**且 `loadLocaleMessages` 传的 location 是 `'newtab'`**:面板文案(`workflow.agent.*`)在
+`locales/<locale>/newtab.json`。
+_Avoid_: 新增宿主入口时只接线不加载语言包(键名直显);想当然传 `'sidepanel'` 当 location(没有这个语言包文件)。
 
 **工具 class**:
 `read`(免确认)/ `write`(过确认门)。缺失或未知一律按需确认处理;模块加载期 `validateTools` 强制显式声明。

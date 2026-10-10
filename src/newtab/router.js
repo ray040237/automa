@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
+import { IS_FIREFOX } from '@/common/utils/constant';
 import Welcome from './pages/Welcome.vue';
 import Packages from './pages/Packages.vue';
 import AgentPage from './pages/Agent.vue';
@@ -57,11 +58,19 @@ const routes = [
         name: 'workflows',
         component: Workflows,
       },
-      {
-        path: 'agent',
-        name: 'agent',
-        component: AgentPage,
-      },
+      // T-199：助手的主面板标签页路由**只在 Firefox 保留**。
+      // Chrome 上助手已迁到浏览器侧边栏（chrome.sidePanel，见 src/sidepanel/），
+      // 主面板这个入口与路由一并撤除；Firefox 没有 sidePanel API，仍用这个形态
+      // （决策与理由见 docs/t199-sidepanel-plan.md §4）。
+      ...(IS_FIREFOX
+        ? [
+            {
+              path: 'agent',
+              name: 'agent',
+              component: AgentPage,
+            },
+          ]
+        : []),
       {
         path: ':id',
         name: 'workflows-details',

@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>侧栏面板观感 · 目标态设计稿（用户反馈后修订版）</title>
+<style>
+  :root {
+    /* pie 的真实 token（参考实现，未变） */
+    --pie-canvas-light: #FAFBFC;
+    --pie-surface-light: #FFFFFF;
+    --pie-field-light: #F4F6F8;
+    --pie-line-light: #E4E8EC;
+    --pie-fg-1-light: #14181D;
+    --pie-fg-2-light: #5A6470;
+    --pie-fg-3-light: #98A1AC;
+    --pie-accent-light: #4A5C6E;
+
+    --pie-canvas-dark: #0B0D10;
+    --pie-surface-dark: #14171C;
+    --pie-field-dark: #1A1E25;
+    --pie-line-dark: #22272F;
+    --pie-fg-1-dark: #E5E8EC;
+    --pie-fg-2-dark: #8A929E;
+    --pie-fg-3-dark: #525965;
+    --pie-accent-dark: #B8C8D6;
+
+    /* 浏览器 chrome 真实颜色（用户截图实测） */
+    --chrome-light: #ECEEF1;
+    --chrome-dark: #202124;
+
+    --radius-chip: 6px;
+    --radius-control: 8px;
+    --radius-card: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #0a0a0a;
+    color: #cdd3da;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 28px; line-height: 1.3; margin: 0 0 8px; color: #fff; letter-spacing: -0.01em; }
+  .sub { color: #8a929e; font-size: 14px; margin-bottom: 24px; }
+  h2 {
+    font-size: 20px; margin: 48px 0 14px; padding-top: 24px;
+    border-top: 1px solid #2a2e35; color: #fff; letter-spacing: -0.01em;
+  }
+  h2:first-of-type { border-top: none; margin-top: 32px; padding-top: 0; }
+  h3 { font-size: 15px; margin: 24px 0 8px; color: #E5E8EC; }
+  p { margin: 8px 0; color: #a8aeb6; }
+  code {
+    font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; font-size: 12.5px;
+    background: #1A1E25; border: 1px solid #22272F; padding: 1px 5px; border-radius: 4px; color: #B8C8D6;
+  }
+  b, strong { color: #fff; }
+
+  /* ── 横向网格：浅色 / 深色，左右并排 ───────────────── */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 16px 0;
+  }
+  @media (max-width: 920px) { .grid { grid-template-columns: 1fr; } }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  .col-label {
+    font-size: 11px; color: #8a929e; font-family: "JetBrains Mono", ui-monospace, monospace;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+
+  /* ── 真实面板 ────────────────────────────────────── */
+  .chrome {
+    /* 模拟浏览器侧栏的 chrome（padding） */
+    padding: 0;
+    border-radius: 0;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .chrome.light { background: var(--chrome-light); }
+  .chrome.dark  { background: var(--chrome-dark); }
+
+  .panel {
+    flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+    color: var(--pie-fg-1-light);
+    font-size: 14px;
+  }
+  .panel.light { background: var(--pie-canvas-light); color: var(--pie-fg-1-light); }
+  .panel.dark  { background: var(--pie-canvas-dark); color: var(--pie-fg-1-dark); }
+
+  /* header */
+  .hdr {
+    flex-shrink: 0;
+    display: flex; align-items: center; gap: 6px;
+    border-bottom: 1px solid;
+    padding: 4px 16px;
+  }
+  .hdr.light { background: var(--pie-surface-light); border-bottom-color: var(--pie-line-light); }
+  .hdr.dark  { background: var(--pie-surface-dark);  border-bottom-color: var(--pie-line-dark); }
+
+  .chip {
+    flex: 1; min-width: 0;
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 8px; border-radius: 6px;
+    border: 0; cursor: pointer; text-align: left;
+    font: inherit; color: inherit;
+    background: transparent;
+  }
+  .chip:hover { background: rgba(0,0,0,0.04); }
+  .dark .chip:hover { background: rgba(255,255,255,0.06); }
+  .chip .icon { opacity: 0.6; flex-shrink: 0; }
+  .chip .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icbtn {
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    border: 0; background: transparent; border-radius: 6px;
+    color: inherit; cursor: pointer; flex-shrink: 0; font: inherit;
+  }
+  .icbtn:hover { background: rgba(0,0,0,0.05); }
+  .dark .icbtn:hover { background: rgba(255,255,255,0.06); }
+
+  /* stream */
+  .stream {
+    flex: 1; min-height: 0; overflow-y: auto;
+    padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+
+  /* turn divider */
+  .turn {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px;
+    color: var(--pie-fg-3-light);
+  }
+  .dark .turn { color: var(--pie-fg-3-dark); }
+  .turn .line { flex: 1; height: 1px; background: var(--pie-line-light); }
+  .dark .turn .line { background: var(--pie-line-dark); }
+
+  /* user bubble —— T-212 目标态：bg-accent/10 + 多 4px 内边距 */
+  .bubble-user {
+    align-self: flex-end; max-width: 85%;
+    border-radius: var(--radius-card);
+    padding: 10px 14px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--pie-fg-1-light);
+  }
+  .bubble-user.light { background: rgba(74, 92, 110, 0.10); }
+  .bubble-user.dark  { background: rgba(184, 200, 214, 0.10); color: var(--pie-fg-1-dark); }
+
+  /* tool row —— T-212 目标态：bg-field（无外框），状态徽标只字色 + 图标 */
+  .tool {
+    align-self: flex-start; max-width: 100%; min-width: 0;
+    border-radius: var(--radius-control);
+    padding: 4px 8px;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px;
+  }
+  .tool.light { background: var(--pie-field-light); color: var(--pie-fg-1-light); }
+  .tool.dark  { background: var(--pie-field-dark); color: var(--pie-fg-1-dark); }
+  .tool .arrow { color: var(--pie-fg-3-light); }
+  .dark .tool .arrow { color: var(--pie-fg-3-dark); }
+  .tool .name { font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 500; flex-shrink: 0; }
+  .tool .summary {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--pie-fg-3-light);
+  }
+  .dark .tool .summary { color: var(--pie-fg-3-dark); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 11px; flex-shrink: 0;
+    /* T-212 目标态：去底色 + 去边框 + 去圆角，只字色 + 图标 */
+  }
+  .badge.ok    { color: #15803d; }
+  .badge.err   { color: #B91C1C; }
+  .badge.okd   { color: #4ade80; }
+  .badge.errd  { color: #f87171; }
+  .dark .badge.ok   { color: #4ade80; }
+  .dark .badge.err  { color: #f87171; }
+
+  /* assistant text */
+  .asst {
+    font-size: 14px; line-height: 1.65;
+  }
+  .asst h2 { font-size: 16px; font-weight: 600; margin: 8px 0 4px; border: 0; padding: 0; color: inherit; }
+  .asst p { margin: 8px 0; color: inherit; }
+  .asst .copyall {
+    float: right; font-size: 11px; color: var(--pie-fg-3-light);
+    padding: 2px 6px; border-radius: 4px; border: 0; background: transparent; cursor: pointer;
+  }
+  .dark .asst .copyall { color: var(--pie-fg-3-dark); }
+  .asst .copyall:hover { background: rgba(0,0,0,0.05); }
+  .dark .asst .copyall:hover { background: rgba(255,255,255,0.06); }
+  .asst code {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    padding: 1px 5px; border-radius: 4px;
+  }
+  .asst.light code { background: var(--pie-field-light); border: 1px solid var(--pie-line-light); color: var(--pie-fg-1-light); }
+  .asst.dark  code { background: var(--pie-field-dark);  border: 1px solid var(--pie-line-dark);  color: var(--pie-fg-1-dark); }
+
+  .code {
+    position: relative;
+    border-radius: var(--radius-control);
+    padding: 8px 10px 24px;
+    font-size: 12px; line-height: 1.5;
+    margin: 8px 0;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    overflow-x: auto;
+  }
+  .code.light { background: var(--pie-field-light); border: 1px solid var(--pie-line-light); color: var(--pie-fg-1-light); }
+  .code.dark  { background: var(--pie-field-dark);  border: 1px solid var(--pie-line-dark);  color: var(--pie-fg-1-dark); }
+  .code .copy {
+    position: absolute; right: 6px; top: 6px;
+    font-size: 11px;
+    padding: 2px 6px; border-radius: 4px; border: 0;
+    background: transparent; color: var(--pie-fg-2-light); cursor: pointer;
+  }
+  .dark .code .copy { color: var(--pie-fg-2-dark); }
+  .code .copy:hover { background: rgba(0,0,0,0.05); }
+  .dark .code .copy:hover { background: rgba(255,255,255,0.08); }
+
+  /* composer —— T-212 目标态：顶部提示 + composer 卡去 border */
+  .composer {
+    flex-shrink: 0;
+    padding: 0 16px 10px;
+  }
+  .composer-hint {
+    margin: 0 0 4px;
+    font-size: 10px;
+    color: var(--pie-fg-3-light);
+  }
+  .dark .composer-hint { color: var(--pie-fg-3-dark); }
+
+  .composer-card {
+    border-radius: var(--radius-card);
+    padding: 6px;
+  }
+  .composer-card.light { background: var(--pie-surface-light); }
+  .composer-card.dark  { background: var(--pie-surface-dark); }
+
+  .tab-chip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+  .tab-chip.light { background: var(--pie-field-light); }
+  .tab-chip.dark  { background: var(--pie-field-dark); }
+  .tab-chip .favicon { width: 14px; height: 14px; border-radius: 3px; background: var(--pie-fg-3-light); flex-shrink: 0; }
+  .dark .tab-chip .favicon { background: var(--pie-fg-3-dark); }
+  .tab-chip .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab-chip .meta { font-size: 11px; color: var(--pie-fg-3-light); }
+  .dark .tab-chip .meta { color: var(--pie-fg-3-dark); }
+  .tab-chip .close { color: var(--pie-fg-3-light); cursor: pointer; opacity: 0; }
+  .tab-chip:hover .close { opacity: 1; }
+  .dark .tab-chip .close { color: var(--pie-fg-3-dark); }
+
+  .ta {
+    border-radius: var(--radius-control);
+    padding: 6px 8px;
+    min-height: 56px;
+    display: flex; align-items: center;
+    font-size: 14px;
+  }
+  .ta.light { background: var(--pie-field-light); color: var(--pie-fg-3-light); }
+  .ta.dark  { background: var(--pie-field-dark);  color: var(--pie-fg-3-dark); }
+
+  .sendrow {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 6px;
+  }
+  .ring {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--pie-fg-3-light);
+    flex-shrink: 0;
+  }
+  .dark .ring { border-color: var(--pie-fg-3-dark); }
+  .send {
+    margin-left: auto;
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    border: 0;
+    display: grid; place-items: center;
+    color: var(--pie-accent-light);
+    background: rgba(74, 92, 110, 0.10);
+    cursor: pointer;
+    font-size: 16px;
+  }
+  .dark .send { color: var(--pie-accent-dark); background: rgba(184, 200, 214, 0.10); }
+
+  /* 复用样式，标注「上一轮 T-212 走错的地方」 */
+  .bad-shell-light { background: var(--chrome-light); }  /* 真 chrome */
+  .bad-shell-light .bad-panel { background: #F0F2F5; }  /* T-212 错值 */
+  .bad-shell-light .bad-hdr    { background: #FFFFFF; }
+  .bad-shell-light .bad-composer { background: #FFFFFF; }
+  .bad-shell-light .bad-ta     { background: #F4F6F8; }
+  .bad-shell-light .bad-shell-label { color: #B91C1C; font-weight: 600; }
+
+  .callout {
+    border-left: 3px solid #4A5C6E;
+    background: rgba(74, 92, 110, 0.08);
+    padding: 12px 16px; border-radius: 0 6px 6px 0;
+    margin: 14px 0; font-size: 13.5px; color: #cdd3da;
+  }
+  .callout.warn  { border-left-color: #c26b5e; background: rgba(194, 107, 94, 0.08); }
+  .callout.ok    { border-left-color: #5fa37d; background: rgba(95, 163, 125, 0.08); }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #2a2e35; vertical-align: top; }
+  th { color: #8a929e; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  td code { font-size: 11.5px; }
+  .ok   { color: #5fa37d; }
+  .no   { color: #c26b5e; }
+  .mid  { color: #b89968; }
+
+  .label-mini {
+    display: inline-block; font-size: 10px; font-family: "JetBrains Mono", monospace;
+    padding: 1px 6px; border-radius: 999px; border: 1px solid #2a2e35; color: #8a929e;
+  }
+  .label-mini.ok  { color: #5fa37d; border-color: rgba(95, 163, 125, 0.4); }
+  .label-mini.no  { color: #c26b5e; border-color: rgba(194, 107, 94, 0.4); }
+  .label-mini.mid { color: #b89968; border-color: rgba(184, 153, 104, 0.4); }
+
+  /* 现实陈列：4 个真实面板 —— 浅 T-212 错 / 浅目标 / 深 T-212 / 深目标 */
+  .quad { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 16px 0; }
+  @media (max-width: 920px) { .quad { grid-template-columns: 1fr; } }
+  .panel-frame { border: 1px solid #2a2e35; border-radius: 8px; overflow: hidden; }
+  .panel-frame .frame-hdr {
+    padding: 6px 10px; font-size: 11px; color: #8a929e;
+    font-family: "JetBrains Mono", monospace; border-bottom: 1px solid #2a2e35;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .panel-frame .frame-hdr .verdict { font-weight: 600; }
+  .panel-frame.bad .frame-hdr .verdict { color: #c26b5e; }
+  .panel-frame.good .frame-hdr .verdict { color: #5fa37d; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>侧栏面板观感 · 目标态设计稿</h1>
+  <p class="sub">在 T-212「更丑了」反馈之后 · 2026-10-10 · 作者：本仓维护者 + 用户共同对齐</p>
+
+  <div class="callout warn">
+    <b>先承认 T-212 哪里走偏了：</b>我引入了 <code>bg-shell</code> token，亮模式取 <code>#F0F2F5</code>，并让侧栏 App.vue 用它铺根。结果在浅色浏览器主题下，shell 比 chrome 还浅、composer 又比 shell 白 —— <b>「白卡浮在浅灰上」</b>，跟设计稿要消除的「白卡浮在深壳上」对称但更糟，因为亮色 island 在亮色 chrome 上更刺眼。<code>bg-shell</code> 是 dark-only 的概念，不该在亮色下存在。
+  </div>
+
+  <h2>一、错在哪里（用户实拍）</h2>
+  <p>下面四张图分别是当前实际状态（bug）和目标状态（fix）：</p>
+
+  <div class="quad">
+    <!-- 浅色 + T-212 错 -->
+    <div class="panel-frame bad">
+      <div class="frame-hdr">
+        <span>当前（浅色）</span>
+        <span class="verdict">更丑了</span>
+      </div>
+      <div class="chrome light bad-shell-light" style="height: 540px;">
+        <div class="panel bad-panel" style="height:100%">
+          <div class="hdr bad-hdr" style="border-bottom-color: #E4E8EC">
+            <button class="chip">
+              <span class="icon">💬</span>
+              <span class="label">页面无法复制的原因</span>
+            </button>
+            <button class="icbtn">＋</button>
+          </div>
+          <div class="stream">
+            <div class="turn"><span class="line"></span><time>00:51</time><span class="line"></span></div>
+            <div class="bubble-user light">这个页面为什么不能复制</div>
+            <div class="tool light">
+              <span class="arrow">→</span>
+              <span class="name">read_page</span>
+              <span class="summary">detail=content</span>
+              <span class="badge ok">✓ 完成</span>
+            </div>
+            <div class="tool light">
+              <span class="arrow">→</span>
+              <span class="name">test_js</span>
+              <span class="summary">code = () => { const results = {}; // ...</span>
+              <span class="badge err">✕ 失败</span>
+            </div>
+            <div class="asst light" style="margin-top:4px">
+              <button class="copyall">复制全文</button>
+              <h2>原因找了</h2>
+              <p>这个页面不能复制是因为整个 <code>&lt;body&gt;</code> 被设置了 CSS <code>user-select: none</code>。</p>
+            </div>
+          </div>
+          <div class="composer" style="background: #F0F2F5">
+            <p class="composer-hint" style="color: #98A1AC">Enter 发送 · Shift+Enter 换行</p>
+            <div class="composer-card bad-composer">
+              <div class="tab-chip bad-ta">
+                <span class="favicon"></span>
+                <span class="label">Z.ai - Advanced AI Chatbot & Agent...</span>
+                <span class="meta">已固定</span>
+                <span class="close">×</span>
+              </div>
+              <div class="ta bad-ta">问问这个页面…</div>
+              <div class="sendrow">
+                <div class="ring"></div>
+                <button class="send">→</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 浅色 + 目标态 -->
+    <div class="panel-frame good">
+      <div class="frame-hdr">
+        <span>目标（浅色）</span>
+        <span class="verdict">干净</span>
+      </div>
+      <div class="chrome light" style="height: 540px;">
+        <div class="panel light" style="height:100%">
+          <div class="hdr light">
+            <button class="chip">
+              <span class="icon">💬</span>
+              <span class="label">页面无法复制的原因</span>
+            </button>
+            <button class="icbtn">＋</button>
+          </div>
+          <div class="stream">
+            <div class="turn"><span class="line"></span><time>00:51</time><span class="line"></span></div>
+            <div class="bubble-user light">这个页面为什么不能复制</div>
+            <div class="tool light">
+              <span class="arrow">→</span>
+              <span class="name">read_page</span>
+              <span class="summary">detail=content</span>
+              <span class="badge ok">✓ 完成</span>
+            </div>
+            <div class="tool light">
+              <span class="arrow">→</span>
+              <span class="name">test_js</span>
+              <span class="summary">code = () => { const results = {}; // ...</span>
+              <span class="badge err">✕ 失败</span>
+            </div>
+            <div class="asst light" style="margin-top:4px">
+              <button class="copyall">复制全文</button>
+              <h2>原因找了</h2>
+              <p>这个页面不能复制是因为整个 <code>&lt;body&gt;</code> 被设置了 CSS <code>user-select: none</code>。</p>
+              <div class="code light">body {
+  user-select: none;
+  -webkit-user-select: none;
+}<button class="copy">复制</button></div>
+            </div>
+          </div>
+          <div class="composer">
+            <p class="composer-hint">Enter 发送 · Shift+Enter 换行</p>
+            <div class="composer-card light">
+              <div class="tab-chip light">
+                <span class="favicon"></span>
+                <span class="label">Z.ai - Advanced AI Chatbot & Agent...</span>
+                <span class="meta">已固定</span>
+                <span class="close">×</span>
+              </div>
+              <div class="ta light">问问这个页面…</div>
+              <div class="sendrow">
+                <div class="ring"></div>
+                <button class="send">→</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 深色 + T-212 当前 -->
+    <div class="panel-frame bad">
+      <div class="frame-hdr">
+        <span>当前（深色）</span>
+        <span class="verdict">方向对但太暗</span>
+      </div>
+      <div class="chrome dark" style="height: 540px;">
+        <div class="panel" style="height:100%; background: #1F2125">
+          <div class="hdr dark">
+            <button class="chip">
+              <span class="icon">💬</span>
+              <span class="label">页面无法复制的原因</span>
+            </button>
+            <button class="icbtn">＋</button>
+          </div>
+          <div class="stream" style="background: #1F2125">
+            <div class="turn"><span class="line" style="background:#22272F"></span><time>00:51</time><span class="line" style="background:#22272F"></span></div>
+            <div class="bubble-user dark">这个页面为什么不能复制</div>
+            <div class="tool dark">
+              <span class="arrow">→</span>
+              <span class="name">read_page</span>
+              <span class="summary">detail=content</span>
+              <span class="badge okd">✓ 完成</span>
+            </div>
+            <div class="tool dark">
+              <span class="arrow">→</span>
+              <span class="name">test_js</span>
+              <span class="summary">code = () => { const results = {}; // ...</span>
+              <span class="badge errd">✕ 失败</span>
+            </div>
+            <div class="asst dark" style="margin-top:4px">
+              <button class="copyall" style="color:#525965">复制全文</button>
+              <h2>原因找了</h2>
+              <p style="color:#cdd3da">这个页面不能复制是因为整个 <code>&lt;body&gt;</code> 被设置了 CSS <code>user-select: none</code>。</p>
+              <div class="code dark">body {
+  user-select: none;
+  -webkit-user-select: none;
+}<button class="copy">复制</button></div>
+            </div>
+          </div>
+          <div class="composer" style="background: #1F2125">
+            <p class="composer-hint" style="color:#525965">Enter 发送 · Shift+Enter 换行</p>
+            <div class="composer-card dark">
+              <div class="tab-chip dark">
+                <span class="favicon" style="background:#525965"></span>
+                <span class="label">Z.ai - Advanced AI Chatbot & Agent...</span>
+                <span class="meta" style="color:#525965">已固定</span>
+                <span class="close" style="color:#525965">×</span>
+              </div>
+              <div class="ta dark">问问这个页面…</div>
+              <div class="sendrow">
+                <div class="ring" style="border-color:#525965"></div>
+                <button class="send" style="color:#B8C8D6;background:rgba(184,200,214,0.10)">→</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 深色 + 目标态 -->
+    <div class="panel-frame good">
+      <div class="frame-hdr">
+        <span>目标（深色）</span>
+        <span class="verdict">稳</span>
+      </div>
+      <div class="chrome dark" style="height: 540px;">
+        <div class="panel dark" style="height:100%">
+          <div class="hdr dark">
+            <button class="chip">
+              <span class="icon">💬</span>
+              <span class="label">页面无法复制的原因</span>
+            </button>
+            <button class="icbtn">＋</button>
+          </div>
+          <div class="stream">
+            <div class="turn"><span class="line"></span><time>00:51</time><span class="line"></span></div>
+            <div class="bubble-user dark">这个页面为什么不能复制</div>
+            <div class="tool dark">
+              <span class="arrow">→</span>
+              <span class="name">read_page</span>
+              <span class="summary">detail=content</span>
+              <span class="badge okd">✓ 完成</span>
+            </div>
+            <div class="tool dark">
+              <span class="arrow">→</span>
+              <span class="name">test_js</span>
+              <span class="summary">code = () => { const results = {}; // ...</span>
+              <span class="badge errd">✕ 失败</span>
+            </div>
+            <div class="asst dark" style="margin-top:4px">
+              <button class="copyall">复制全文</button>
+              <h2>原因找了</h2>
+              <p>这个页面不能复制是因为整个 <code>&lt;body&gt;</code> 被设置了 CSS <code>user-select: none</code>。</p>
+              <div class="code dark">body {
+  user-select: none;
+  -webkit-user-select: none;
+}<button class="copy">复制</button></div>
+            </div>
+          </div>
+          <div class="composer">
+            <p class="composer-hint">Enter 发送 · Shift+Enter 换行</p>
+            <div class="composer-card dark">
+              <div class="tab-chip dark">
+                <span class="favicon"></span>
+                <span class="label">Z.ai - Advanced AI Chatbot & Agent...</span>
+                <span class="meta">已固定</span>
+                <span class="close">×</span>
+              </div>
+              <div class="ta dark">问问这个页面…</div>
+              <div class="sendrow">
+                <div class="ring"></div>
+                <button class="send">→</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>二、错在哪几点（逐条核对）</h2>
+
+  <table>
+    <thead>
+      <tr><th>#</th><th>错误</th><th>原因</th><th>修复方向</th><th>难度</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>浅色下面板根是 <code>#F0F2F5</code>（= <code>bg-shell</code> 亮值），比浏览器 chrome 还浅 → 白卡浮在浅灰上</td>
+        <td><code>bg-shell</code> 是 dark-only 抽象，亮值不该挂任何东西 —— 我留了"将来白壳"的占位值，结果漏到了浅色侧栏</td>
+        <td><b>删 <code>--color-shell</code> 亮值</b>，浅色下面板根就回到 <code>bg-canvas</code>，与 chrome 衔接</td>
+        <td><span class="label-mini ok">小</span></td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>深色下面板根走 <code>bg-shell</code>（<code>#1F2125</code>，与 chrome 几乎同色），composer 是 <code>bg-surface</code>（<code>#14171C</code>，比 shell <b>深一档</b>）→ 卡片是凹进去的，深色观感</td>
+        <td>暗色下"卡片 = 更浅"是 pie 的隐含约定，<code>surface &lt; shell</code> 在暗色下反过来</td>
+        <td><b>深色下也用 <code>bg-canvas</code>（<code>#0B0D10</code>）</b>作面板根；让 <code>surface</code> 是 <code>#14171C</code> 浮起，<code>field</code> 是 <code>#1A1E25</code> 再浅一档。三层关系恢复成"由深到浅 = 由远到近"</td>
+        <td><span class="label-mini ok">小</span></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>composer 提示文案「Enter 发送 · Shift+Enter 换行」 与「↓ 回到底部」按钮挤在同一区域，看起来像"两个差不多的控件"</td>
+        <td>这是用户截图里那个 <code>&lt;</code> 的来源 —— 实际是 <code>↓</code> 浮在代码块 <code>复制</code> 旁边，与上方 composer 提示 <code>Enter 发送</code> 三件东西视觉上撞在一起</td>
+        <td>提示搬到 composer 顶是对的；<b>回到底部</b>用更轻的形态（去掉按钮或改图标位置）；<b>代码块复制</b>只在 hover 时显形，不要常驻</td>
+        <td><span class="label-mini mid">中</span></td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>深色下 shell 表面 <code>#1F2125</code> 对比 chrome 实际是 <code>#202124</code>（差 1 RGB 单位）→ 几乎看不出明度差，"白卡浮在深壳上"被换成"白板（chrome）vs 白板（shell）"</td>
+        <td>shell 值是猜的（基于 Chrome 较新版本），老 Chrome / Firefox 侧栏 chrome 是 <code>#1F2125</code>，新 Chrome 是 <code>#202124</code>。Shell 必须覆盖更广的色域</td>
+        <td><b>不引 shell token</b>，用 <code>bg-canvas</code> 直接吃下两种 chrome 的色差（panel 比 chrome 略浅一档 —— 看着像"嵌在 chrome 里"而不是"覆盖 chrome"）</td>
+        <td><span class="label-mini ok">小</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>三、为什么 T-212 整体方向是对的</h2>
+  <p>尽管 <code>bg-shell</code> 这个具体 token 是错的，但 T-212 的**观感决策**（在用户答"做第二步"之后做的）大部分都对：</p>
+  <table>
+    <thead>
+      <tr><th>决策</th><th>对不对</th><th>说明</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>用户气泡 <code>bg-accent/10</code></td>
+        <td><span class="label-mini ok">对</span></td>
+        <td>蓝透明是「标签/通知」语义色，用户自己发的话用 accent 更准</td>
+      </tr>
+      <tr>
+        <td>工具徽标去底色 + 去边框，只字色 + 图标</td>
+        <td><span class="label-mini ok">对</span></td>
+        <td>三个「完成/失败/完成」并排像表单错误列，去框后视觉重量退到正确档</td>
+      </tr>
+      <tr>
+        <td>工具卡外壳 <code>bg-field</code> 去外框</td>
+        <td><span class="label-mini ok">对</span></td>
+        <td>「这一行和正文不一样」的信号靠底色差，不必再画边框</td>
+      </tr>
+      <tr>
+        <td>composer 卡去 border</td>
+        <td><span class="label-mini ok">对</span></td>
+        <td>canvas→surface→field 三层关系靠底色差看得出</td>
+      </tr>
+      <tr>
+        <td>composer 提示搬到顶部</td>
+        <td><span class="label-mini ok">对</span></td>
+        <td>底行只剩「圆环 + 发送」两个控件，层级清晰</td>
+      </tr>
+      <tr>
+        <td>新增 <code>bg-shell</code> token + dark 面板根走 shell</td>
+        <td><span class="label-mini no">错</span></td>
+        <td>用 shell 解决的是「白卡浮在深壳上」，但深色 chrome 与 shell 的色差无法预测；改用 <code>bg-canvas</code> 让 panel 始终比 chrome 略浅一档，三层 token 自洽</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>四、目标态的具体规格（下一步要落地的）</h2>
+
+  <h3>token 层</h3>
+  <ul>
+    <li><b>删 <code>--color-shell</code> 全部定义</b>（亮暗都删），删 <code>tailwind.config.js</code> 的 <code>shell</code> 字段。</li>
+    <li>面板根的 <code>useAgentHost</code> 不再需要 <code>shell</code> 字段 —— <code>host.shell</code> 删，<code>AgentPanel.vue</code> 的 <code>shell</code> computed 删，面板根 class 回到 <code>bg-canvas</code> 写死。</li>
+    <li>侧栏 <code>App.vue</code> 根 <code>&lt;div&gt;</code> 去掉 <code>bg-shell</code>，回到原来的 <code>class="h-screen w-full"</code>。</li>
+  </ul>
+
+  <h3>布局层（用户截图里能看到的）</h3>
+  <ul>
+    <li><b>代码块复制按钮</b> 只在 hover 时显形（<code>opacity-0 group-hover:opacity-100</code> 已存在，但常驻时仍可见 —— 看截图判断是常驻态显示的，移出 hover 仍在那里）。<b>改用 <code>group-hover</code> + <code>focus-within</code> 同时挂，鼠标移开、代码块失焦都立即消失。</b></li>
+    <li><b>回到底部按钮</b> 居中靠下（已经这样），但 <b>图标 + 文字</b> 比 单图标轻，文字 <code>text-fg-2</code> 即可；hover 时加 <code>bg-field</code> 反馈。</li>
+    <li><b>回到底部</b> 与 <b>代码块复制</b> 视觉重量调到<b>不同档</b>（一个是浮层的"动作"，一个是代码块旁的"动作"）—— 不在同一行对齐就能避免用户截图里那种"两件东西挤一起"的错觉。</li>
+  </ul>
+
+  <h3>守卫层（要改 / 加的）</h3>
+  <ul>
+    <li><b>删 T-212 守卫里的"shell"相关条款</b>（面板根、useAgentHost、sidepanel、--color-shell）。改回"面板根必须 <code>bg-canvas</code>"的单条断言。</li>
+    <li><b>代码块复制按钮的常驻态</b>加守卫：class 串里必须有 <code>group</code> + <code>group-hover:opacity-100</code> + <code>opacity-0</code>（钉"hover 才显形"）。</li>
+  </ul>
+
+  <h2>五、要看的两个对照</h2>
+  <p>左：当前实际状态（bug）。右：目标态（fix）。差异肉眼可见 ——</p>
+
+  <h3>浅色对比（侧栏 chrome 也是浅色）</h3>
+  <p>当前：「白卡浮在浅灰上」 —— shell 比 chrome 浅，composer 又比 shell 白，<b>三层都偏白，看着像弹窗</b>。目标：取消 shell，面板根直接 <code>bg-canvas</code>（<code>#FAFBFC</code>，与 chrome <code>#ECEEF1</code> 差 4 RGB 单位），composer 浮起，input 凹陷 —— <b>三档明度差清楚</b>。</p>
+
+  <h3>深色对比（侧栏 chrome 是深色）</h3>
+  <p>当前：<code>bg-shell</code>（<code>#1F2125</code>，与 chrome 同色） + composer <code>bg-surface</code>（<code>#14171C</code>，<b>比 shell 深</b>）—— 卡片是"凹下去"的，<b>反直觉</b>。目标：面板根 <code>bg-canvas</code>（<code>#0B0D10</code>，比 chrome 略深），composer <code>bg-surface</code>（<code>#14171C</code>，<b>比 canvas 浅</b>）—— 卡片是"浮起来"的，<b>符合预期</b>。</p>
+
+  <h2>六、净改动预估</h2>
+  <table>
+    <thead>
+      <tr><th>类别</th><th>行数</th><th>风险</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>删 <code>--color-shell</code> 全部 + tailwind config 字段</td>
+        <td>~10</td>
+        <td><span class="label-mini ok">小</span></td>
+      </tr>
+      <tr>
+        <td>删 <code>host.shell</code> + AgentPanel 根回到 <code>bg-canvas</code> 写死 + 侧栏 App.vue 根去 <code>bg-shell</code></td>
+        <td>~8</td>
+        <td><span class="label-mini ok">小</span></td>
+      </tr>
+      <tr>
+        <td>改代码块复制按钮的常驻/hover 切换</td>
+        <td>~5</td>
+        <td><span class="label-mini mid">中</span></td>
+      </tr>
+      <tr>
+        <td>改 T-212 守卫为只钉"必须有 <code>bg-canvas</code>"的单条</td>
+        <td>~30</td>
+        <td><span class="label-mini ok">小</span></td>
+      </tr>
+      <tr>
+        <td>docs / memory 同步</td>
+        <td>~30</td>
+        <td><span class="label-mini ok">小</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <p>预估净 <b>~80 行改动</b>，1 个文件删 1 个 token 字段，1 个守卫重写。T-212 之前正确的 5 项（用户气泡、徽标去框、工具卡去外框、composer 去 border、提示搬顶）全部保留。</p>
+
+  <h2>七、待用户拍板</h2>
+  <div class="callout">
+    <b>本设计稿不动代码</b>。如果上面"四、目标态"看着对，告诉我"按设计稿改"即可。如果还有想改的点（比如想保留 <code>bg-shell</code>、或者代码块复制按钮想用别的形态），现在提比写完了再退回成本低得多。
+  </div>
+
+</div>
+</body>
+</html>

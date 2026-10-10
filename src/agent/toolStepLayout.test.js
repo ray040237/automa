@@ -53,6 +53,8 @@ const strip = (src) =>
 
 const stepSrc = () => strip(read(`${AGENT}/AgentToolStep.vue`));
 const transcriptSrc = () => strip(read(`${AGENT}/AgentTranscript.vue`));
+// T-205：用户气泡抽成了独立组件，长串约束跟着它搬过去。
+const bubbleSrc = () => strip(read(`${AGENT}/AgentUserBubble.vue`));
 
 // —— ① 卡片根节点：永不比面板宽 ——
 test('T-174：工具卡根节点带 max-w-full + min-w-0', () => {
@@ -118,15 +120,23 @@ test('T-174：展开体只纵向滚动且体量收敛（max-h-56，不再 max-h-
 
 // —— ④ 同型长串隐患：用户气泡与错误卡正文 ——
 test('T-174：用户气泡与错误卡正文也用 [overflow-wrap:anywhere]', () => {
-  const src = transcriptSrc();
+  // T-205：用户气泡搬进了 AgentUserBubble.vue，约束跟着它走。
+  // 断言跨两个文件，所以两边都读。
+  const bubble = bubbleSrc();
+  const transcript = transcriptSrc();
 
   assert.match(
-    src,
+    bubble,
     /class="[^"]*\bmax-w-full\b[^"]*\bself-end\b[^"]*\[overflow-wrap:anywhere\]/,
     '用户气泡可能贴进长 URL/路径，同样要 max-w-full + [overflow-wrap:anywhere]'
   );
   assert.match(
-    src,
+    bubble,
+    /\[overflow-wrap:anywhere\]/,
+    '用户气泡本体必须带 [overflow-wrap:anywhere]（T-205 抽组件后别把它弄丢了）'
+  );
+  assert.match(
+    transcript,
     /\[overflow-wrap:anywhere\][^"]*text-red-700/,
     '错误卡正文也要 [overflow-wrap:anywhere]（原来的 break-words 不收缩 min-content）'
   );

@@ -6,6 +6,9 @@
     "default_popup": "popup.html",
     "default_icon": "icon-dev-128.png"
   },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "background": {
     "service_worker": "background.bundle.js",
     "type": "module"
@@ -66,7 +69,8 @@
     "offscreen",
     "webNavigation",
     "unlimitedStorage",
-    "scripting"
+    "scripting",
+    "sidePanel"
   ],
   "web_accessible_resources": [
     {

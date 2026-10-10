@@ -29,6 +29,16 @@
 
 ### bug（先审，多数可快速定夺）
 
+## T-216 — `backlog.md`「待审核」区滞留 9 条已清条目，与本文件头「只放未完成的条目」自相矛盾
+
+登记日期：2026-10-10
+来源：2026-10-10 本次会话提交前核对 backlog 状态；触发点 `docs/backlog.md:7-9`（文件头「本文件只放未完成的条目……完成时整条移入 `backlog-done.md`」）与 `docs/backlog.md:65-175`（`### 改进` 区内 9 条 `状态：已清`）
+现象：`## 待审核` 下有 9 条状态已是「已清（2026-10-10 完成）」的条目（T-203、T-204、T-205、T-206、T-208、T-209、T-210、T-211、T-212），仍留在待审核区；其中 7 条（T-205/206/208~212）的全文另有一份 `### T-NN` 归档在 `docs/backlog-done.md`，同一条目两处各存一份。同批的 T-199/T-200/T-207/T-213/T-214/T-215 则是按规则整条移出的 —— 同一批里两种处理并存。
+证据：**实测** —— `git show HEAD:docs/backlog.md` 后 grep `状态：已清` 得 **0** 命中（HEAD 无此形态，是本工作区新引入的），工作区 `docs/backlog.md` 得 **9** 命中；`docs/backlog-done.md` 里能 grep 出其中 7 条的完整归档（T-203/T-204 无独立归档条目，其状态行指向 T-207）。AGENTS.md「状态流转」原文：「驳回、已消解、已修复的条目同样及时整条移入 `docs/backlog-done.md`——**『待审核』区不留已裁决的条目**」。
+影响：用户按「待审核」区逐条审票时会看到 9 条其实已完成的条目，可能重复批准已完成的工作，或误判这些改进还没做；统计未完成条目数失真。不涉及代码。
+建议：把 9 条整条搬到 `backlog-done.md`（T-203/T-204 在 done 里没有独立条目，需新建或并进 T-207 那条）；`backlog.md` 只留真正未裁决的 T-189/T-184/T-178/T-186/T-185/T-155/T-201/T-202。**T-201 是「部分落地」**（选择器已可用、多连接弹层组织方式仍待观察），移不移出由用户裁决。
+状态：待审核
+
 ## T-189 — `MAX_SESSION_TURNS` 的注释还写着「wire 层另有 token 预算」，wire 层已随票 08 删除
 
 登记日期：2026-10-09
@@ -61,6 +71,118 @@
 状态：待审核
 
 ### 改进
+
+## T-208 — 复刻 pie 观感第一步：加「三层底色 + 语义文字档」token，用底色代替边框分层
+
+登记日期：2026-10-10
+来源：2026-10-10 会话评估「能不能复刻 pie 界面」（产出 `docs/agent-pie-ui-clone-assessment.html`）；用户原话「先做第一步」= 批准该评估里建议的第一步（只改 token 层，不碰组件结构）。
+现象：本仓助手面板是「一块白底 + 到处画 `border-gray-*`」——层级靠 1px 边框表达。参考实现 pie 用三层几乎等亮的灰（canvas #FAFBFC / surface #FFFFFF / field #F4F6F8）表达同一个层级，整屏没有一条边框却层次清楚。实测本仓 agent 目录里 `border-gray-200/700` 共 **20 处**、`bg-gray-*` 共 **34 处**，边框是主要分隔手段。
+证据：**源码统计** —— `grep -ro "border-gray-[0-9]*" src/components/newtab/workflow/agent/` 共 20 命中；参考值见 `pie-ai-agent/src/sidepanel/index.css:55-108`（`--c-canvas/surface/field/line/fg-1/2/3`），每个都是具体 hex，非估计。
+影响：观感层面 —— 边框用得多时整屏都是线，显得「拼装」而非「一体」；窄面板（320px）里尤其明显。不阻塞任何功能。
+建议：只加 token、不碰组件结构 ——
+1. `tailwind.config.js` 的 `extend.colors` 加 `canvas / surface / field / line` 四档语义色（值走 CSS 变量，与本仓既有 `primary/accent` 同款 `withOpacityValue` 写法）；
+2. `src/assets/css/tailwind.css` 的 `:host, :root` 与 `.dark` 补这四组变量的亮/暗值；
+3. 逐步把 agent 面板里的 `border-gray-200 dark:border-gray-700` 换成 `border-line`、`bg-white dark:bg-gray-800` 换成 `bg-surface`、面板底 `bg-gray-50 dark:bg-gray-900` 换成 `bg-canvas`、凹陷输入区加 `bg-field`。
+注：**不改 `gray` 别名**（`tailwind.config.js:56` 把 `gray` 指向 `colors.zinc`，全项目都在用，动它会波及整个应用）；新 token 与原类并存，可逐个替换、可回退。
+注：这一步会让锚在具体 class 串上的旧守卫连锁变红（如 T-187/`panelRender`），**属有意迁移**，需逐条判断「回归 vs 迁移」，不许批量改正则（同 T-207 那次的处理方式）。
+状态：已清（2026-10-10 完成）—— 见 `backlog-done.md` T-208：四档语义色 token（canvas/surface/field/line）已入 `tailwind.config.js` + `tailwind.css`（亮暗各一套 RGB 三元组），面板底壳（根/顶栏/左栏分隔/composer 卡）已换 `bg-canvas`/`bg-surface`/`border-line`。**只做第一步（token 层 + 底壳），未碰组件结构与布局**；语义文字档（fg-1/2/3）与正文卡片的面留第二步（= T-209）。
+
+## T-209 — 复刻 pie 观感第二步：把三层底色贯彻到卡片与输入区
+
+登记日期：2026-10-10
+来源：2026-10-10 用户实拍反馈「现在这个页面UI和你的设计稿长得不一样啊」（截图见会话记录）。根因：T-208 只做了第一步（底壳换色），而 `docs/agent-pie-ui-clone-assessment.html` §5 画的是三步做完的终态 —— 两者当然不一样。这一步补上「第二步」。
+现象：T-208 之后，面板根是 canvas、顶栏/composer 卡是 surface，但**正文区里的卡片、输入区、下拉菜单都还是旧面**：
+1. `AgentToolStep.vue` 工具卡外壳仍是 `border-gray-200 dark:border-gray-700`、内部分隔线也是 —— 与新的 line token 不同源；
+2. `AgentMarkdown.vue` 代码块仍是 `bg-gray-100 dark:bg-gray-800`、`hr` 仍是 `border-gray-200/700`；
+3. `AgentTable.vue` 表头 `bg-gray-50`、单元格 `border-gray-200/700`；
+4. `AgentDropdown.vue` 下拉菜单仍是 `bg-white dark:bg-gray-800`、`border-gray-700`；
+5. **最要紧的一处**：composer 输入区是 `!bg-transparent`（透出卡片的 surface 白）—— 输入区与白卡糊成一片，「凹陷的 field 面」完全没出来。设计稿里输入区是 `#F4F6F8` 的凹陷灰。
+证据：**源码事实** —— `grep -rn "bg-gray-50\|bg-gray-100\|bg-white\|border-gray-200\|border-gray-700" src/components/newtab/workflow/agent/*.vue` 命中工具卡/代码块/表格/下拉/表头多处；`AgentPanel.vue` 的 `<ui-textarea>` class 含 `!bg-transparent`。**渲染实测** —— 用本仓 `utils/sfc-render.mjs` 把工具卡/代码块/用户气泡渲成 HTML 挂真实 `build/newtab.css` 截图核验（产物见 `.scratch/three-layer-audit.html`，一次性脚本不入库）。
+影响：观感 —— 面板壳换了，里面还是「边框分层」的旧语言，整体不统一；用户一眼能看出「设计稿跟实际不一样」。不阻塞功能。
+建议：把三层底色贯彻到底，**仍然不碰布局结构** ——
+1. 正文卡片落 surface（浮起）：工具卡外壳、thinking 卡（已是）、下拉菜单；
+2. 凹陷面落 field：markdown 代码块、压缩卡（已是）、表头、**composer 输入区**、T-200 的复制按钮底；
+3. 一切分隔线走 `border-line`，清掉 agent 目录里残留的 `border-gray-200/700`；
+4. 用户气泡、notice 行这类**有独立语义**的底保持不动（气泡是蓝灰、notice 是 advisory 灰）。
+注：**再次会有旧守卫连锁变红，逐条判断**：T-171 的 `MUST_OVERRIDE` 清单（`!px-1/!py-1/!bg-transparent`）、`!rounded-none` 断言 —— 它们钉的是「必须带 ! 才能盖掉组件自身」这条不变量，值变了但不变量没变，改 want 列即可，断言逻辑不动。
+状态：已清（2026-10-10 完成）—— 见 `backlog-done.md` T-209。
+
+## T-210 — composer 卡片里有一个孤立的 `>` 文本节点，渲染成可见乱码字符
+
+登记日期：2026-10-10
+来源：2026-10-10 用户实拍截图 —— composer 卡片上沿浮着一个孤零零的「<」字符。
+现象：`AgentPanel.vue` 的 composer 卡片（`class="rounded-card border border-line bg-surface ..."`）里，紧跟开标签之后有一个**孤立的 `>`**。它落在已经闭合的标签之后，被 Vue 当成**文本节点**渲染出来，成了一个可见的乱码字符。
+证据：**代码事实** —— `AgentPanel.vue` 模板里该行只含一个 `>`，上一行是已闭合的 `<div ...>`。**全量扫描** —— 对 agent 目录 12 个 .vue 跑「上一非空行以 `>` 结尾 + 本行只含 `>`」的判定，仅此一处命中（其余 `>` 都是合法多行标签的收尾）。
+影响：纯观感 —— 用户看到输入框上方有个莫名其妙的符号，会以为界面坏了。不阻塞输入。
+建议：删掉那个字符；补一条守卫（同一判定）防它再回来 —— 这类失效 lint / prettier 都不拦（它们把 `>` 当普通文本），只有渲染或肉眼才发现。
+状态：已清（2026-10-10 完成）—— 见 `backlog-done.md` T-210。
+
+## T-211 — 复刻 pie 观感第三步：加语义文字色阶 fg-1/2/3，消掉 dark: 双写
+
+登记日期：2026-10-10
+来源：2026-10-10 会话「继续」—— 承接 T-208/T-209，做评估稿里「观感三件套」的最后一件（语义文字色阶）。
+现象：面板里的文字色全靠 `text-gray-500 dark:text-gray-400` 这种**双写**表达 —— 同一件事两处声明。实测 agent 目录里「次要文字」双写 14 处、「弱文字」双写 19 处；另有若干**单边** `text-gray-400`（8 处，缺 dark 对应值 —— 暗色下这些图标/占位就是错的）。参考实现 pie 用三档语义 fg（`--c-fg-1/2/3`）一次表达，跨主题稳定。
+证据：**源码统计** —— `grep -ro "text-gray-[0-9]*"` 命中 41×gray-400 / 37×gray-500 / 9×gray-600…；双写组合单独统计见上。参考值见 `pie-ai-agent/src/sidepanel/index.css:55-108`（fg-1 #14181D / fg-2 #5A6470 / fg-3 #98A1AC；暗 #E5E8EC / #8A929E / #525965）。
+影响：① 维护上「同一件事两处声明」，漏改一处就在某个主题下看不清；② 单边 `text-gray-400` 在暗色下是错的（8 处）；③ 与已落地的 canvas/surface/field 三层**面**不配套 —— 面分了三层，字却还是「第几级灰」。
+建议：加 `fg-1/2/3` 三档语义文字色（走 CSS 变量 + withOpacityValue，同 primary/accent），把 agent 目录的 `text-gray-400/500/600` + dark: 双写按档映射过去。**不动** gray 别名、不动有语义的颜色（红/绿/accent）。
+状态：已清（2026-10-10 完成）—— 见 `backlog-done.md` T-211。
+
+## T-212 — 修面板「观感三件套」之外的几处具体丑
+
+登记日期：2026-10-10
+来源：2026-10-10 用户实拍反馈「UI太丑了」（截图见会话记录 —— 浏览器侧栏态）。根因：T-208/209/210/211 解决了「token + 三层底色 + 语义文字色」这些**基底**问题，但具体组件里还有几处「基底有 token 不用、退而画边框/画胶囊」的旧形态 —— 观感的最后一公里。
+现象（按截图逐条）：
+1. **用户气泡** `bg-blue-500/15` —— 蓝色透明是「标签/通知」语义色（错误横幅、未配 Key、上下文将满），用户自己的提问用它就把"我说了什么"读成"系统提示"。换 `bg-accent/10`。
+2. **工具状态徽标** `bg-green-500/15 text-green-700` + `rounded-chip` —— 三个「完成/失败/完成」并排像「表单错误列表」。徽标去底色 + 去边框，**只留字色 + 图标**（绿/红/琥珀/灰 fg-2）。语义改由字色 + 图标形状承担，色块是冗余通道。
+3. **工具卡外壳** `border-line + bg-surface` —— 三个带边框的 surface 卡并排在 canvas 底上仍像「独立卡片」。改 `bg-field`（最暗一档）：「这一行和正文不一样」的信号靠底色差，不再画外框。底色差本身就是分层。
+4. **composer 卡** `border-line + bg-surface` 套 `bg-field` 输入区 —— 两层矩形嵌套。composer 外框去掉：canvas→surface（composer）→field（输入）三层关系靠**底色差**看得出，不必再画实线。
+5. **composer 底行「Enter 发送」提示** 与发送按钮同行 —— 视觉重量相当，用户分不清哪个是文案哪个可点。挪到 composer 顶上一行 `text-[10px] text-fg-3` 的提示，底行只剩「圆环 + 发送按钮」两个控件。
+6. **侧栏面板根** `bg-canvas` 在浏览器 chrome 上面是「白卡浮在深壳上」像弹窗。新增 `bg-shell` token（亮 #F0F2F5 / 暗 #1F2125，**暗色与 chrome 几乎同色**），侧栏 `App.vue` 根容器铺 `bg-shell` 续上 chrome，面板根在 dark 宿主下走透明 —— 透出父级，**消除「白卡浮在深壳上」的弹窗感**。独立页 / 编辑器侧栏宿主无此父级，仍走 `bg-canvas`。
+7. **宿主形态声明** —— 给 `useAgentHost` 加 `deps.shell: 'light' | 'dark'`，写到 `host.shell`；面板根根据 `host.shell` 决定透明 / `bg-canvas`。侧栏 App.vue 显式 `shell: 'dark'`。**不让面板自己读 prefers-color-scheme** —— 那是页面主题，与「宿主是不是侧栏」无关。
+证据：T-211 之后所有 token 已就位（canvas/surface/field/line + fg-1/2/3），但截图暴露的几处都是「有 token 不用、退而画边框/画胶囊」的旧形态。设计稿 `docs/agent-pie-ui-clone-assessment.html` §5 画的是「三步做完的终态」观感，截图与终态的差距全部在这 7 项里。
+影响：截图里的「island 感」是问题 6 单独造成的；「表单错误列表」感是问题 2 单独造成的；「白卡套白卡」感是问题 4 单独造成的 —— 这三项是用户感知最强的；其余是「观感」层面的细节。
+建议：逐条迁移到 token 家族 + 加 T-212 守卫。**不动**结构（chip、header、输入区都没改布局）；**不动**T-208/209/210/211 已落地的部分。
+状态：已清（2026-10-10 完成）—— 见 `backlog-done.md` T-212。守卫：① 面板根不能写死 bg-canvas（必须按 shell 切）；② composer 必须 `rounded-card bg-surface`（去 border）；③ composer 顶部必须有 `<p data-test="composer-hint">`；④ 工具徽标根不能带 rounded-chip（去框）；⑤ 用户气泡必须 bg-accent/10 不是 bg-blue-*；⑥ --color-shell 在 :root/.dark 各一次；⑦ useAgentHost 必须读 deps.shell，sidepanel 必须显式 shell: "dark"。
+
+## T-203 — 配置好 API Key 之后，面板里再也找不到进设置的路
+
+登记日期：2026-10-10
+来源：2026-10-10 会话做「Automa AgentPanel vs pie-ai-agent SidePanel」UI 对比（`docs/agent-sidepanel-ui-compare.html`）；触发点 `src/components/newtab/workflow/agent/AgentPanel.vue:172`
+现象：面板上唯一的设置入口是那条「未配置 API Key」红横幅，它挂在 `v-if="!configured"` 上。用户一旦填好 Key，横幅消失，面板里就再没有通往设置页的入口 —— 想换模型、改 baseUrl、看连接状态，得先离开助手回到主界面。
+证据：**代码事实** —— `AgentPanel.vue:172-179` 的横幅 `v-if="!configured"`；全面板 grep `goToSettings` 只有这一处调用点（`AgentPanel.vue:610`）。参考实现 sidepanel 的设置入口常驻（会话抽屉右上角 `Settings` IconButton）。
+影响：第一次配置完的用户最常做的第二件事就是「换个模型试试」，而这条路的入口恰好在他配置成功的那一刻消失。目前只能靠主界面绕回去，助手面板成了一个单向入口。
+建议：在 header 常驻一个设置图标按钮（窄宿主 header 已有会话 chip + 新建两个控件，加第三个要重新算 320px 下的横向预算）。或者只在「已配置」时显示一个更轻的入口（避免和红横幅同时出现两个设置入口 —— 那就是 T-177 刚拆掉的那类重复入口）。
+状态：已清（2026-10-10 随 T-207 一起解决）—— 见 `backlog-done.md` T-207：未配置态改为整页引导页，引导页自身就是设置入口且是该状态的唯一形态，「入口随配置成功而消失」的根因不复存在。
+
+## T-204 — composer 顶部用渐隐替代硬分割线
+
+登记日期：2026-10-10
+来源：2026-10-10 会话 UI 对比；参考实现 `pie-ai-agent/src/sidepanel/components/Chat.tsx:2003`
+现象：composer 是一条实边框卡片（T-166 合并成一框之后），消息滚到输入区边界时是被一条 1px 实线"切断"的，看不出下面还有内容继续溢出。
+证据：本仓 `AgentPanel.vue:248-250`（`rounded-card border border-gray-200`）；参考实现在输入区上方放一条 `pointer-events-none absolute inset-x-0 -top-5 h-5 bg-gradient-to-t from-canvas to-transparent`。
+影响：纯观感问题，不影响可用性。窄面板（320px）里消息被切线截断的观感比宽屏更明显。
+建议：在 composer 上方加一条 20px 高的渐隐层（`from-canvas to-transparent`，`pointer-events-none`）。成本一个绝对定位 div，不参与布局。
+状态：已清（2026-10-10）—— `AgentPanel.vue` composer 上加了 `data-test="composer-fade"` 渐隐层（`pointer-events-none absolute inset-x-0 -top-5 h-5 bg-gradient-to-t from-gray-50 to-transparent dark:from-gray-900`），form 改 `relative` 承载它。守卫钉在 `panelUi.test.js`（`composer-fade` 存在 + form 仍 `px-4`）。
+
+## T-205 — 用户长文本超过一屏时自动折叠
+
+登记日期：2026-10-10
+来源：2026-10-10 会话 UI 对比；参考实现 `pie-ai-agent/src/sidepanel/components/CollapsibleText.tsx`（`COLLAPSED_MAX_PX = 240`）
+现象：用户气泡不折叠。侧栏 360px 宽时，一条长的用户提问（贴一段日志、贴一整段页面文本）能把一屏占满，助手的回答要滚很久才看得到。
+证据：本仓 `AgentTranscript.vue:24` 的用户气泡只有 `[overflow-wrap:anywhere]`（防长串撑破已做），没有高度上限。参考实现超过 240px 折叠 + 底部渐隐 + 展开/收起。
+影响：助手场景下「贴一大段东西进来问」是高频用法（贴报错、贴 HTML、贴表格），长输入把对话区挤掉比短输入更常见。
+建议：超过阈值（240px 或按视口比例）折叠，底部渐隐 + 「展开/收起」。判定放纯模块（可单测），组件只消费 —— 沿用本仓 `usage.js` 那套做法。
+状态：已清（2026-10-10）—— 见 `backlog-done.md` T-205：判定抽成纯模块 `src/agent/foldText.js`（`foldDecision` + `USER_FOLD_MAX_PX=240`，5 条单测），用户气泡抽成 `AgentUserBubble.vue`（量 `scrollHeight` + 渐隐 + 开关）。**未做**建议里的「补『重试』」一项 —— 见 T-206 的说明（与错误卡重试语义不同，未一并做）。
+
+## T-206 — 消息级操作只有「复制全文」一个按钮，且它压在首行上
+
+登记日期：2026-10-10
+来源：2026-10-10 会话 UI 对比；触发点 `src/components/newtab/workflow/agent/AgentMarkdown.vue:13-23`
+现象：助手消息上唯一的操作是悬停才显形的「复制全文」，绝对定位在右上角、压在首行文字上（T-16 的设计）。没有重试 / 删除 / 逐条操作条。
+证据：代码位置如上；参考实现有「复制整条（富文本）+ 报告问题」，且 hover 时用 `peer-hover:bg-accent-tint` **高亮将被复制的范围** —— 我们现在只给按钮加底色，用户不知道自己会复制到哪一段。
+影响：用户分不清「复制全文」复制的是哪一条（长对话里多条消息各自带一个同款按钮）。
+建议：① 复制时高亮作用范围（成本极低，一条 `peer-hover` 类）；② 视情况补「重试」—— 但注意它与错误卡上的「重试」（`AgentTranscript.vue:128-136`）语义不同，别做成两个入口。
+状态：已清（2026-10-10）—— 见 `backlog-done.md` T-206：只做了建议①（复制按钮加 `peer` + 正文容器 `peer-hover:bg-accent/5` / `peer-focus:bg-accent/5`）。**建议②未做**：错误卡的「重试」是「这一轮失败了，重发」；消息级重试是「这一条我不满意，重来」，两者的前置条件与后果不同，且后者要处理「从哪一条重试、后续历史怎么办」，属数据模型改动 —— 若要做请单独立项，不在本条顺手实现。
 
 ## T-186 — `riMagicLine` 是全项目「AI 助手」的品牌图标，唯一语义不搭的是画布自动布局
 
@@ -98,31 +220,34 @@
 
 ### 新功能（要讨论场景，审得慢）
 
-## T-199 — 把独立助手页从主面板标签页迁移到浏览器原生侧边栏（chrome.sidePanel）
+## T-201 — 面板内没有模型 / 服务商选择器
 
 登记日期：2026-10-10
-来源：2026-10-10 会话讨论两个助手宿主形态；用户原话「把宽形态的这个助手对话取消掉，把它挪到应用的侧边栏上。本身这个对话无法操作工作流，所以在功能上无需和工作流的这个界面并存，只需要住进浏览器和页面交互的需求」。
-现象（现状）：独立助手页是主面板的一个标签页（路由 `/workflows/agent`，`layout: 'wide'`），全局会话、无 canvas 组。它的工具集（page / context / tab 三组）全部面向「当前浏览器的页面」，与 Automa 主面板本身无关。用户必须先把主面板切到这一页，才能问「这个页面结构是什么 / selector 怎么写」，切回来又得再切一次 —— 而这个场景的主场恰恰是「正在看某个网页」。
-证据（**代码事实已实测**，非推断）：
-- 数据层天然跨页：会话存储走 `browser.storage.local`（`src/agent/index.js:920-927` 的 `sessionIO`），配置（model/apiKey）同源（`:909-916` 的 `configIO`）。`browser.storage.local` 是**扩展级**存储，任何扩展页面（含未来的 sidepanel 页）都能直接读，不需要主面板先打开，也不需要跨页消息通道。这是本方案最大的有利条件 —— 用户最初担心的「侧栏要读主面板数据是不是得先开主面板」不成立。
-- runtime 与宿主无关：`agentHost.js:3-9` 顶部注释已写死「两个宿主面对的是同一个 runtime 契约和同一块面板……宿主本身除了接线没有别的逻辑」。`src/agent/` 下全部逻辑（`createAgentRuntime`、工具集、prompt、SSE、confirm 门、untrusted 包裹）零改动即可服务第三个宿主。
-- 侧栏宿主现行宽度：`sidebarCss.width` 默认 360、下限 360（`[id].vue:467-468,493`），可用内容宽度 320px（360 − padding 40）。**这与 chrome.sidePanel 的实际可用宽度量级一致**，故「窄形态 UI 与侧边栏 UI 可以大致相同」的判断成立（待 demo 视觉验证）。
-- chrome.sidePanel 宽度不可由扩展控制：官方 issue GoogleChrome/chrome-extensions-samples#1011 答复「currently not supported」，宽度由浏览器管理（默认约 320px，用户可拖宽，重开重置）。**侧栏页不能假设自己有多宽**，只能按「约 320–400px」设计。
-影响：
-- 正面：两个入口收敛为一个浏览器级入口；页面交互场景零切换成本；主面板标签体系中的助手单例/keep-alive/`localStorage['tabs']` 持久化整套机制可以卸掉。
-- 代价（必须一并决策，不能只看好处）：
-  ① **失去 wide 形态**：侧栏 ~400px 塞不下「240px 常驻历史 + 对话」的横向布局，必须退回窄宿主的 `view` 切换（chat ↔ history）。大屏用户的常驻历史列表体验消失。
-  ② **主面板标签体系整块退出**：`router.js:61` 的 agent 路由、`Agent.vue`、`Workflows.vue:58` 的 `openAgentTab()` 入口、`:199-202` 的旧数据 `/agent → /workflows/agent` 迁移代码，全部要拆。
-  ③ **Firefox 需另写 `sidebar_action`**：`chrome.sidePanel` 是 Chrome 114+ 专有；现有 `manifest.firefox.json` 是 MV2，Firefox 的侧边栏是另一套 API。要么双平台各写一套，要么 Firefox 上继续保留现行主面板标签页 —— 后者会让「取消宽形态」在 Firefox 不成立，需接受平台形态不一致。
-  ④ **多宿主困惑以新形式回归**：编辑器侧栏宿主仍在（有 canvas），浏览器侧栏宿主为全局会话。若两者会话范围不一致（一个按 workflowId 过滤、一个全局），T-182 记的「为什么这里会话多那里少」会重新出现。
-建议：分两步走，先探针后实施。
-- 第一步（探针，低成本）：做一个 sidepanel demo 页面（纯静态 HTML，可直接在浏览器打开预览），用真实的面板视觉规格（320–400px 宽）复刻窄形态布局，验证「窄 UI = 侧栏 UI」这条判断是否成立、以及窄布局在 320px 下的可读性。**demo 不等于实现**，只用于视觉裁决。
-- 第二步（实施，需先批准）：新建 `sidepanel.html` + sidepanel 入口 bundle + sidepanel 页面组件（接线照搬 `Agent.vue` 的 `useAgentHost({layout:'narrow', enabledGroups:['page','context','tab'], getWorkflowId:()=>null, getVariables:async()=>({bound:false}), getWorkflowContext:()=>null})`）；manifest 加 `sidePanel` 权限与 `side_panel.default_path` + `setPanelBehavior({openPanelOnActionClick})`；Firefox 侧另行决策；最后拆掉旧独立页。
-注：本条与 ADR 0001 的「已知欠账」直接相关 —— ADR 0001 记的收敛路径是「做一个『在助手里打开某工作流』的挂载机制后放宽 enabledGroups」，本条走的是另一条收敛路径（把无画布的那个宿主搬出主面板，让两个宿主职责彻底分离：**侧栏宿主 = 工作流内、有画布、按 workflowId；浏览器侧栏宿主 = 全局、无工作流、面向网页**）。两条路径不冲突，但若本条实施，ADR 0001 需新增一条 ADR 或补记。
+来源：2026-10-10 会话 UI 对比；触发点 `src/components/newtab/workflow/agent/AgentSessionList.vue:109-116`
+现象：面板里能看到的模型信息只有会话列表底部那一行 `config.model` 字符串，**不可点、不可切换**。要换模型必须离开助手去设置页（`src/newtab/pages/settings/SettingsAgent.vue`）。
+证据：**代码事实** —— `AgentSessionList.vue:109-116` 显示 `data-test="model-name"` 的纯文本；`AgentPanel.vue` 全面板无模型选择控件。参考实现 sidepanel 有常驻 `ModelPicker`（显示 `Provider · model`，流式时锁定并禁用）。
+影响：换模型是「这一轮答得不好，换个模型再试」的常规动作。现在这个动作要跳出助手、在设置页翻到对应连接、改完再回来，且**改完当前会话仍会沿用旧模型直到新建会话**（这个行为面板上完全没说）。
+建议：在 composer 底行加一个紧凑的模型选择器（底行现在只有「上下文圆环 + 快捷键提示 + 发送」，320px 下横向预算紧张 —— 可能需要先把快捷键提示那句收掉或缩短）。**要讨论的点**：是否需要「下次发送生效」的提示文案，以及多连接下选择器的组织方式（按 provider 分组还是平铺）。
+注：**已随 T-213 落地（2026-10-10）** —— 选择器放在 composer 底行左侧（`flex-1` 撑开前），芯片只剩等宽模型名 + 箭头（不用服务商图标），弹层底部固定小字「换模型后从下一轮开始生效，当前会话不重放」，按连接分组、无 Key 的连接标注。实现见 `src/components/newtab/workflow/agent/AgentModelPicker.vue`（新增）与 `.scratch/t213-impl.png` 的存证。**本票剩余待决项只剩「多连接下弹层怎么组织」的细化**（当前是按连接分组 + 组标题，未做折叠/搜索）。
+状态：部分落地（选择器已可用；多连接组织方式仍待观察用户反馈）
+
+## T-202 — 没有「编辑这条消息并回溯重发」
+
+登记日期：2026-10-10
+来源：2026-10-10 会话 UI 对比；参考实现 `pie-ai-agent/src/sidepanel` 的 `chat.rewind.*` 与 `useSession/rewind.ts`
+现象：想改一句已经发出的话，只能清空重开一轮。错误卡上有「重试」（`AgentTranscript.vue:128-136`），但它重发的是**出错那一轮之前最近的那条用户消息**，不是用户指定的任意一条，也不能改内容。
+证据：代码位置如上；全面板无「编辑用户消息」入口。参考实现：点用户气泡的铅笔 → 原地 textarea → Cmd+Enter → 截断该条之后全部历史并重发，文案明确写着「Editing resends this message and discards everything after it.」。
+影响：改一句 prompt 重跑是很常见的诉求（尤其调 selector、调抓取规则时）。现在的替代方案是复制原文、新建会话、粘贴、再发 —— 会话历史被切成两截。
+建议：先想清楚**语义**再动手：回溯意味着丢弃该条之后的所有内容（含工具调用与画布改动），这个破坏性要有明确确认。且它与红线「agent 永不保存工作流」的关系要理清（画布改动是内存的，回溯要不要一起回滚？）。**这是产品决策，不是 UI 改动**，建议单独立项讨论。
 状态：待审核
 
 ---
 ## 已批准（待排期）
+
+> **T-213 已于 2026-10-10 清掉**（header 两行 + composer 下半部重排 + 模型选择器）。
+> 完整档案见 `docs/backlog-done.md` 的 T-213 条目；定稿依据仍是设计稿
+> `docs/agent-ui-header-composer-redesign.html`。本票附带落地了 T-201 的「放哪」。
+
 
 ### T-81b — skills 两级注入 + read_skill 工具 + zip 导入导出（T-81 拆分第二张）
 

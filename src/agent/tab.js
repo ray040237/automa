@@ -192,6 +192,47 @@ export function targetHealth(liveTab, snapshot) {
 }
 
 /**
+ * 标签页事件到来时，面板应对目标页采取的动作（T-215）。**纯函数**。
+ *
+ * 背景：跟随态（自动态）此前只在 pin/unpin/init 等入口各解析一次，之后冻结
+ * —— 没有 `tabs.onActivated` 监听，用户切换标签页时 chip 与助手读的页面
+ * 纹丝不动（用户实测「切换到跟随态但是实际上无法跟随」）。本函数把三个
+ * 监听器（activated / removed / updated）的动作判定收拢成一处可单测的纯函数：
+ *
+ *   'skip'       —— 什么都不做（激活的就是当前目标页，解析结果不会变）
+ *   'reresolve'  —— 按降级链重解析（自动态跟随语义：换了页 / 读的页没了 /
+ *                    同一页签导航到新页面）
+ *   'health'     —— 只判健康（closed / drift），不换页
+ *
+ * 两条纪律的分界就是 pinned：
+ *   - 固定态：用户显式选的页，origin 才是真身份 —— 只判健康，永不自动换页；
+ *   - 自动态：跟的是「标签页」—— 换激活页、页签内导航都算跟随语义的一部分，
+ *     目标应当更新而不是报警。
+ *
+ * @param {{pinned: boolean, event: 'activated'|'removed'|'updated', targetTabId?: number, eventTabId?: number, urlChanged?: boolean}} p
+ * @returns {'skip'|'reresolve'|'health'}
+ */
+export function targetFollowPlan({
+  pinned,
+  event,
+  targetTabId,
+  eventTabId,
+  urlChanged = false,
+}) {
+  if (pinned) return 'health';
+
+  if (event === 'removed') return 'reresolve';
+
+  if (event === 'activated') {
+    return targetTabId === eventTabId ? 'skip' : 'reresolve';
+  }
+
+  // updated：同页签内导航（url 变了）才需要重新跟随；title / favicon 之类
+  // 只判健康即可。
+  return urlChanged ? 'reresolve' : 'health';
+}
+
+/**
  * 标签页 -> 面板「选目标页」列表的选项载荷。**纯函数**。
  *
  * 为什么不直接用上面的 normalize()：两者长得像，口径不同 ——

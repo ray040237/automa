@@ -13,13 +13,13 @@
  *
  * 本守卫钉两件事：
  *   ① 每个 `<v-remixicon>` 都必须**显式**声明 size（不许再吃默认值）；
- *   ② 尺寸收敛到 12/14/16 —— 唯一的例外是 ui-button 的 icon 变体内部
- *      （h-10 + p-2，内容区正好 24px，图标填满才算「图标按钮」），
- *      只有 composer 的发送/停止两处，且名字写死在这里，多的就会被拦下。
+ *   ② 尺寸收敛到 12/14/16/18 —— 18 是 T-213 新增的一档，只给
+ *      composer 底行那两个 32px 的图标按钮用（见下）。
  *
- * 为什么值得单开一个文件：图标默认值这种"看不见的全局决定"最容易在新增
- * 界面里悄悄复发，而单测、lint、构建、i18n 全都看不见它 —— 只有量像素的
- * 守卫能发现（与 cssSpecificity 同型的"肉眼与工具都过的坑"）。
+ * T-213 的改动：发送/停止键从 40px（ui-button icon 的 h-10 + p-2 → 24px 内容）
+ * 收到 32px（`!h-8 !w-8 !p-0`）。内容区不再是 24px 而是整个 32px，图标随之
+ * 从 24 收到 **18** —— 32px 盒子里塞 24px 图标会显得"几乎填满、没有呼吸"，
+ * 18px 是视觉平衡点（与 40→24 同比例，约 0.5625 vs 0.6）。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -88,37 +88,31 @@ test('T-175：agent 面板每个 v-remixicon 都必须显式给 size', () => {
   );
 });
 
-// —— ② 尺寸收敛，ui-button 里的 24 是唯二例外 ——
-test('T-175：图标尺寸收敛到 12/14/16，24 只留给 ui-button 内的两个按钮图标', () => {
+// —— ② 尺寸收敛，24 这个值不该再出现 ——
+test('T-175：图标尺寸收敛到 12/14/16/18，不再有 24', () => {
   const files = agentFiles();
   const histogram = {};
-  const bigNames = [];
 
   for (const file of files) {
     for (const icon of scanIcons(readFileSync(join(AGENT, file), 'utf8'))) {
       if (!icon.size) continue;
       histogram[icon.size] = (histogram[icon.size] || 0) + 1;
-      if (icon.size === '24') bigNames.push(icon.name || '(动态名)');
     }
   }
 
   assert.deepEqual(
     Object.keys(histogram).filter(
-      (size) => !['12', '14', '16', '24'].includes(size)
+      (size) => !['12', '14', '16', '18'].includes(size)
     ),
     [],
     `出现了约定外的图标尺寸：${JSON.stringify(histogram)}`
   );
 
-  // 这两处是 composer 的发送/停止：ui-button 的 icon 变体固定 h-10，
-  // 内边距 p-2，内容区正好 24px。其余图标都没有固定高度的宿主，
-  // 24px 只会把行撑高 —— 所以「多一个 24」是需要被看见的决定，不是顺手。
-  assert.deepEqual(
-    bigNames.sort(),
-    ['riArrowRightLine', 'riStopLine'],
-    [
-      '只有 composer 的发送(riArrowRightLine)/停止(riStopLine)该用 24px',
-      `实际用到 24px 的是：${JSON.stringify(bigNames)}`,
-    ].join('\n')
+  // T-213：24 这一档已随「40px 图标按钮」一起退场，现在不该有任何图标用它。
+  // 若将来又要加，请先想清楚宿主盒子多大 —— 这条断言的目的就是逼出那个思考。
+  assert.equal(
+    histogram['24'] || 0,
+    0,
+    '不该再有 24px 图标（T-213 把发送/停止键从 40px 收到 32px，图标随之到 18）'
   );
 });

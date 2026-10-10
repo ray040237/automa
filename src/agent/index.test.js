@@ -56,7 +56,7 @@ beforeEach(() => resetBrowser());
 /* ───────────────────── ① 导出面基线 ───────────────────── */
 
 describe('导出面（T-126 的 interface 宽度基线）', () => {
-  test('装配层对外就是这 16 个导出 —— 多一个少一个都该是一次显式决定', () => {
+  test('装配层对外就是这 17 个导出 —— 多一个少一个都该是一次显式决定', () => {
     const EXPECTED = [
       'BACKGROUND_CHANNEL_TIMEOUT_MS',
       'PHANTOM_AUTOMA_FUNCS',
@@ -67,6 +67,11 @@ describe('导出面（T-126 的 interface 宽度基线）', () => {
       'createAgentRuntime',
       'listTabs',
       'loadConfig',
+      // T-201/T-213：模型选择器要枚举「有哪些连接、各自的模型」，而 loadConfig
+      // 只给当前生效那一条。loadConfigDoc 返回脱敏后的整份 doc（apiKey 清空、
+      // 密文挪到 encryptedKey），正是选择器要的那份。加它是一次显式决定，
+      // 所以这条基线更新到 17。
+      'loadConfigDoc',
       'lookupBlockSchema',
       'readPageFromTab',
       'resolveTarget',
@@ -79,14 +84,13 @@ describe('导出面（T-126 的 interface 宽度基线）', () => {
     assert.deepEqual(
       Object.keys(index).sort(),
       EXPECTED,
-      '导出面变了。T-126 记录过：全仓只有 agentHost.js 消费这里的 6 个' +
-        '（configIO/createAgentRuntime/listTabs/loadConfig/resolveTarget/sessionStore），' +
-        '其余 10 个 prod 侧 0 引用。增删导出时请连带更新 T-126 的证据。'
+      '导出面变了。T-126 记录过：全仓只有 agentHost.js 消费这里的导出，' +
+        '其余在 prod 侧 0 引用。增删导出时请连带更新 T-126 的证据。'
     );
   });
 
-  test('消费面就那 6 个 —— 本文件的存在意义就是替它们兜住回归', () => {
-    // 这 6 个是 agentHost.js 真正 import 的。守卫它们的形状，
+  test('消费面就那 7 个 —— 本文件的存在意义就是替它们兜住回归', () => {
+    // 这 7 个是 agentHost.js 真正 import 的。守卫它们的形状，
     // 免得「为了测试能 import」这类理由把导出面重新撑大。
     const OBJECT_LIKE = {
       configIO: ['get', 'set', 'remove'],
@@ -96,6 +100,8 @@ describe('导出面（T-126 的 interface 宽度基线）', () => {
       'createAgentRuntime',
       'listTabs',
       'loadConfig',
+      // T-201/T-213：模型选择器的候选列表来源（agentHost 的 modelCatalog）
+      'loadConfigDoc',
       'resolveTarget',
     ];
 

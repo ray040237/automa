@@ -10,18 +10,40 @@
     也就是近黑与近白 —— 不加新色相，只是把「整个面板里唯一的那块深色边框」
     留给需要用户裁决的东西。配合已有的双按钮（拒绝 default / 允许 accent）
     和 riAlertLine，三重信号指向同一个意思：这里要你做决定。
+
+    T-200：**在「需要裁决」这一档内部再分两种作用域**。
+
+    同样是请你点头，「在页面里跑一段 JS」与「开一个新标签页」的影响面差得远：
+    前者的后果落在你的页面数据与工作流上，后者只在浏览器窗口里、随时能撤销。
+    参考实现（sidepanel）用 warning / accent 两种色相区分这类卡，本仓**不能照搬**
+    —— 琥珀已经被 semanticColor 守卫钉死给「工具被你拒绝」一个语义（T-172），
+    再拿它表示第二件事就退回了 T-152 的老问题。所以分档走**同色相内的强度差**：
+      local   = accent 实边框 + 深一档的底 + 盾牌徽标
+      browser = accent/40 淡边框 + 淡底 + 罗盘徽标
+    强度差与图标、文案是三条并行通道，色盲用户靠后两条同样能分。
   -->
   <div
-    class="rounded border border-accent/40 bg-accent/5 p-3 dark:border-accent/40"
+    class="rounded-card border border-accent/40 bg-accent/5 p-3 dark:border-accent/40"
+    :class="scopeClass"
   >
     <div class="mb-1 flex items-center gap-2 text-sm font-medium">
       <v-remixicon name="riAlertLine" size="16" />
-      <span>{{ title }}</span>
+      <span class="min-w-0">{{ title }}</span>
+      <!-- 影响面徽标：与左边框/底色、图标构成三重信号里的第三条（文案）。
+           shrink-0 —— 标题长时先截标题，徽标不许被挤掉。 -->
+      <span
+        class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-chip px-1 py-0.5 text-[11px] font-normal"
+        :class="scopeBadgeClass"
+        data-test="confirm-scope"
+      >
+        <v-remixicon :name="scopeIcon" size="14" />
+        {{ scopeLabel }}
+      </span>
     </div>
-    <p class="mb-2 text-xs text-gray-600 dark:text-gray-300">{{ hint }}</p>
+    <p class="mb-2 text-xs text-fg-2">{{ hint }}</p>
     <pre
       v-if="body"
-      class="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-black/5 p-2 text-xs dark:bg-black/30"
+      class="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-control bg-black/5 p-2 text-xs dark:bg-black/30"
       >{{ body }}</pre
     >
     <ui-checkbox v-if="canRemember" v-model="remember" class="mt-2 text-xs">
@@ -41,6 +63,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { confirmScope } from '@/agent/confirm';
 
 /**
  * 写类工具的确认卡。
@@ -66,6 +89,44 @@ const kind = computed(() => (props.confirm && props.confirm.kind) || 'generic');
 
 const canRemember = computed(() =>
   Boolean(props.confirm && props.confirm.canRemember)
+);
+
+/**
+ * T-200：影响面（local / browser）。判定在 @/agent/confirm 的纯函数里
+ * —— .vue 里的分支一条都测不到，而这个判定决定用户看到哪一档卡。
+ */
+const scope = computed(() => confirmScope(kind.value));
+
+/**
+ * 两档只差在 accent 的**强度**上，不引入第二个色相。
+ *
+ * 带 `!` 是必须的：静态 class 里已经写了 border-accent/40 / bg-accent/5，
+ * 同一元素上两条同名单类谁赢取决于 Tailwind 的产出顺序（T-171 那一类坑），
+ * 靠顺序赢不可靠 —— 用 !important 明确表达「这一档要盖掉基线」。
+ */
+const scopeClass = computed(() =>
+  scope.value === 'local'
+    ? '!border-accent !bg-accent/10 dark:!border-accent'
+    : ''
+);
+
+/** 徽标：local 用盾牌（动到你的东西），browser 用罗盘（在浏览器里逛一圈）。 */
+const scopeIcon = computed(() =>
+  scope.value === 'local' ? 'riShieldKeyholeLine' : 'riCompass3Line'
+);
+
+const scopeBadgeClass = computed(() =>
+  scope.value === 'local'
+    ? 'bg-accent/15 text-accent'
+    : 'bg-gray-500/10 text-fg-2'
+);
+
+const scopeLabel = computed(() =>
+  t(
+    scope.value === 'local'
+      ? 'workflow.agent.confirm.scopeLocal'
+      : 'workflow.agent.confirm.scopeBrowser'
+  )
 );
 
 /** 没有目标页标题时给个占位，别让标题里出现空的「在  上执行」。 */

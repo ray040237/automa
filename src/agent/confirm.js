@@ -80,6 +80,34 @@ export function canRememberSession(name) {
 }
 
 /**
+ * 这次确认的**作用域**：后果落在哪儿。
+ *
+ * 不是「危险等级」—— 危险等级由 ADR 0002 的 read/write 分级管（write 才进得
+ * 到这张卡），这里分的是另一件事：放行之后，影响留在浏览器里，还是留在你的
+ * 数据与执行环境里。
+ *
+ *   local   = 在页面里执行代码 / 改你的画布数据 —— 后果落在用户自己的资产上
+ *   browser = 描边高亮 / 开个标签页 —— 后果在浏览器窗口内，随时可撤销
+ *
+ * 为什么放进纯函数而不是写在卡片里：.vue 里的分支一条都测不到（T-26），
+ * 而这个判定决定「用户一眼看到的是哪种卡」。未知 kind 按 local 处理 ——
+ * 危险面不清楚时按重的那一档显示，与 validateTools 的保守方向一致。
+ *
+ * @param {string} kind buildConfirmation 产出的 kind
+ * @returns {'local'|'browser'}
+ */
+export function confirmScope(kind) {
+  switch (kind) {
+    case 'selector':
+    case 'url':
+      return 'browser';
+    default:
+      // code / canvas / generic 与任何将来新增的未知 kind
+      return 'local';
+  }
+}
+
+/**
  * 本次确认的展示载荷。
  *
  * 「用户到底在放行什么」的事实由**工具自带**（T-134）：写类工具定义里的

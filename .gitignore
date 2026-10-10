@@ -11,6 +11,9 @@
 /build-zip
 dist
 
+# 构建前把旧 build/ 挪开（clean-webpack-plugin 清目录会撞文件安全守卫）时产生
+/build.bak.*
+
 # misc
 .DS_Store
 .eslintcache

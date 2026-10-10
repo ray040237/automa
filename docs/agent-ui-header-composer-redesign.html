@@ -1,0 +1,2066 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent 面板设计稿 · Header 与 composer 下半部（T-213）</title>
+    <style>
+      /* ============================================================
+       本稿的 CSS 变量**刻意与源码 token 同值**，不是另起一套：
+       亮色取 src/assets/css/tailwind.css :host/:root 的 RGB 三元组，
+       暗色取 .dark 块。这样稿子上的色值可以直接抄回 tailwind.css。
+       ============================================================ */
+      :root {
+        /* 三层底（T-208） */
+        --canvas: #fafbfc; /* 250 251 252 */
+        --surface: #ffffff; /* 255 255 255 */
+        --field: #f4f6f8; /* 244 246 248 */
+        --line: #e4e8ec; /* 228 232 236 */
+        /* 语义文字（T-211） */
+        --fg1: #14181d;
+        --fg2: #5a6470;
+        --fg3: #98a1ac;
+        /* accent（Automa 现状：近黑） */
+        --accent-light: #18181b;
+        --accent-dark: #f4f4f5;
+        /* 语义色 */
+        --warn: #b85a4d;
+        --warn-tint: rgba(184, 90, 77, 0.12);
+        --danger: #d9544a;
+        --danger-tint: rgba(217, 84, 74, 0.12);
+        --success: #3e8e63;
+        --pending: #8a6d2e;
+        /* 页面自身（稿纸），与面板无关 */
+        --page-bg: #f4f5f7;
+        --page-text: #1f2937;
+        --page-muted: #6b7280;
+        --code-bg: #f3f4f6;
+        --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.06),
+          0 8px 28px rgba(0, 0, 0, 0.07);
+        --mark: #fef08a;
+        --mark-fg: #854d0e;
+        --ok-bg: rgba(62, 142, 99, 0.1);
+        --ok-fg: #2f6e4c;
+        --bad-bg: rgba(217, 84, 74, 0.1);
+        --bad-fg: #b8433a;
+      }
+      body.dark {
+        --canvas: #0b0d10;
+        --surface: #14171c;
+        --field: #1a1e25;
+        --line: #22272f;
+        --fg1: #e5e8ec;
+        --fg2: #8a929e;
+        --fg3: #525965;
+        --page-bg: #0f1115;
+        --page-text: #e5e7eb;
+        --page-muted: #9ca3af;
+        --code-bg: #22262e;
+        --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.5);
+        --mark: #713f12;
+        --mark-fg: #fde68a;
+        --ok-bg: rgba(62, 142, 99, 0.16);
+        --ok-fg: #7fc7a0;
+        --bad-bg: rgba(217, 84, 74, 0.16);
+        --bad-fg: #f08a80;
+        --warn-tint: rgba(184, 90, 77, 0.18);
+        --danger-tint: rgba(217, 84, 74, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--page-bg);
+        color: var(--page-text);
+        font: 13px/1.65 -apple-system, "Segoe UI", "Microsoft YaHei", Roboto,
+          Helvetica, Arial, sans-serif;
+      }
+      .wrap {
+        max-width: 1480px;
+        margin: 0 auto;
+        padding: 28px 20px 90px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 36px 0 12px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--line);
+      }
+      h3 {
+        font-size: 13px;
+        margin: 20px 0 8px;
+      }
+      p {
+        margin: 8px 0;
+      }
+      .lede {
+        color: var(--page-muted);
+        margin: 0 0 4px;
+        max-width: 1020px;
+      }
+      ul,
+      ol {
+        margin: 8px 0;
+        padding-left: 22px;
+      }
+      li {
+        margin: 3px 0;
+      }
+      code {
+        background: var(--code-bg);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      mark {
+        background: var(--mark);
+        color: var(--mark-fg);
+        padding: 0 3px;
+        border-radius: 3px;
+      }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin: 14px 0 6px;
+        flex-wrap: wrap;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: var(--page-bg);
+        padding: 8px 0;
+      }
+      .toolbar button {
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 11px;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--page-text);
+        cursor: pointer;
+      }
+      .toolbar button:hover {
+        border-color: var(--fg3);
+      }
+      .toolbar button.on {
+        background: var(--page-text);
+        color: var(--page-bg);
+        border-color: var(--page-text);
+      }
+      .toolbar .sep {
+        width: 1px;
+        height: 20px;
+        background: var(--line);
+      }
+
+      /* ---------- 交付物：320 面板 ---------- */
+      .grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        align-items: flex-start;
+      }
+      .case {
+        width: 320px;
+      }
+      .case.wide {
+        width: 660px;
+      }
+      .cap {
+        font-size: 12px;
+        color: var(--page-muted);
+        margin: 0 0 6px;
+        min-height: 32px;
+      }
+      .cap b {
+        color: var(--page-text);
+        font-size: 12.5px;
+      }
+      .cap .tag {
+        display: inline-block;
+        font-size: 10px;
+        padding: 0 5px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        color: var(--page-muted);
+        margin-left: 4px;
+        vertical-align: 1px;
+      }
+      .cap .tag.bad {
+        background: var(--bad-bg);
+        color: var(--bad-fg);
+        border-color: transparent;
+      }
+      .cap .tag.good {
+        background: var(--ok-bg);
+        color: var(--ok-fg);
+        border-color: transparent;
+      }
+
+      .panel {
+        width: 320px;
+        height: 560px;
+        background: var(--canvas);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        box-shadow: var(--shadow-panel);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        color: var(--fg1);
+      }
+      /* header 与 footer 都压在 canvas 上（本稿核心主张之一） */
+      .p-head {
+        flex: 0 0 auto;
+        border-bottom: 1px solid var(--line);
+        background: var(--canvas);
+      }
+      .p-body {
+        flex: 1 1 auto;
+        overflow: auto;
+        padding: 10px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .p-foot {
+        flex: 0 0 auto;
+        padding: 0 16px 10px;
+      }
+
+      /* ---------- 通用小件 ---------- */
+      .truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .box {
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 6px;
+      }
+      body.dark .box {
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .box:hover {
+        background: rgba(0, 0, 0, 0.08);
+      }
+      body.dark .box:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .ico {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        border: 0;
+        background: transparent;
+        color: var(--fg2);
+        cursor: pointer;
+        border-radius: 6px;
+        padding: 0;
+      }
+      .ico svg {
+        display: block;
+      }
+      .ico:hover {
+        color: var(--fg1);
+        background: rgba(0, 0, 0, 0.05);
+      }
+      body.dark .ico:hover {
+        background: rgba(255, 255, 255, 0.07);
+      }
+      .ico.sm {
+        width: 24px;
+        height: 24px;
+      }
+      .ico.md {
+        width: 28px;
+        height: 28px;
+      }
+      .fav {
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+        flex: 0 0 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        font-weight: 700;
+        color: #fff;
+      }
+      .fav.off {
+        background: transparent !important;
+        color: var(--fg3);
+        font-weight: 400;
+      }
+      .pill {
+        font-size: 10px;
+        line-height: 1.6;
+        padding: 0 5px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+      }
+      .pill.on {
+        background: rgba(24, 24, 27, 0.12);
+        color: var(--fg1);
+      }
+      body.dark .pill.on {
+        background: rgba(244, 244, 245, 0.16);
+      }
+      .pill.warn {
+        background: var(--warn-tint);
+        color: var(--warn);
+      }
+      .pill.bad {
+        background: var(--danger-tint);
+        color: var(--danger);
+      }
+      .spacer {
+        flex: 1 1 auto;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      /* ---------- ① header 现状 vs 目标 ---------- */
+      .h-now {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 16px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--line);
+      }
+      .h-now .chip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        flex: 1 1 auto;
+        padding: 6px 8px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.05);
+        font-size: 13px;
+        cursor: pointer;
+      }
+      body.dark .h-now .chip {
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .h-now .new {
+        flex: 0 0 auto;
+        padding: 6px 8px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.05);
+        cursor: pointer;
+      }
+      body.dark .h-now .new {
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .h-tgt {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: var(--canvas);
+        border-bottom: 1px solid var(--line);
+      }
+      .h-tgt .titlebar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        flex: 1 1 auto;
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .h-tgt .titlebar:hover {
+        background: var(--field);
+      }
+      .h-tgt .titlebar .chev {
+        color: var(--fg3);
+        opacity: 0;
+        flex: 0 0 12px;
+        transition: opacity 140ms cubic-bezier(0.32, 0.72, 0, 1),
+          transform 160ms cubic-bezier(0.32, 0.72, 0, 1);
+      }
+      .h-tgt .titlebar:hover .chev,
+      .h-tgt .titlebar.is-open .chev {
+        opacity: 1;
+      }
+      .h-tgt .titlebar.is-open {
+        background: var(--field);
+      }
+      .h-tgt .titlebar.is-open .chev {
+        transform: rotate(180deg);
+      }
+      /* 第二行 = 标签页切换（本次美化重点） */
+      .h-tabsrow {
+        padding: 0 10px 6px;
+      }
+      .tabsw {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        padding: 5px 7px;
+        border-radius: 7px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--fg1);
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+        transition: background-color 140ms cubic-bezier(0.32, 0.72, 0, 1),
+          border-color 140ms cubic-bezier(0.32, 0.72, 0, 1);
+      }
+      .tabsw:hover {
+        border-color: var(--fg3);
+      }
+      .tabsw:active {
+        background: var(--field);
+      }
+      .tabsw .chev {
+        color: var(--fg3);
+        flex: 0 0 12px;
+        margin-left: auto;
+      }
+      .tabsw.auto {
+        border-color: transparent;
+        background: transparent;
+        color: var(--fg2);
+      }
+      .tabsw.auto:hover {
+        background: var(--field);
+        color: var(--fg1);
+      }
+      .tabsw.stale {
+        border-color: transparent;
+        background: var(--danger-tint);
+        color: var(--danger);
+      }
+      .tabsw .pin {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        color: var(--fg3);
+      }
+
+      /* ---------- ② composer 三种形态 ---------- */
+      .composer {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .c-card {
+        border-radius: 14px;
+        background: var(--field);
+        border: 1px solid var(--line);
+        padding: 10px 12px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        transition: border-color 140ms cubic-bezier(0.32, 0.72, 0, 1);
+      }
+      .c-card.focus {
+        border-color: var(--accent-light);
+      }
+      body.dark .c-card.focus {
+        border-color: var(--accent-dark);
+      }
+      /* 变体：保留 T-212 的「无边框 + 两层底」 */
+      .c-card.noborder {
+        border-color: transparent;
+        background: var(--surface);
+      }
+      .c-card.noborder .c-ta {
+        background: var(--field);
+        border-radius: 8px;
+        padding: 6px 8px;
+      }
+      .c-ta {
+        width: 100%;
+        min-height: 56px;
+        border: 0;
+        outline: none;
+        resize: none;
+        padding: 0;
+        font: inherit;
+        font-size: 13px;
+        line-height: 20px;
+        color: var(--fg1);
+        background: transparent;
+        display: block;
+      }
+      .c-ta::placeholder {
+        color: var(--fg3);
+      }
+      .c-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 28px;
+      }
+      .c-bar .gap {
+        flex: 1 1 auto;
+        min-width: 4px;
+      }
+      .c-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 24px;
+        padding: 0 7px;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--fg2);
+        font-size: 12px;
+        cursor: pointer;
+        min-width: 0;
+      }
+      .c-chip:hover {
+        background: rgba(0, 0, 0, 0.05);
+        color: var(--fg1);
+      }
+      body.dark .c-chip:hover {
+        background: rgba(255, 255, 255, 0.07);
+      }
+      .c-chip.solid {
+        border-color: var(--line);
+        background: var(--surface);
+      }
+      .c-chip .chev {
+        color: var(--fg3);
+        transition: transform 140ms cubic-bezier(0.32, 0.72, 0, 1);
+      }
+      .c-chip[aria-expanded="true"] .chev {
+        transform: rotate(180deg);
+      }
+      .c-send {
+        flex: 0 0 32px;
+        width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent-light);
+        color: #fff;
+        cursor: pointer;
+      }
+      body.dark .c-send {
+        background: var(--accent-dark);
+        color: #18181b;
+      }
+      .c-send.ghost {
+        background: rgba(0, 0, 0, 0.05);
+        color: var(--fg1);
+      }
+      body.dark .c-send.ghost {
+        background: rgba(255, 255, 255, 0.07);
+        color: var(--fg1);
+      }
+      .c-send:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .c-send.stop {
+        background: var(--warn-tint);
+        color: var(--warn);
+        box-shadow: 0 0 0 1.5px var(--warn);
+      }
+      .c-hint {
+        font-size: 10px;
+        color: var(--fg3);
+        padding: 0 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* 水位圆环 */
+      .ring-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex: 0 0 auto;
+        height: 24px;
+        padding: 0 5px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--fg2);
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .ring-btn:hover {
+        background: rgba(0, 0, 0, 0.05);
+      }
+      body.dark .ring-btn:hover {
+        background: rgba(255, 255, 255, 0.07);
+      }
+      .ring-btn.warn {
+        color: var(--warn);
+      }
+      .ring-btn.crit {
+        color: var(--danger);
+      }
+      .ring-btn .num {
+        font-size: 11px;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* 模型选择芯片 */
+      .mp {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 24px;
+        padding: 0 5px 0 4px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--fg2);
+        font-size: 12px;
+        cursor: pointer;
+        min-width: 0;
+        max-width: 150px;
+      }
+      .mp:hover {
+        background: rgba(0, 0, 0, 0.05);
+        color: var(--fg1);
+      }
+      body.dark .mp:hover {
+        background: rgba(255, 255, 255, 0.07);
+      }
+
+      /* 目标页 chip（目标态放在底行） */
+      .tp {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 24px;
+        padding: 0 6px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.05);
+        color: var(--fg2);
+        font-size: 11px;
+        cursor: pointer;
+        min-width: 0;
+        max-width: 132px;
+      }
+      body.dark .tp {
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .tp.auto {
+        background: transparent;
+      }
+      .tp.auto:hover {
+        background: rgba(0, 0, 0, 0.05);
+      }
+      body.dark .tp.auto:hover {
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      /* ---------- 浮层 ---------- */
+      .pop {
+        position: relative;
+        margin-top: 6px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+        overflow: hidden;
+        color: var(--fg1);
+      }
+      .pop .ph {
+        padding: 6px 10px;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--fg3);
+      }
+      .pop .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .pop .row:hover {
+        background: var(--field);
+      }
+      .pop .row.sel {
+        background: var(--field);
+      }
+      .pop .row .u {
+        margin-left: auto;
+        font-size: 10px;
+        color: var(--fg3);
+        flex: 0 0 auto;
+      }
+      .pop .foot {
+        border-top: 1px solid var(--line);
+        padding: 7px 10px;
+        font-size: 11px;
+        color: var(--fg2);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+      }
+      .pop .foot:hover {
+        background: var(--field);
+      }
+      .pop .divider {
+        height: 1px;
+        background: var(--line);
+        margin: 4px 0;
+      }
+      /* 会话行里的删除按钮：平时不显眼，hover 行才亮出来 */
+      .pop .del {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 22px;
+        width: 22px;
+        height: 22px;
+        border-radius: 5px;
+        color: var(--fg3);
+        opacity: 0;
+        transition: opacity 120ms ease-out, background-color 120ms ease-out;
+      }
+      .pop .row:hover .del {
+        opacity: 1;
+      }
+      .pop .del:hover {
+        background: var(--danger-tint);
+        color: var(--danger);
+      }
+      .pop .row .u {
+        transition: opacity 120ms ease-out;
+      }
+      .pop .row:hover .u {
+        opacity: 0;
+      }
+      .pop .row:hover .del {
+        margin-left: 0;
+      }
+      .pop .note {
+        padding: 4px 10px 8px;
+        font-size: 10px;
+        color: var(--fg3);
+      }
+
+      /* ---------- 三段式说明表 ---------- */
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 12px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 7px 10px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        font-weight: 600;
+        color: var(--fg2);
+        background: var(--field);
+        font-size: 11px;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td.k {
+        white-space: nowrap;
+        font-size: 11px;
+      }
+      .bad {
+        color: var(--bad-fg);
+      }
+      .good {
+        color: var(--ok-fg);
+      }
+      .swatch {
+        display: inline-block;
+        width: 11px;
+        height: 11px;
+        border-radius: 3px;
+        border: 1px solid var(--line);
+        vertical-align: -1px;
+        margin-right: 4px;
+      }
+      .cols {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .cols > div {
+        flex: 1 1 300px;
+        min-width: 260px;
+      }
+      .note-block {
+        border-left: 2px solid var(--line);
+        padding: 2px 0 2px 12px;
+        color: var(--page-muted);
+        font-size: 12px;
+        margin: 12px 0;
+      }
+      .measure {
+        font-size: 11px;
+        color: var(--fg3);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Agent 面板设计稿 · header 与 composer 下半部</h1>
+      <p
+        style="
+          display: inline-block;
+          margin: 0 0 10px;
+          padding: 4px 12px;
+          border-radius: 999px;
+          background: var(--ok-bg);
+          color: var(--ok-fg);
+          font-size: 12px;
+          font-weight: 600;
+        "
+      >
+        ✓ 已定稿（2026-10-10）—— 用户确认「就定这一稿」，可据此开工
+      </p>
+      <p class="lede">
+        对应票 <code>T-213</code>。两个区域：
+        <b>① 顶部 header</b>、<b>② 下半部</b>（输入框 / 发送键 / 标签页切换 /
+        上下文状态 / 模型状态）。所有色值 <b>直接取源码 token</b>
+        （<code>tailwind.css</code> 的 <code>:host/:root</code> 与 <code>.dark</code>），
+        稿上的颜色可以原样抄回代码。
+      </p>
+      <p class="lede">
+        参照实现是 <code>pie-ai-agent/src/sidepanel</code> —— 它是 Automa 正在复刻的那套观感，
+        比任何博客拆解都准。下文每条主张后面括注了参考文件与行号。
+      </p>
+
+      <div class="toolbar">
+        <button id="theme-btn">切换亮 / 暗</button>
+        <span class="sep"></span>
+        <span class="measure">320px 窄宿主（浏览器侧栏 / 编辑器侧栏）</span>
+      </div>
+
+      <!-- ============================================================
+           §0 结论先行
+           ============================================================ -->
+      <h2>§0 调研到的「优秀 UI 在做什么」</h2>
+      <p>
+        读参考实现源码（不是读文章）得到的五条，本稿的每一处改动都挂在其中一条上：
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 130px">做法</th>
+            <th>参考实现怎么做的</th>
+            <th style="width: 300px">Automa 现状</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="k">header 压在最底层</td>
+            <td>
+              header 走 <code>bg-canvas</code> 而不是 <code>bg-surface</code>，
+              正文卡才是 surface（<code>TopBar.tsx:29</code>）
+            </td>
+            <td class="bad">
+              header 是 <code>bg-surface</code>，与正文卡同层 ——
+              「header 是面板的一部分」而不是「浮在面板上的条」
+            </td>
+          </tr>
+          <tr>
+            <td class="k">状态藏在动作后面</td>
+            <td>
+              圆环 16×16 <b>不带数字</b>；其注释明写「消费级产品（Dia / Atlas /
+              Gemini in Chrome）根本不暴露 token 水位」（<code>ContextRing.tsx:8-20</code>）
+            </td>
+            <td class="bad">
+              14×14 圆环带常驻 <code>{pct}%</code> 文字，占着底行横向预算
+            </td>
+          </tr>
+          <tr>
+            <td class="k">底行「左手工具、右手状态」</td>
+            <td>
+              一行里：左 = 工具入口（<code>ToolsMenu</code>），
+              <b>中间一个 <code>flex-1</code> 撑开</b>，
+              右 = 模型 + 水位 + 发送（<code>Chat.tsx:2120-2170</code>）
+            </td>
+            <td class="bad">
+              <code>AgentPanel.vue:368</code> 的底行 <b>没有 flex-1</b>，
+              圆环与发送按钮贴左边缘
+            </td>
+          </tr>
+          <tr>
+            <td class="k">输入区「凹」，卡片「凸」</td>
+            <td>
+              卡片 <code>bg-field</code> + <code>border-line</code>，
+              内部 textarea <code>bg-transparent</code>，
+              focus 时 <code>border-accent</code>（<code>Chat.tsx:2007-2016</code>）
+            </td>
+            <td class="bad">
+              卡片 <code>bg-surface</code>（无边框），textarea <code>!bg-field</code> ——
+              <b>正好反过来</b>：凸的在外、凹的在内
+            </td>
+          </tr>
+          <tr>
+            <td class="k">模型状态常驻可见</td>
+            <td>
+              <code>provider · model</code> 等宽字 + 服务商图标 + 旋转箭头，
+              流式时锁定（<code>ModelPicker.tsx:1-60</code>）
+            </td>
+            <td class="bad">面板内<b>完全没有</b>（T-201）</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note-block">
+        第五条是<b>唯一的功能新增</b>，其余四条都只是观感重排 ——
+        本稿刻意把「加功能」与「调布局」分开，方便拆票验收。
+      </div>
+
+      <!-- ============================================================
+          §1 header
+          ============================================================ -->
+      <h2>§1 顶部 header</h2>
+      <p>
+        现状是一行：<code>[会话 chip ────────] [+ 新建]</code>。
+        问题不在「少了什么」，而在<b>它把三件不同层级的事塞进了一行</b>：
+        「我在哪个会话」是导航、「我看的是哪个页面」是上下文、「用什么模型」是配置。
+        三者生命周期不同 —— 换会话会换页面，换页面不会换模型。
+      </p>
+
+      <div class="grid">
+        <div class="case">
+          <p class="cap">
+            <b>现状</b><span class="tag bad">问题</span><br />
+            单行 + <code>bg-surface</code>。模型状态无处安放，页面来源不可见。
+          </p>
+          <div class="panel">
+            <div class="h-now">
+              <div class="chip">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--fg2); flex: 0 0 14px"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>
+                <span class="truncate" style="font-size: 13px">「新建会话」应走哪条路</span>
+              </div>
+              <div class="new">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              </div>
+            </div>
+            <div class="p-body">
+              <div class="box" style="padding: 8px 10px; font-size: 12.5px; color: var(--fg2)">
+                面板正文（模拟）。注意 header 底与正文底<b>同色</b> —— 中间那条
+                细线是唯一的分隔，看起来像「一张纸被划了一道」。
+              </div>
+              <div class="box" style="padding: 8px 10px; font-size: 12.5px; color: var(--fg2)">
+                用户看不到模型、看不到目标页来源、看不到是否有后台任务。
+              </div>
+            </div>
+            <div class="p-foot">
+              <div class="c-card noborder">
+                <div class="c-ta" style="color: var(--fg3)">问问这个页面…</div>
+                <div class="c-bar">
+                  <button class="ring-btn" title="上下文 12%"><svg width="16" height="16" viewBox="0 0 16 16" style="flex: 0 0 16px"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" opacity="0.25" /><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="33.2" transform="rotate(-90 8 8)" /></svg></button>
+                  <span class="gap"></span>
+                  <button class="c-send" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="case">
+          <p class="cap">
+            <b>目标态 A · 两行（定稿）</b><span class="tag good">本次改法</span><br />
+            行 1 = 图标 + <b>可点的标题</b>（点开下拉：切换 / 删除）+ 新建；
+            行 2 = 标签页切换（美化过的整行 chip）。
+            <b>「会话管理」那一行去掉</b> —— 管理动作收进标题的下拉里。
+          </p>
+          <div class="panel">
+            <div class="p-head" style="padding: 0">
+              <!-- 行 1：导航 -->
+              <div class="h-tgt" style="border-bottom: 0">
+                <button class="ico sm" title="会话历史" aria-label="会话历史">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>
+                </button>
+                <!-- 标题即下拉触发器：切换 / 重命名 / 删除都在里面 -->
+                <div class="titlebar is-open" title="点开：切换会话 / 重命名 / 删除" aria-expanded="true">
+                  <span class="truncate">「新建会话」应走哪条路</span>
+                  <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                </div>
+                <button class="ico sm" title="新建会话" aria-label="新建会话">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                </button>
+              </div>
+              <!-- 行 2：标签页切换 -->
+              <div class="h-tabsrow">
+                <button class="tabsw" title="点开换目标页 / 解除固定">
+                  <span class="fav" style="background: #ff5000">淘</span>
+                  <span class="truncate">商品列表 - 淘宝网</span>
+                  <span class="pill on">已固定</span>
+                  <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+              </div>
+            </div>
+            <div class="p-body">
+              <div style="background: var(--surface); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--fg2)">
+                正文卡走 <code>surface</code>，比 header 亮一档 ——
+                「header 是底、内容浮在上面」的层级一眼看得出。
+              </div>
+              <div style="background: var(--surface); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--fg2)">
+                标题行省下的高度给了正文；标签页切换单独成行、整行宽，名字能显示全。
+              </div>
+            </div>
+            <div class="p-foot">
+              <div class="c-card">
+                <div class="c-ta" style="color: var(--fg3)">问问这个页面…</div>
+                <div class="c-bar">
+                  <button class="mp">
+                    <span class="truncate mono" style="font-size: 11px">gpt-4o · mini</span>
+                    <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 12px; color: var(--fg3)"><path d="M6 9l6 6 6-6" /></svg>
+                  </button>
+                  <span class="gap"></span>
+                  <button class="ring-btn" title="上下文 12%">
+                    <svg width="16" height="16" viewBox="0 0 16 16" style="flex: 0 0 16px"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" opacity="0.25" /><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="33.2" transform="rotate(-90 8 8)" /></svg>
+                  </button>
+                  <button class="c-send" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="case">
+          <p class="cap">
+            <b>标题行的下拉（展开态）</b><span class="tag good">切换 / 删除</span><br />
+            点标题弹出。列表复用 <code>AgentSessionList</code> 的两行密度
+            （标题 + 「时间 · N 条」），当前项打勾，右侧删除。
+          </p>
+          <div class="panel" style="height: 560px">
+            <div class="p-head" style="padding: 0">
+              <div class="h-tgt" style="border-bottom: 0">
+                <button class="ico sm">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>
+                </button>
+                <div class="titlebar is-open" aria-expanded="true">
+                  <span class="truncate">「新建会话」应走哪条路</span>
+                  <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                </div>
+                <button class="ico sm">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                </button>
+              </div>
+              <div class="h-tabsrow">
+                <button class="tabsw">
+                  <span class="fav" style="background: #ff5000">淘</span>
+                  <span class="truncate">商品列表 - 淘宝网</span>
+                  <span class="pill on">已固定</span>
+                  <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+              </div>
+            </div>
+            <div class="p-body" style="position: relative; padding-top: 0">
+              <!-- 下拉浮层：贴在标题正下方 -->
+              <div class="pop" style="margin-top: 4px">
+                <div class="ph">切换会话 · 共 3 条</div>
+                <div class="row sel">
+                  <span class="truncate" style="flex: 1 1 auto">「新建会话」应走哪条路</span>
+                  <span class="u" style="color: var(--fg2)">✓</span>
+                  <span class="del" title="删除这条会话">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M6 6l1 14h10l1-14" /></svg>
+                  </span>
+                </div>
+                <div class="row">
+                  <span class="truncate" style="flex: 1 1 auto">总结一下这页的要点</span>
+                  <span class="u">14:02 · 6 条</span>
+                  <span class="del" title="删除这条会话">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M6 6l1 14h10l1-14" /></svg>
+                  </span>
+                </div>
+                <div class="row">
+                  <span class="truncate" style="flex: 1 1 auto">把这些字段按时间排序</span>
+                  <span class="u">昨天 · 4 条</span>
+                  <span class="del" title="删除这条会话">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M6 6l1 14h10l1-14" /></svg>
+                  </span>
+                </div>
+                <div class="divider"></div>
+                <div class="foot">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>
+                  <span>查看全部历史会话</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: auto"><path d="M9 6l6 6-6 6" /></svg>
+                </div>
+              </div>
+            </div>
+            <div class="p-foot" style="opacity: 0.4">
+              <div class="c-card">
+                <div class="c-ta" style="color: var(--fg3)">问问这个页面…</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="case">
+          <p class="cap">
+            <b>目标态 · 单行压缩（行 2 保留版）</b><span class="tag">对照</span><br />
+            若不想要行 2，可把标签页退成标题右侧小 chip —— 但页面名只剩 4~6 字。
+            <b>本稿不推荐</b>，仅作对照。
+          </p>
+          <div class="panel">
+            <div class="p-head" style="padding: 4px 10px">
+              <div style="display: flex; align-items: center; gap: 6px">
+                <button class="ico sm">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>
+                </button>
+                <span class="truncate" style="flex: 1 1 auto; font-size: 13px; font-weight: 500; padding: 6px 2px">「新建会话」应走哪条路</span>
+                <button class="tp" title="当前目标页">
+                  <span class="fav" style="background: #ff5000; width: 12px; height: 12px; flex: 0 0 12px"></span>
+                  <span class="truncate">淘宝</span>
+                </button>
+                <button class="ico sm">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                </button>
+              </div>
+            </div>
+            <div class="p-body">
+              <div style="background: var(--surface); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--fg2)">
+                单行形态。省下的 26px 直接给了正文，但「商品列表 - 淘宝网」被压成
+                「淘宝」两个字 —— 用户在多个同域标签页之间分不出来。
+              </div>
+            </div>
+            <div class="p-foot">
+              <div class="c-card">
+                <div class="c-ta" style="color: var(--fg3)">问问这个页面…</div>
+                <div class="c-bar">
+                  <button class="mp">
+                    <span class="truncate mono" style="font-size: 11px">gpt-4o · mini</span>
+                  </button>
+                  <span class="gap"></span>
+                  <button class="c-send" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>header 的四个决定</h3>
+      <table>
+        <tbody>
+          <tr>
+            <td class="k">底色</td>
+            <td>
+              <code>bg-surface</code> → <code>bg-canvas</code>。
+              参考 <code>TopBar.tsx:29</code>（<code>bg-canvas</code> + <code>border-b border-line</code>）。
+              <b>收益</b>：header 与 composer 都回到 canvas，「夹在中间的内容」是唯一浮起的东西，
+              层级从「三段并列」变成「一条底 + 中间卡片」。
+            </td>
+          </tr>
+          <tr>
+            <td class="k">行数</td>
+            <td>
+              <b>两行</b>（已拍板）。参考 <code>TopBar.tsx:33-46</code> 的两行结构。
+              行 1 = 图标 + <b>可点的标题</b> + 新建；
+              行 2 = 标签页切换（<b>整行宽</b>的 chip）。
+            </td>
+          </tr>
+          <tr>
+            <td class="k">会话入口</td>
+            <td>
+              从「宽 chip 带底色」改成 <b>28px 图标按钮 + 可点的标题</b>。
+              理由：现状那个 <code>bg-box-transparent</code> 灰胶囊占了大半行，
+              却只表达「点这里进历史」；参考实现用 28px 图标按钮做同一件事
+              （<code>IconButton.tsx</code> 的 <code>sm: h-7 w-7</code>），
+              标题因此能多显示 3~4 个字。
+              <b>标题本身是一个下拉触发器</b>（见下一条）。
+            </td>
+          </tr>
+          <tr>
+            <td class="k">标题即下拉</td>
+            <td>
+              <b>本次改动的核心。</b>点标题就地弹出会话列表：<b>切换</b>（点一行即切）、
+              <b>删除</b>（每行右侧垃圾桶，hover 才显形）、底部一行「查看全部历史会话」
+              导向正文区的整页历史视图。
+              这样「会话管理」不再需要单独一行 —— <b>省掉一整行</b>，
+              而「切换」这个最高频动作从「跳到另一屏」变成「就地在原地」。
+              列表复用 <code>AgentSessionList</code> 已有的两行密度与分组逻辑。
+            </td>
+          </tr>
+          <tr>
+            <td class="k">模型状态</td>
+            <td>
+              <b>不放 header，放 composer 底行。</b>参考实现就是这么分的
+              （<code>ModelPicker</code> 在 <code>Chat.tsx:2140</code> 的底行里）。
+              理由：模型是「这一句话用谁答」，与发送动作同一决策时刻；
+              而 header 表达的是「我在哪、看什么」。
+              <b>这一条与 T-201 合并处理</b>。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ============================================================
+          §2 composer
+          ============================================================ -->
+      <h2>§2 下半部 · composer</h2>
+      <p>
+        现状底行是 <code>&lt;div class="flex items-center gap-2"&gt;</code>
+        （<code>AgentPanel.vue:368</code>），里面只有圆环和发送键，
+        <b>没有 <code>flex-1</code></b>，所以两个控件贴左。参考实现在同一位置放了一个
+        <code>&lt;div className="flex-1" /&gt;</code>（<code>Chat.tsx:2125</code>），
+        于是左边工具、右边状态，发送键落在拇指自然位置。
+      </p>
+
+      <h3>2.1 底行怎么排</h3>
+      <div class="grid">
+        <div class="case">
+          <p class="cap">
+            <b>现状</b><span class="tag bad">控件贴左</span><br />
+            圆环 + 发送键挤在左边，右侧空一大片。
+          </p>
+          <div class="panel" style="height: 200px">
+            <div class="p-foot" style="padding-top: 10px">
+              <div class="c-card noborder">
+                <div class="c-ta" style="min-height: 32px; color: var(--fg3)">问问这个页面…</div>
+                <div class="c-bar" style="outline: 1px dashed var(--bad-fg); outline-offset: 3px; border-radius: 4px">
+                  <button class="ring-btn" title="上下文 12%"><svg width="16" height="16" viewBox="0 0 16 16" style="flex: 0 0 16px"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" opacity="0.25" /><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="33.2" transform="rotate(-90 8 8)" /></svg></button>
+                  <button class="c-send" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                  </button>
+                  <span class="spacer"></span>
+                </div>
+                <div class="measure">↑ 虚线内没有 flex-1，全部靠左</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="case">
+          <p class="cap">
+            <b>目标</b><span class="tag good">左工具 / 右状态</span><br />
+            左：模型选择器。右：水位 + 发送。中间撑开。
+          </p>
+          <div class="panel" style="height: 200px">
+            <div class="p-foot" style="padding-top: 10px">
+              <div class="c-card">
+                <div class="c-ta" style="min-height: 32px; color: var(--fg3)">问问这个页面…</div>
+                <div class="c-bar">
+                  <button class="mp">
+                    <span class="truncate mono" style="font-size: 11px">gpt-4o · mini</span>
+                    <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 12px; color: var(--fg3)"><path d="M6 9l6 6 6-6" /></svg>
+                  </button>
+                  <span class="gap"></span>
+                  <button class="ring-btn" title="上下文 12%"><svg width="16" height="16" viewBox="0 0 16 16" style="flex: 0 0 16px"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" opacity="0.25" /><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="33.2" transform="rotate(-90 8 8)" /></svg></button>
+                  <button class="c-send" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="measure" style="margin-top: 4px">模型放左，正是因为左边「空」</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="case">
+          <p class="cap">
+            <b>目标 · 忙碌态</b><span class="tag">两段式停止</span><br />
+            模型芯片变成锁定（不可点），停止键 armed 时走暖色底 + 描边
+            （参考 <code>Chat.tsx:2130</code> 的 <code>--c-warning</code> 用法）。
+          </p>
+          <div class="panel" style="height: 200px">
+            <div class="p-foot" style="padding-top: 10px">
+              <div class="c-card">
+                <div class="c-ta" style="min-height: 32px">把这个列表的每一项都导出成 CSV</div>
+                <div class="c-bar">
+                  <button class="mp" disabled style="opacity: 0.5; cursor: not-allowed">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 11px"><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                    <span class="truncate mono" style="font-size: 11px">gpt-4o · mini</span>
+                  </button>
+                  <span class="gap"></span>
+                  <span class="ring-btn warn"><svg width="16" height="16" viewBox="0 0 16 16" style="flex: 0 0 16px"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" opacity="0.25" /><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="21.9" transform="rotate(-90 8 8)" /></svg></span>
+                  <button class="c-send stop" title="再按一次停止生成">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="measure" style="margin-top: 4px">arm 后 2s 自动解除，不会一直停在 armed 上骗人</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>2.2 输入区：卡片与输入框谁凸谁凹</h3>
+      <p>
+        这里有个<b>方向性错误</b>值得单说。参考实现是
+        <code>bg-field</code> 卡片 + 内部 <code>bg-transparent</code> 的 textarea ——
+        卡片整体是一块「凹」下去的区域，字写在凹陷里。
+        而 Automa 现在是 <code>bg-surface</code> 卡片（凸）+ <code>!bg-field</code>
+        textarea（凹），变成<b>凸的里面挖了个凹的</b>，
+        320px 宽下看起来像「一张白纸上贴了一张灰纸条」。
+      </p>
+      <div class="cols">
+        <div>
+          <div class="case" style="width: 320px">
+            <p class="cap">
+              <b>现状</b><span class="tag bad">凸包凹</span><br />
+              <code>bg-surface</code> 卡 + <code>!bg-field</code> 输入区
+              （<code>AgentPanel.vue:327,355</code>）
+            </p>
+            <div class="panel" style="height: 180px">
+              <div class="p-foot" style="padding-top: 10px">
+                <div class="c-card noborder">
+                  <div class="c-ta" style="color: var(--fg3)">问问这个页面…</div>
+                  <div class="c-bar">
+                    <span class="gap"></span>
+                    <button class="c-send" disabled>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="case" style="width: 320px">
+            <p class="cap">
+              <b>目标</b><span class="tag good">整块凹陷 + focus 描边</span><br />
+              <code>bg-field</code> 卡 + 透明 textarea + <code>focus-within:border-accent</code>
+              （<code>Chat.tsx:2007</code>）
+            </p>
+            <div class="panel" style="height: 180px">
+              <div class="p-foot" style="padding-top: 10px">
+                <div class="c-card focus">
+                  <div class="c-ta" style="color: var(--fg3)">问问这个页面…</div>
+                  <div class="c-bar">
+                    <button class="mp">
+                      <span class="truncate mono" style="font-size: 11px">gpt-4o · mini</span>
+                    </button>
+                    <span class="gap"></span>
+                    <button class="ring-btn" title="上下文 12%"><svg width="16" height="16" viewBox="0 0 16 16" style="flex: 0 0 16px"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" opacity="0.25" /><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="33.2" transform="rotate(-90 8 8)" /></svg></button>
+                    <button class="c-send">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="measure" style="margin-top: 4px">
+                  ↑ 描边只在 focus 时出现，平时靠底色分层
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note-block">
+        <b>为什么 focus 描边能成立</b>：现在项目里 <code>UiTextarea</code> 自带
+        <code>ui-input</code>，全局有 <code>focus { ring-2 ring-accent }</code>
+        （<code>tailwind.css</code> 末尾）。改成「描边挂在卡片上」以后，
+        需要把 textarea 自己的 ring 关掉（<code>focus:!ring-0</code>），
+        否则会出现「卡片描边 + 输入框描边」两圈。
+      </div>
+
+      <h3>2.3 标签页切换搬到 header 第三行</h3>
+      <p>
+        现状 <code>AgentTabPicker</code> 挂在卡片<b>顶部</b>（
+        <code>AgentPanel.vue:328-337</code>，<code>class="mb-1"</code>），
+        下拉 <code>side="top"</code> 向上弹。
+        它是「这一轮读哪个页面」，与「输入什么」同级 ——
+        放在输入框上方，等于让一个<b>不常改</b>的设置占着最贵的一行。
+      </p>
+      <div class="grid">
+        <div class="case">
+          <p class="cap"><b>现状 · 卡片顶部</b><span class="tag bad">占一行</span></p>
+          <div class="panel" style="height: 250px">
+            <div class="p-foot" style="padding-top: 10px">
+              <div class="c-card noborder" style="gap: 4px">
+                <div class="tp" style="margin-bottom: 2px">
+                  <span class="fav" style="background: #ff5000">淘</span>
+                  <span class="truncate">商品列表 - 淘宝网</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 12px"><path d="M6 9l6 6 6-6" /></svg>
+                </div>
+                <div class="c-ta" style="color: var(--fg3)">问问这个页面…</div>
+                <div class="c-bar">
+                  <span class="gap"></span>
+                  <button class="c-send" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="measure" style="margin-top: 4px">↑ 目标页占掉约 30px 正文高度</div>
+            </div>
+          </div>
+        </div>
+        <div class="case">
+          <p class="cap">
+            <b>目标 · header 第二行</b><span class="tag good">定稿</span><br />
+            整行宽的标签页 chip（美化见下方专节）。
+            <b>这是它唯一的家</b> —— 底行不再放第二枚 chip。
+          </p>
+          <div class="panel" style="height: 250px">
+            <div class="p-head" style="padding: 0">
+              <div class="h-tgt" style="border-bottom: 0">
+                <button class="ico sm">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>
+                </button>
+                <div class="titlebar">
+                  <span class="truncate">问问这个页面</span>
+                </div>
+                <button class="ico sm">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                </button>
+              </div>
+              <div class="h-tabsrow">
+                <button class="tabsw">
+                  <span class="fav" style="background: #ff5000">淘</span>
+                  <span class="truncate">商品列表 - 淘宝网</span>
+                  <span class="pill on">已固定</span>
+                  <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+              </div>
+            </div>
+            <div class="p-body">
+              <div style="background: var(--surface); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--fg2)">
+                卡片顶部因此<b>空出来一整行</b>（约 30px）给了正文。
+              </div>
+            </div>
+            <div class="p-foot">
+              <div class="c-card">
+                <div class="c-ta" style="min-height: 44px; color: var(--fg3)">问问这个页面…</div>
+                <div class="c-bar">
+                  <button class="mp">
+                    <span class="truncate mono" style="font-size: 11px">gpt-4o</span>
+                  </button>
+                  <span class="gap"></span>
+                  <span class="ring-btn"><svg width="16" height="16" viewBox="0 0 16 16" style="flex: 0 0 16px"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" opacity="0.25" /><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="24.5" transform="rotate(-90 8 8)" /></svg></span>
+                  <button class="c-send" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="measure" style="margin-top: 4px">
+                底行只剩模型 + 水位 + 发送，横向宽松
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p>
+        <b>已拍板：搬到 header 第二行。</b>
+        这一行是 <b>320px 全宽</b>，页面名能拿到约 190px —— 比挤在底行（只能显示 4 个字）
+        宽得多，且它只出现一次，<b>不违反 T-177「换页统一走一个入口」</b>。
+        代价是「改目标页」从拇指手边挪到了面板顶部；但目标页是<b>低频</b>动作
+        （一轮会话里通常只选一次），而底行的横向空间要留给模型、水位、发送三样。
+      </p>
+
+      <h3>2.4 标签页这一行的美化</h3>
+      <p>
+        原稿这一行只是一条「无底色的文字 + favicon」（像一段说明文字，看不出可点）。
+        既然它是这一行唯一的东西、又是唯一入口，就该有<b>明确的控件外观</b>。
+        下面三种状态可切换查看。
+      </p>
+      <div class="case" style="width: 320px">
+        <p class="cap">
+          <b>标签页 chip 的三种状态</b><span class="tag good">已美化</span>
+        </p>
+        <div class="panel" style="height: 300px">
+          <div class="p-head" style="padding-top: 8px">
+            <div class="h-tabsrow">
+              <button class="tabsw">
+                <span class="fav" style="background: #ff5000">淘</span>
+                <span class="truncate">商品列表 - 淘宝网</span>
+                <span class="pill on">已固定</span>
+                <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+            </div>
+            <div class="h-tabsrow">
+              <button class="tabsw">
+                <span class="fav" style="background: #1677ff">G</span>
+                <span class="truncate">订单详情 - 商家后台</span>
+                <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+            </div>
+            <div class="h-tabsrow">
+              <button class="tabsw auto">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 13px"><path d="M13 2L4.1 12.6a1 1 0 0 0 .8 1.6h5.3L9 22l8.9-10.6a1 1 0 0 0-.8-1.6h-5.3L13 2z" /></svg>
+                <span class="truncate">自动跟随当前标签页</span>
+                <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+            </div>
+            <div class="h-tabsrow">
+              <button class="tabsw stale">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 13px"><path d="M12 9v4" /><path d="M12 17h.01" /><circle cx="12" cy="12" r="9" /></svg>
+                <span class="truncate">原页面已关闭</span>
+                <span class="pill bad">重选</span>
+              </button>
+            </div>
+          </div>
+          <div class="p-body">
+            <div style="background: var(--surface); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--fg2); line-height: 1.7">
+              <b>① 已固定</b>：实心 chip（<code>surface</code> + <code>line</code> 边），favicon + 完整标题 + <code>已固定</code> 徽标 + 箭头。<br />
+              <b>② 自动</b>：无边框、<code>fg-2</code> 文字，hover 才浮出底色 —— 不抢注意力。<br />
+              <b>③ 失效</b>：<code>danger-tint</code> 底 + 红字 + <code>重选</code> 动作。
+            </div>
+          </div>
+        </div>
+      </div>
+      <table>
+        <tbody>
+          <tr>
+            <td class="k">外观</td>
+            <td>
+              从「无底色文字」改成 <b>7px 圆角 + <code>surface</code> 底 + <code>line</code> 边</b>。
+              参考实现把目标页做成 <code>bg-field</code> 的 chip（<code>TopBar.tsx:40</code>）——
+              我们这里反过来用 <code>surface</code>，因为这一行压在 <code>canvas</code> 上，
+              <code>surface</code> 才是「浮起一档」。
+            </td>
+          </tr>
+          <tr>
+            <td class="k">图标</td>
+            <td>
+              <b>用项目现成图标</b>：自动态走 <code>riFlashlightLine</code>（闪念/跟随），
+              失效态走 <code>riErrorWarningLine</code>。均为 <code>v-remixicon</code>，
+              <b>不引入任何新依赖</b>。
+            </td>
+          </tr>
+          <tr>
+            <td class="k">hover / active</td>
+            <td>
+              hover 时描边转 <code>fg-3</code>（比底色变化更清楚「这是个盒子」）；
+              active 时底色转 <code>field</code>。均走 <code>ease-panel</code> 140ms。
+            </td>
+          </tr>
+          <tr>
+            <td class="k">徽标位置</td>
+            <td>
+              <code>已固定</code> / <code>自动</code> 徽标在标题右侧、箭头左侧。
+              箭头用 <code>margin-left: auto</code> 钉在最右 —— 与标题长短无关，位置恒定。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ============================================================
+          §3 三个 chip 的收起态
+          ============================================================ -->
+      <h2>§3 「安静」是默认态</h2>
+      <p>
+        目标页搬去 header 之后，底行只剩 <b>模型 + 水位 + 发送</b> 三样
+        （原来还有目标页 chip）—— 320px 减去左右 32px 内边距和 32px 发送键，
+        可用宽度从约 190px 回升到 <b>约 230px</b>。
+        参考实现的做法是<b>让它们默认不说话</b>：
+        模型显示 <code>provider · model</code> 但砍到最短，
+        水位 <b>低于阈值时整个不渲染</b>（<code>ContextRing.tsx:41</code> 的
+        <code>if (!visible) return null</code>）。
+      </p>
+      <div class="case" style="width: 320px">
+        <p class="cap">
+          <b>底行三种状态</b><span class="tag good">渐进披露</span>
+        </p>
+        <div class="panel" style="height: 330px">
+          <div class="p-foot" style="padding-top: 10px">
+            <div class="c-card">
+              <div class="c-ta" style="min-height: 44px; color: var(--fg3)">问问这个页面…</div>
+              <div class="c-bar">
+                <button class="mp">
+                  <span class="truncate mono" style="font-size: 11px">gpt-4o</span>
+                </button>
+                <span class="gap"></span>
+                <button class="c-send" disabled>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </button>
+              </div>
+            </div>
+            <div class="measure" style="margin: 6px 0 14px">
+              ① 空闲 · 水位 12%（不渲染）<br />
+              底行只剩「模型 + 发送」两个元素，右侧空得很干净
+            </div>
+
+            <div class="c-card">
+              <div class="c-ta" style="min-height: 44px; color: var(--fg3)">总结一下这页的要点</div>
+              <div class="c-bar">
+                <button class="mp">
+                  <span class="truncate mono" style="font-size: 11px">gpt-4o</span>
+                </button>
+                <span class="gap"></span>
+                <button class="ring-btn warn" title="上下文 68%">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style="flex: 0 0 16px"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" opacity="0.25" /><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="12.1" transform="rotate(-90 8 8)" /></svg>
+                </button>
+                <button class="c-send">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </button>
+              </div>
+            </div>
+            <div class="measure" style="margin: 6px 0 14px">
+              ② 水位 68%：圆环出现（中段转暖色），<b>平时不写数字</b> ——
+              弧长本身就是水位。鼠标移上去才出 <code>68%</code> 与明细弹层。
+            </div>
+
+            <div class="c-card">
+              <div class="c-ta" style="min-height: 44px; color: var(--fg3)">再把这些字段按时间排序</div>
+              <div class="c-bar">
+                <button class="mp">
+                  <span class="truncate mono" style="font-size: 11px">gpt-4o</span>
+                </button>
+                <span class="gap"></span>
+                <button class="ring-btn crit" title="上下文将满（92%）">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style="flex: 0 0 16px"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2.5" opacity="0.25" /><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="3" transform="rotate(-90 8 8)" /></svg>
+                </button>
+                <button class="c-send">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </button>
+              </div>
+            </div>
+            <div class="measure" style="margin-top: 6px">
+              ③ ≥90%：圆环转红 + 描边加粗。<b>数字仍然只在悬停时出现</b> ——
+              红色弧线本身已经足够醒目，不必再加文字。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+          §4 模型选择器
+          ============================================================ -->
+      <h2>§4 模型状态（本票唯一新增）</h2>
+      <p>
+        参考实现 <code>ModelPicker.tsx</code>：触发器是
+        <code>px-1.5 py-1 text-[12px] text-fg-2</code>，内含
+        <b>16px 服务商图标（<code>text-accent</code>）</b> +
+        <b>等宽字 <code>provider · model</code></b> + 可旋转的 12px 箭头；
+        流式期间换成锁图标并禁用。
+        弹层 300px，按服务商分组折叠、带搜索、带 vision / tools 徽标，底部一行「管理」。
+      </p>
+      <div class="note-block">
+        <b>已拍板：不用服务商图标。</b>触发器和弹层里的服务商标识<b>一律走纯文字</b> ——
+        项目没有 provider icon 资源，为它引入一套图标（或维护一张
+        服务商→品牌色的映射表）不划算。<b>模型芯片只剩「等宽模型名 + 箭头」两个元素</b>，
+        弹层里的分组标题也退回纯文字（<code>uppercase tracking-wide text-fg-3</code>，
+        与 §4 原有的 <code>AgentTabList</code> 分组标题同一手法）。
+      </div>
+      <div class="grid">
+        <div class="case">
+          <p class="cap">
+            <b>触发器</b><span class="tag good">24px 高 · 纯文字</span><br />
+            只剩等宽模型名 + 箭头。零图标依赖，横向更省（约 132px → 约 108px）。
+          </p>
+          <div class="panel" style="height: 150px">
+            <div class="p-foot" style="padding-top: 10px">
+              <div class="c-card">
+                <div class="c-ta" style="min-height: 28px; color: var(--fg3)">问问这个页面…</div>
+                <div class="c-bar">
+                  <button class="mp">
+                    <span class="truncate mono" style="font-size: 11px">gpt-4o · mini</span>
+                    <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 12px; color: var(--fg3)"><path d="M6 9l6 6 6-6" /></svg>
+                  </button>
+                  <span class="gap"></span>
+                  <button class="c-send" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="measure" style="margin-top: 4px">
+                <code>text-fg-2</code>，不发蓝不发绿 —— 它是「事实」不是「提醒」
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="case" style="width: 320px">
+          <p class="cap">
+            <b>弹层</b><span class="tag">向上弹</span><br />
+            遵守既有约束：<code>AgentDropdown</code> 是 <code>absolute</code> 同列定位、
+            <code>side="top"</code>、不挂 body（tippy 方案此前已否决）。
+          </p>
+          <div class="pop">
+            <div class="ph">模型</div>
+            <div class="row sel">
+              <span class="truncate" style="flex: 1 1 auto; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg3)">OpenAI</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg); color: var(--fg3)"><path d="M6 9l6 6 6-6" /></svg>
+            </div>
+            <div class="row" style="padding-left: 18px; background: var(--field)">
+              <span class="truncate" style="flex: 1 1 auto">gpt-4o mini</span>
+              <span class="u">当前</span>
+            </div>
+            <div class="row" style="padding-left: 18px">
+              <span class="truncate" style="flex: 1 1 auto">gpt-4o</span>
+              <span class="pill" style="background: var(--line); color: var(--fg3)">vision</span>
+            </div>
+            <div class="row" style="padding-left: 18px">
+              <span class="truncate" style="flex: 1 1 auto">o4-mini</span>
+              <span class="pill" style="background: var(--line); color: var(--fg3)">tools</span>
+            </div>
+            <div class="divider"></div>
+            <div class="row">
+              <span class="truncate" style="flex: 1 1 auto; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg3)">Anthropic</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--fg3)"><path d="M6 9l6 6 6-6" /></svg>
+            </div>
+            <div class="divider"></div>
+            <div class="foot">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2 2 2 0 1 1-4 0 1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15a2 2 0 1 1 0-4 1.7 1.7 0 0 0 1.5-2.6l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 4.6a2 2 0 1 1 4 0 1.7 1.7 0 0 0 2.6 1.5l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 21 11a2 2 0 1 1 0 4z" /></svg>
+              <span>管理连接与模型</span>
+            </div>
+            <div class="note">换模型后<b>从下一轮开始生效</b>，当前会话不重放</div>
+            <div class="note" style="padding-top: 0; color: var(--fg2)">
+              ↑ <b>已定稿文案</b>：固定在弹层底部，随弹层每次打开都可见。
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note-block">
+        <b>320px 的硬约束</b>：弹层宽度必须是 <code>w-72</code>（288px）以内，
+        否则在 <code>px-4</code> 的内边距下会溢出面板。
+        上图的 320px 是为了看清内容，实际要用 288px。
+        <b>验收时请量</b>：弹层左边缘 ≥ 面板左边缘 + 16px。
+      </div>
+
+      <!-- ============================================================
+          §5 亮暗对照
+          ============================================================ -->
+      <h2>§5 亮 / 暗对照（同一稿，切换顶部按钮）</h2>
+      <p>
+        下方面板跟随顶部「切换亮 / 暗」按钮，用来核对 token 在两种主题下都成立。
+        注意暗色下 <code>canvas #0B0D10</code> 与 <code>surface #14171C</code> 的
+        亮度差只有 1.25 倍 —— 这正是 T-212 上一轮踩坑的地方（当时引入了
+        <code>--color-shell</code>，暗色值 <code>#1F2125</code> 与 chrome 太近，
+        反而把层级搞反了）。<b>本稿主张删掉 <code>--color-shell</code></b>，
+        面板根一律 <code>bg-canvas</code>，靠 <code>canvas → surface</code>
+        这一档表达层级。
+      </p>
+      <div class="case" style="width: 320px">
+        <p class="cap"><b>完整目标态</b><span class="tag good">A + 底行</span></p>
+        <div class="panel" style="height: 470px">
+          <div class="p-head" style="padding: 0">
+            <div class="h-tgt" style="border-bottom: 0">
+              <button class="ico sm">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 2" /></svg>
+              </button>
+              <div class="titlebar">
+                <span class="truncate">「新建会话」应走哪条路</span>
+                <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+              </div>
+              <button class="ico sm" title="新建会话">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              </button>
+            </div>
+            <div class="h-tabsrow">
+              <button class="tabsw">
+                <span class="fav" style="background: #ff5000">淘</span>
+                <span class="truncate">商品列表 - 淘宝网</span>
+                <span class="pill on">已固定</span>
+                <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+            </div>
+          </div>
+          <div class="p-body">
+            <div style="background: var(--surface); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--fg2)">
+              正文卡（surface）浮在 canvas 上。
+            </div>
+            <div style="background: var(--surface); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--fg1)">
+              回答内容走 <code>fg-1</code>，次要说明走 <code>fg-2</code>。
+            </div>
+          </div>
+          <div class="p-foot">
+            <div class="c-card">
+              <div class="c-ta" style="color: var(--fg3)">问问这个页面…</div>
+              <div class="c-bar">
+                <button class="mp">
+                  <span class="truncate mono" style="font-size: 11px">gpt-4o</span>
+                  <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 12px; color: var(--fg3)"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+                <span class="gap"></span>
+                <span class="ring-btn"><svg width="16" height="16" viewBox="0 0 16 16" style="flex: 0 0 16px"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" opacity="0.25" /><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="37.7" stroke-dashoffset="24.5" transform="rotate(-90 8 8)" /></svg></span>
+                <button class="c-send" disabled>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+          §6 尺寸与 token 表
+          ============================================================ -->
+      <h2>§6 尺寸与 token 一览</h2>
+      <div class="cols">
+        <div>
+          <h3>高度预算（320px 宽，narrow 宿主）</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>元素</th>
+                <th style="width: 78px">现状</th>
+                <th style="width: 78px">目标</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>header</td>
+                <td class="bad">33px（1 行）</td>
+                <td class="good">64px（2 行）</td>
+              </tr>
+              <tr>
+                <td>composer 提示行</td>
+                <td>14px</td>
+                <td class="good">0（删掉，提示改挂发送键 title）</td>
+              </tr>
+              <tr>
+                <td>卡片内目标页 chip 行</td>
+                <td class="bad">30px</td>
+                <td class="good">0（移到 header 第 2 行）</td>
+              </tr>
+              <tr>
+                <td>文字区（min-height）</td>
+                <td>60px</td>
+                <td>56px</td>
+              </tr>
+              <tr>
+                <td>底行</td>
+                <td>40px（<code>ui-button h-10</code>）</td>
+                <td class="good">32px</td>
+              </tr>
+              <tr>
+                <td><b>合计</b></td>
+                <td class="bad"><b>177px</b></td>
+                <td class="good"><b>152px</b></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="measure">
+            合计 <b>净省 25px</b> 给正文。header 多花 31px，其中 <b>30px 是从卡片里
+            搬上来的</b>（目标页 chip 换了住处，不是新增），实际只多 1px 的边距差。
+            <b>换来的是：模型可见、来源可见、会话切换不必再跳视图。</b>
+          </p>
+        </div>
+        <div>
+          <h3>要用到的 token（已全部存在，无需新增）</h3>
+          <table>
+            <tbody>
+              <tr>
+                <td class="k"><span class="swatch" style="background: #fafbfc"></span>canvas</td>
+                <td>header 底、面板底、面板根</td>
+              </tr>
+              <tr>
+                <td class="k"><span class="swatch" style="background: #ffffff"></span>surface</td>
+                <td>正文卡、composer 内的实心 chip</td>
+              </tr>
+              <tr>
+                <td class="k"><span class="swatch" style="background: #f4f6f8"></span>field</td>
+                <td>composer 卡片本身、hover 底、弹层行 hover</td>
+              </tr>
+              <tr>
+                <td class="k"><span class="swatch" style="background: #e4e8ec"></span>line</td>
+                <td>header 下沿、弹层边框、divider</td>
+              </tr>
+              <tr>
+                <td class="k">fg-1 / fg-2 / fg-3</td>
+                <td>标题 / 控件默认 / 占位与副标题</td>
+              </tr>
+              <tr>
+                <td class="k">accent</td>
+                <td>发送键底、focus 描边（<b>不动</b>）</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="measure">
+            <b>本稿不新增任何 token，也不删除 token</b> —— 唯一涉及 token 的是
+            建议删掉 T-212 引入的 <code>--color-shell</code>（它在暗色下与 chrome
+            过近，是上一轮「更丑了」的直接原因）。
+          </p>
+        </div>
+      </div>
+
+      <!-- ============================================================
+          §7 落地步骤
+          ============================================================ -->
+      <h2>§7 落地步骤（可独立验收的 6 步）</h2>
+      <ol>
+        <li>
+          <b>删 <code>--color-shell</code></b>（<code>tailwind.css</code> 两处 +
+          <code>tailwind.config.js</code> 的 <code>colors.shell</code> +
+          <code>host.shell</code> + <code>AgentPanel</code> 的 <code>shell</code>
+          computed + <code>sidepanel/App.vue</code> 的 <code>bg-shell</code>），
+          面板根回到 <code>bg-canvas</code>。同时把 T-212 的守卫 ①⑥⑦ 改成
+          「面板根是 <code>bg-canvas</code>」单条断言。
+          <span class="measure">→ 独立可验收，风险最低，建议先做。</span>
+        </li>
+        <li>
+          <b>header 降层 + 拆两行</b>：<code>bg-surface</code> → <code>bg-canvas</code>；
+          会话 chip 换成 28px 图标按钮 + <b>可点的标题</b>（标题 = 会话下拉触发器，
+          内含切换 / 删除）；第 2 行放美化后的 <code>AgentTabPicker</code>（整行宽 chip）。
+          <span class="measure">→ 此时页面来源在 header 和卡片里各有一份，属临时双写。</span>
+        </li>
+        <li>
+          <b>composer 底行重排</b>：补 <code>&lt;div class="flex-1" /&gt;</code>；
+          发送键从 <code>ui-button h-10</code> 收到 32px；
+          composer 顶部提示行删掉（内容改挂发送键 <code>title</code>）。
+        </li>
+        <li>
+          <b>composer 卡片反向</b>：<code>bg-surface</code> → <code>bg-field</code> +
+          <code>border-line</code>；textarea 去掉 <code>!bg-field</code> 改回透明；
+          加 <code>focus-within:border-accent</code>；
+          textarea 自身的 <code>focus:ring-0</code>。
+        </li>
+        <li>
+          <b>水位圆环去数字</b>：14px → 16px，常态不渲染文字，
+          仅 <code>hover</code> 与 <code>≥90%</code> 时出百分比；
+          阈值颜色沿用 <code>fg-2 → warn → danger</code>。
+        </li>
+        <li>
+          <b>加模型选择器</b>（T-201）：24px 高芯片 + <code>flex-1</code> 左侧定位；
+          弹层 <code>w-72</code> 以内、<code>side="top"</code>、复用
+          <code>AgentDropdown</code>；流式期间锁定。
+          <span class="measure">→ 本票唯一功能新增，可最后做。</span>
+        </li>
+      </ol>
+      <div class="note-block">
+        第 1 步与第 2~6 步之间建议<b>断一次</b>：第 1 步修的是上一轮遗留的观感回归，
+        单独验收能立刻看出「白卡浮在深壳上」有没有消失；
+        第 2~6 步是新的重排，混在一起会看不清是哪一步带来的变化。
+      </div>
+
+      <!-- ============================================================
+          §8 决定记录（已全部拍板）
+          ============================================================ -->
+      <h2>§8 决定记录（已全部拍板 · 定稿依据）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 200px">问题</th>
+            <th>选项</th>
+            <th style="width: 230px">决定</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>header 行数</td>
+            <td>单行 / 两行 / 三行</td>
+            <td class="good">
+              <b>两行</b>（行 1 图标 + 可点标题 + 新建 · 行 2 标签页切换）
+            </td>
+          </tr>
+          <tr>
+            <td>「会话管理」那一行</td>
+            <td>保留独立一行 / 收进标题下拉</td>
+            <td class="good">
+              <b>收进标题下拉</b> —— 点标题弹出会话列表（切换 / 删除），
+              省掉一整行。切换从「跳屏」变成「就地」。
+            </td>
+          </tr>
+          <tr>
+            <td>标签页切换的位置与外观</td>
+            <td>卡片顶部 / header 行 / 底行</td>
+            <td class="good">
+              <b>header 第二行，整行宽</b>；外观从「无底色文字」改成
+              <code>surface</code> 底 + <code>line</code> 边的 chip，
+              按「已固定 / 自动 / 失效」三态变化。
+            </td>
+          </tr>
+          <tr>
+            <td>header 第一行图标</td>
+            <td>自绘图 / 项目现有图标</td>
+            <td class="good">
+              <b>项目现有图标</b>（<code>v-remixicon</code>）：
+              <code>riChatHistoryLine</code> 历史、<code>riAddLine</code> 新建。
+            </td>
+          </tr>
+          <tr>
+            <td>composer 边框</td>
+            <td>恢复 <code>border-line</code> + focus 描边 / 保持 T-212 的无边框</td>
+            <td class="good">
+              <b>整块凹陷 + focus 描边</b>：卡片 <code>bg-field</code> +
+              <code>border-line</code>，内部 textarea 透明，
+              focus 时边框转 <code>accent</code>。
+            </td>
+          </tr>
+          <tr>
+            <td>上下文展示</td>
+            <td>文字百分比 / 圆环 / 圆环 + 数字</td>
+            <td class="good">
+              <b>只用圆环，不带文字</b>。弧长即水位，颜色分三档
+              （<code>fg-2</code> → <code>warn</code> → <code>danger</code>）；
+              鼠标移上去出 <code>{pct}%</code> + 明细弹层。
+            </td>
+          </tr>
+          <tr>
+            <td>模型芯片的服务商图标</td>
+            <td>色块首字母 / 引入图标资源 / 不要图标</td>
+            <td class="good">
+              <b>不要图标</b>。芯片只剩等宽模型名 + 箭头；
+              弹层分组标题退回纯文字。
+            </td>
+          </tr>
+          <tr>
+            <td>换模型的生效时机文案</td>
+            <td>弹层底部小字「下一轮生效」/ 不提示 / 强制新建会话</td>
+            <td class="good">
+              <b>弹层底部小字</b>：<code>换模型后从下一轮开始生效，当前会话不重放</code>。
+              固定在模型弹层底部，每次打开都可见。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note-block">
+        <b>本稿已定稿（2026-10-10）</b>—— 全部决定已落进画面，可直接据此开工。
+        headless 渲染核验：亮暗两版 <code>pageerrors = 0</code>，产物
+        <code>.scratch/v2-*.png</code>。
+        落地顺序见 §7（建议第 1 步单独断一次，它修的是上一轮 T-212 的观感回归）。
+      </div>
+      <div class="note-block">
+        <b>拍板后新暴露的一个问题</b>：目标页移到 header 后，
+        <b>底行的第二个 chip 位置空了出来</b>（§3 的底行三状态里，
+        第一个 chip 原本是目标页状态）。
+        两个走法，请挑一个：
+        <b>(甲)</b> 底行留空 —— 视觉最安静，模型芯片在左、水位与发送在右；
+        <b>(乙)</b> 把「自动 / 已固定」的状态徽标挪进 header 第三行
+        （贴在页面名右侧，如上面 §1 与 §5 所画），底行同样留空。
+        本稿画的是<b>乙</b>（第三行右侧有枚 <code>已固定</code> 徽标）。
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var btn = document.getElementById('theme-btn');
+        btn.addEventListener('click', function () {
+          document.body.classList.toggle('dark');
+          btn.classList.toggle('on');
+        });
+      })();
+    </script>
+  </body>
+</html>

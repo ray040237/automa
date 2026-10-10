@@ -1,26 +1,49 @@
 <template>
-  <!-- side="top"：chip 贴着面板底部，往下展开在矮窗口里会被视口截断 -->
-  <agent-dropdown v-model="open" align="left" side="top" width="w-72">
+  <!--
+    方向用默认的 side="bottom"（向下展开）。
+    side="top" 是本格还住在 composer 顶部（面板底部）时的旧设定 —— 那时往下弹
+    会被视口截断。T-213 把整格搬进 header 第 2 行（面板**顶部**）后，往上弹
+    就成了把列表顶出页面（2026-10-10 用户截图实证）。头部的东西一律向下弹，
+    底部的东西（模型芯片、圆环明细）才向上弹 —— 方向跟随所在位置，不再逐个
+    特调。
+  -->
+  <agent-dropdown v-model="open" align="left" width="w-72">
     <template #trigger>
       <!--
-        T-164：chip 拆成「主体 + 解除」两个**并排的兄弟 button**（不嵌套 ——
-        嵌套 button 是无效 HTML）。点解除必须 `@click.stop`：dropdown 是靠
-        trigger 外面那个 div 的 @click 开合的，不拦掉冒泡会顺手把列表也打开。
+        T-164/T-214：chip =「主体 button + 状态徽标 + 箭头」三个**并排的兄弟**
+        （不嵌套 —— 嵌套 button 是无效 HTML）。主体/箭头开列表；徽标在固定态
+        自成一枚 button，必须 `@click.stop`：dropdown 是靠 trigger 外面那个
+        div 的 @click 开合的，不拦掉冒泡会顺手把列表也打开。
 
-        解除键只在 **pinned 且未失效** 时出现：
-        - 自动跟随的页没什么可解除的（它是运行时解析出来的，不是用户选的）；
-        - 失效态（页关了 / 漂到别的 origin）该做的是**重选**，不是解除。
+        T-214 三态统一徽标（用户提议，设计稿 docs/agent-tab-picker-redesign.html v2.1）：
+          ① 自动（默认）：「跟随」灰描边徽标，**只显示不可点** —— v2 之前
+             自动态不贴标签，与固定态/失效态形成"有没有徽标"的断层；三个
+             状态都把状态说出来，视觉才是连续谱。
+          ② 已固定：「已固定 ✕」accent/15 实底徽标，hover 整块转 danger 红，
+             点击 = 解除固定、回到自动跟随。解除动作**只有这一条路** ——
+             T-164 的独立 ✕ 按钮删除（它与"徽标不可点"是三个同形状信号
+             打架的根因）。
+          ③ 失效：「已关闭 / 已跳转」danger/15 红徽标，只提示。「重新选择」
+             文字删除：chip 本身点开就是列表，重选路径本来就在，行内 CTA
+             是同一动作的第二张脸。
 
-        失效态（T-08）：页被关掉或跳去了别的 origin 时，这一行不再假装正常。
-        「重新选择」就是同一个 trigger —— 点哪都开列表，不另套一个按钮。
+        徽标内不放状态图标（v2.1 修订）：三个徽标已有颜色深浅 / 文案 / 可点性
+        三重区分，10px 小胶囊里再塞图标只有拥挤没有信息。✕ 是唯一例外 ——
+        它不是状态图标，是"这个徽标能点"的动作线索，只出现在可点的固定态上。
       -->
       <div
-        class="flex max-w-full items-center rounded-md"
-        :class="stale ? 'bg-red-500/10' : 'bg-box-transparent'"
+        class="group/tab flex w-full items-center rounded-chip border transition duration-fast ease-panel"
+        :class="[
+          stale
+            ? 'border-transparent bg-danger/15'
+            : pinned
+            ? 'border-line bg-surface hover:border-fg-3'
+            : 'border-transparent bg-box-transparent hover:bg-field',
+        ]"
       >
         <button
           type="button"
-          class="hoverable flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
+          class="flex min-w-0 flex-1 items-center gap-1.5 rounded-chip px-2 py-1 text-left"
           :title="
             pinned
               ? t('workflow.agent.pickTab.pinnedHint')
@@ -34,76 +57,68 @@
             :alt="t('workflow.agent.pickTab.faviconAlt')"
             @error="faviconBroken = true"
           />
+          <!-- 无 favicon 时的兜底：自动态用闪电（跟随是一个真实的状态，
+               不该与地球"没有图标"的兜底形态长得一样）、其余用地球。 -->
+          <v-remixicon
+            v-else-if="!pinned && !stale"
+            name="riFlashlightLine"
+            size="14"
+            class="shrink-0 text-fg-3"
+          />
           <v-remixicon
             v-else
             name="riEarthLine"
             size="16"
-            class="shrink-0 text-gray-400"
+            class="shrink-0 text-fg-3"
           />
 
           <span
             class="truncate text-xs"
-            :class="{ 'text-gray-400': !targetTab }"
+            :class="stale ? 'text-danger' : pinned ? 'text-fg-1' : 'text-fg-2'"
           >
             {{ label }}
           </span>
-
-          <!--
-            T-173（原 T-150）：徽标不再两态都渲染。
-
-            原先 auto 态也挂一个「自动」徽标，问题是这个词对普通用户没有落点 ——
-            它指的是「运行时解析模式」，但用户会读成「数据来源」「抓取模式」，
-            甚至以为是个可切换的开关（初版 UI 评审就是这么误读的）。
-            T-150 原本的建议是把文案改成「跟随当前页」，但那会让徽标从约 30px
-            涨到 50px，在 320px 侧栏里挤掉标题 —— 而标题正是被 truncate 截得
-            最狠的地方。
-
-            改为：**默认态不贴标签**。跟随当前页是常态，常态不需要标注；
-            只有用户显式做过的动作（固定了某一页）才值得一个徽标。
-            这样既消灭了「自动」这个看不懂的词，也让 pinned 一眼可见
-            （原先两态同色 bg-gray-500/15，看不出区别）。
-            两态的含义改由上面那个动态 title 说明 —— hover 整条 chip 都能看到。
-
-            注意 v-else-if 而不是 v-else：auto 态这一格现在是空的。
-          -->
-          <span
-            v-if="stale"
-            class="shrink-0 rounded bg-red-500/15 px-1 text-[10px] text-red-600 dark:text-red-400"
-          >
-            {{ staleText }}
-          </span>
-          <span
-            v-else-if="pinned"
-            class="shrink-0 rounded bg-accent/15 px-1 text-[10px] text-accent"
-          >
-            {{ t('workflow.agent.pickTab.pinned') }}
-          </span>
-
-          <span
-            v-if="stale"
-            class="shrink-0 text-[10px] text-red-600 underline dark:text-red-400"
-          >
-            {{ t('workflow.agent.pickTab.reselect') }}
-          </span>
-
-          <v-remixicon
-            name="riArrowDownSLine"
-            size="14"
-            class="shrink-0 text-gray-400"
-          />
         </button>
 
+        <!-- 三态徽标：同一位置、同一套圆角字号，只有颜色深浅与可点性不同 -->
+        <span
+          v-if="stale"
+          class="shrink-0 rounded-chip bg-danger/15 px-1 py-0.5 text-[10px] text-danger"
+        >
+          {{ staleText }}
+        </span>
         <button
-          v-if="showUnpin"
+          v-else-if="pinned"
           type="button"
-          class="mr-1 shrink-0 rounded p-1 text-gray-500 hover:bg-red-500/10 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400"
+          class="group/badge flex shrink-0 items-center gap-0.5 rounded-chip bg-accent/15 px-1 py-0.5 text-[10px] text-accent transition duration-fast ease-panel hover:bg-danger/15 hover:text-danger"
           :title="t('workflow.agent.pickTab.unpin')"
           :aria-label="t('workflow.agent.pickTab.unpin')"
           data-test="unpin-target"
           @click.stop="emit('unpin')"
         >
-          <v-remixicon name="riCloseLine" size="14" class="shrink-0" />
+          {{ t('workflow.agent.pickTab.pinned') }}
+          <v-remixicon
+            name="riCloseLine"
+            size="12"
+            class="shrink-0 opacity-55 transition duration-fast ease-panel group-hover/badge:opacity-100"
+          />
         </button>
+        <span
+          v-else
+          class="shrink-0 rounded-chip border border-line px-1 py-0.5 text-[10px] text-fg-3"
+        >
+          {{ t('workflow.agent.pickTab.followBadge') }}
+        </span>
+
+        <!-- T-213：箭头只在 hover / 键盘 focus 时出现（与 header 标题一致）。
+             320px 里这 14px 等于标题多显示一两个字。T-214 后它是徽标的
+             右邻兄弟（设计稿 §3 的 main → badge → chev 顺序）。 -->
+        <v-remixicon
+          name="riArrowDownSLine"
+          size="14"
+          class="mr-1.5 shrink-0 text-fg-3 opacity-0 transition duration-fast ease-panel group-hover/tab:opacity-100"
+          :class="open ? 'rotate-180 opacity-100' : ''"
+        />
       </div>
     </template>
 
@@ -133,12 +148,11 @@ import AgentTabList from './AgentTabList.vue';
  * 的按钮、在输入区点开会把面板撑开（tippy 把内容挂到 body 上定位，脱离本列）。
  * 现在改用本文件夹里的 AgentDropdown（留在本列、absolute）。
  *
- * T-164：chip 现在有「✕ 解除」，但**只在 pinned 时**。早先完全不做的理由依然
- * 成立 —— `resolveTargetTab` 永远会解析出一个目标页（pinned → lastAccessed →
- * 当前窗口 → 其他窗口），「无目标」不是一个运行时支持的状态，硬造一个解除入口
- * 等于让 UI 显示一个假状态。解除键的真实语义是 **取消固定 → 回到自动跟随**：
- * 目标页照样有，只是不再由用户指定。所以它不能出现在自动态（没什么可解除的），
- * 也不能出现在失效态（那时候该做的是重选）。
+ * T-214（用户提议）：chip 的三态由同一枚位置的**状态徽标**表达 —— 自动态
+ * 「跟随」只显示、固定态「已固定 ✕」可点解除、失效态红徽标只提示。解除键的
+ * 真实语义依然是 **取消固定 → 回到自动跟随**：目标页照样有，只是不再由用户
+ * 指定。所以徽标在自动态不可点（没什么可解除的），失效态只提示（该做的是
+ * 重选，点 chip 开列表就是）。
  */
 const props = defineProps({
   targetTab: { type: Object, default: null },
@@ -182,8 +196,6 @@ const stale = computed(
   () => props.state === 'closed' || props.state === 'drift'
 );
 
-/** T-164：解除键只在「用户固定的、且还活着」时出现 —— 理由见顶部注释。 */
-const showUnpin = computed(() => props.pinned && !stale.value);
 const staleText = computed(() =>
   props.state === 'closed'
     ? t('workflow.agent.pickTab.staleClosed')

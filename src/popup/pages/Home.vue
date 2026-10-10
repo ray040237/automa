@@ -29,6 +29,14 @@
         <v-remixicon name="riFocus3Line" />
       </ui-button>
       <ui-button
+        v-tooltip.group="t('home.openAgent')"
+        icon
+        class="mr-2"
+        @click="openAgentPanel"
+      >
+        <v-remixicon name="riChat3Line" />
+      </ui-button>
+      <ui-button
         v-tooltip.group="t('common.dashboard')"
         icon
         :title="t('common.dashboard')"
@@ -356,6 +364,39 @@ function deleteWorkflow({ id, hostId, name }) {
 }
 function openDashboard(url) {
   BackgroundUtils.openDashboard(url);
+}
+/**
+ * 打开助手侧边栏（T-199）。
+ *
+ * 为什么不在 manifest 里用 `setPanelBehavior({openPanelOnActionClick: true})`
+ * 一步到位：那个开关会让**点扩展图标直接开侧栏**，从而顶掉 popup —— 而 popup
+ * 是工作流列表 / 录制 / 元素选择的主入口，不能丢。所以保留 popup，在它里面
+ * 放一个按钮，由用户点击这个手势触发 `sidePanel.open()`。
+ *
+ * 约束：`sidePanel.open()` 只能由用户手势触发（官方文档明写）。popup 里的
+ * 点击就是用户手势，成立。
+ *
+ * Firefox（MV2）没有 sidePanel API —— 那一侧助手入口是主面板标签页，由
+ * `manifest.firefox.json` 的形态承载（见 docs/t199-sidepanel-plan.md §4），
+ * 这里据 `sidePanel` 可用性判断，缺失时按钮点了给一句提示而非静默失败。
+ */
+async function openAgentPanel() {
+  const { sidePanel } = browser;
+
+  if (!sidePanel || typeof sidePanel.open !== 'function') {
+    // Firefox 等无 sidePanel 的环境：引导去主面板（它仍保留助手标签页入口）
+    openDashboard('/workflows/agent');
+
+    return;
+  }
+
+  try {
+    const win = await browser.windows.getCurrent();
+    await sidePanel.open({ windowId: win.id });
+    window.close();
+  } catch (error) {
+    console.error('[popup] open side panel failed:', error);
+  }
 }
 async function initElementSelector() {
   const [tab] = await browser.tabs.query({

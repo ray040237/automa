@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>能不能复刻 pie 的界面 · 评估与设计稿</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --bg-2: #14171c;
+    --bg-3: #1a1e25;
+    --line: #22272f;
+    --fg-1: #e5e8ec;
+    --fg-2: #8a929e;
+    --fg-3: #525965;
+    --accent: #b8c8d6;
+    --accent-tint: rgba(184, 200, 214, 0.08);
+    --accent-line: rgba(184, 200, 214, 0.3);
+    --warn: #c26b5e;
+    --warn-tint: rgba(194, 107, 94, 0.08);
+    --success: #5fa37d;
+    --success-tint: rgba(95, 163, 125, 0.14);
+    --pending: #b89968;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+    --radius-chip: 6px;
+    --radius-control: 8px;
+    --radius-card: 14px;
+    --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg-1);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 48px 28px 96px; }
+  h1 { font-size: 30px; line-height: 1.3; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .sub { color: var(--fg-2); font-size: 14px; margin-bottom: 8px; }
+  h2 {
+    font-size: 21px; margin: 56px 0 16px; padding-top: 24px;
+    border-top: 1px solid var(--line); letter-spacing: -0.01em;
+  }
+  h2:first-of-type { border-top: none; margin-top: 40px; }
+  h3 { font-size: 16px; margin: 28px 0 10px; color: var(--fg-1); }
+  p { margin: 10px 0; color: #cdd3da; }
+  code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--bg-3); border: 1px solid var(--line);
+    padding: 1px 5px; border-radius: 4px; color: var(--accent);
+  }
+  b, strong { color: #fff; }
+  .verdict {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 13px; padding: 4px 12px;
+    border-radius: 999px; margin: 6px 0 4px;
+  }
+  .v-yes { background: var(--success-tint); color: var(--success); border: 1px solid rgba(95,163,125,0.35); }
+  .v-part { background: var(--warn-tint); color: var(--warn); border: 1px solid rgba(194,107,94,0.35); }
+  .v-no { background: rgba(194,107,94,0.12); color: var(--warn); border: 1px solid rgba(194,107,94,0.45); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--fg-2); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+  td code { font-size: 11.5px; }
+
+  .card {
+    background: var(--bg-2); border: 1px solid var(--line);
+    border-radius: var(--radius-card); padding: 20px 22px; margin: 16px 0;
+  }
+  .callout {
+    border-left: 3px solid var(--accent-line); background: var(--accent-tint);
+    padding: 12px 16px; border-radius: 0 var(--radius-control) var(--radius-control) 0;
+    margin: 16px 0; font-size: 14px;
+  }
+  .callout.warn { border-left-color: rgba(194,107,94,0.5); background: var(--warn-tint); }
+  .callout.ok { border-left-color: rgba(95,163,125,0.5); background: var(--success-tint); }
+
+  ul { margin: 10px 0; padding-left: 22px; }
+  li { margin: 6px 0; color: #cdd3da; }
+
+  /* ── 并排对照 ───────────────────────────────────────────── */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+  @media (max-width: 760px) { .compare { grid-template-columns: 1fr; } }
+  .pane { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-card); overflow: hidden; }
+  .pane > header {
+    padding: 10px 14px; font-size: 12px; color: var(--fg-2);
+    border-bottom: 1px solid var(--line); font-family: var(--mono);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .pane .body { padding: 14px; }
+
+  /* ── 真实还原的迷你面板（pie 侧） ───────────────────────── */
+  .mini {
+    background: var(--bg); border-radius: 10px; overflow: hidden;
+    height: 460px; display: flex; flex-direction: column;
+    font-size: 12px; position: relative;
+  }
+  .mini .topbar {
+    flex-shrink: 0; border-bottom: 1px solid var(--line);
+    padding: 8px 10px; display: flex; align-items: center; gap: 6px;
+  }
+  .icbtn {
+    width: 26px; height: 26px; border-radius: var(--radius-chip);
+    display: grid; place-items: center; color: var(--fg-2);
+    border: 1px solid transparent; flex-shrink: 0; position: relative;
+  }
+  .icbtn:hover { background: var(--bg-3); }
+  .icbtn.on { background: var(--accent-tint); color: var(--accent); border-color: var(--accent-line); }
+  .mini .title { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; truncate: ellipsis; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mini .pinrow {
+    display: flex; align-items: center; gap: 5px; padding: 3px 4px; margin-top: 5px;
+    border-radius: 5px; color: var(--fg-2); font-family: var(--mono); font-size: 10.5px;
+  }
+  .mini .pinrow:hover { background: var(--bg-3); }
+  .mini .stream { flex: 1; overflow: hidden; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+  .mini .bubble {
+    align-self: flex-end; max-width: 85%;
+    background: var(--bubble, #2a333d); color: var(--fg-1);
+    padding: 8px 11px; border-radius: var(--radius-card); font-size: 12px;
+  }
+  .mini .assistant { color: #cdd3da; font-size: 12px; }
+  .mini .stepline {
+    display: flex; align-items: center; gap: 6px; font-size: 11px;
+    color: var(--fg-2); font-family: var(--mono); padding: 4px 0;
+  }
+  .mini .composer {
+    flex-shrink: 0; margin: 10px; padding: 9px 11px;
+    background: var(--bg-2); border: 1px solid var(--line);
+    border-radius: var(--radius-card); color: var(--fg-3); font-size: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .mini .composer .send {
+    margin-left: auto; width: 22px; height: 22px; border-radius: var(--radius-chip);
+    background: var(--accent-tint); color: var(--accent); display: grid; place-items: center;
+  }
+  .dotgrid {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0.55;
+    background-image: radial-gradient(circle at 1px 1px, rgba(232,236,242,0.05) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+  .drawer {
+    position: absolute; inset: 0; background: rgba(8,13,16,0.72);
+    display: flex; flex-direction: column; padding: 14px;
+  }
+  .drawer .row {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border-radius: var(--radius-control); font-size: 12px;
+  }
+  .drawer .row.active { background: var(--accent-tint); color: var(--accent); }
+  .drawer .row .meta { margin-left: auto; font-size: 10px; color: var(--fg-3); font-family: var(--mono); }
+
+  /* ── 表格里的小色板 ───────────────────────────────────── */
+  .swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; border: 1px solid rgba(255,255,255,0.12); }
+  .mono { font-family: var(--mono); font-size: 12px; }
+  .muted { color: var(--fg-2); font-size: 13px; }
+  .tag {
+    display: inline-block; font-size: 11px; font-family: var(--mono);
+    padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--fg-2);
+  }
+  .tag.easy { color: var(--success); border-color: rgba(95,163,125,0.4); }
+  .tag.hard { color: var(--warn); border-color: rgba(194,107,94,0.4); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>能不能复刻 pie 的界面？</h1>
+  <p class="sub">对 <code>pie-ai-agent</code> 侧边栏 UI 的复刻可行性评估 + 可落地的设计稿 · 2026-10-10</p>
+
+  <div class="callout">
+    <b>一句话结论：</b>能复刻「观感」，但不能（也不该）复刻「结构」。pie 的界面比本仓合理的部分集中在<b>三条视觉决策</b>上（灰度色阶、形态语言、动效纪律），这三条可以直接搬；但它整体之所以好看，还有一半来自 <b>React 组件树 + 一整套独立产品形态</b>（会话抽屉 / 六态顶栏 / 多视图），那部分是<b>架构改动</b>，不是复刻界面，代价远超「好看」二字。
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>一、先说清楚：你看到的「合理」是哪一部分</h2>
+  <p>「UI 设计比我的合理」是个笼统的说法，拆开至少是三件不同的事，价格差一个数量级：</p>
+
+  <table>
+    <thead><tr><th>层级</th><th>具体是什么</th><th>能否复刻</th><th>代价</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>① 观感</b><br /><span class="muted">配色 / 圆角 / 阴影 / 字重 / 间距</span></td>
+        <td>灰度色阶（canvas→surface→field 三层底）、语义圆角、克制的动效</td>
+        <td><span class="verdict v-yes">能，直接搬</span></td>
+        <td><span class="tag easy">小</span> 改 token + 一批 class</td>
+      </tr>
+      <tr>
+        <td><b>② 形态</b><br /><span class="muted">组件怎么摆、信息怎么组织</span></td>
+        <td>六态顶栏、底部上滑的会话抽屉、步骤行（step line）、气泡布局</td>
+        <td><span class="verdict v-part">部分能</span></td>
+        <td><span class="tag hard">中</span> 要改 <code>AgentPanel.vue</code> 结构</td>
+      </tr>
+      <tr>
+        <td><b>③ 架构</b><br /><span class="muted">状态怎么管、有多少个视图</span></td>
+        <td>5 个并列视图、抽屉 overlay、会话 paused/failed/archived 状态机</td>
+        <td><span class="verdict v-no">不建议</span></td>
+        <td><span class="tag hard">大</span> 数据模型改动，非 UI 改动</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>我上一份对比文档（<code>docs/agent-sidepanel-ui-compare.html</code>）已经把 ① 里的八条落地了。所以<b>你现在看到的「不太行」，很可能已经不是 ① 的问题，而是 ②③ 的形态差异</b> —— 那才是这次要评估的。</p>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>二、并排看清楚：两边到底差在哪</h2>
+  <p>下面是按真实 token 值还原的两边界面。左边 pie（用它的 <code>--c-*</code> 变量与结构画的），右边本仓现在的样子。</p>
+
+  <div class="compare">
+    <div class="pane">
+      <header><span>pie-ai-agent · sidepanel</span><span class="muted">React 19 / TW v4</span></header>
+      <div class="body">
+        <div class="mini">
+          <div class="dotgrid"></div>
+          <div class="topbar">
+            <div class="icbtn">☰<span style="position:absolute;right:4px;top:4px;width:5px;height:5px;border-radius:50%;background:var(--pending)"></span></div>
+            <div class="icbtn">＋</div>
+            <div class="title">整理这个页面里的表格</div>
+            <div class="icbtn">⏰</div>
+            <div class="icbtn">🔭</div>
+            <div class="icbtn">⚡</div>
+          </div>
+          <div style="padding:0 10px 6px">
+            <div class="pinrow">📌 example.com/products <span style="color:var(--fg-3)">⌄</span></div>
+          </div>
+          <div class="stream">
+            <div class="bubble">帮我把这页的表格整理成 CSV</div>
+            <div class="stepline">› 读取页面 · 找到 3 个表格</div>
+            <div class="stepline">› 提取表格数据 · 完成</div>
+            <div class="assistant">已整理完成，共 42 行，包含商品名、价格、库存三列 ——</div>
+          </div>
+          <div class="composer">
+            <span>问问这个页面…</span>
+            <span class="send">↑</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane">
+      <header><span>Automa · AgentPanel</span><span class="muted">Vue 3 / TW v3</span></header>
+      <div class="body">
+        <div class="mini">
+          <div class="topbar">
+            <div class="icbtn on" style="width:auto;padding:0 8px;gap:4px;font-size:11px">💬 整理表格</div>
+            <div class="icbtn" style="margin-left:auto">＋</div>
+          </div>
+          <div class="stream">
+            <div class="bubble" style="background:rgba(59,130,246,0.15)">帮我把这页的表格整理成 CSV</div>
+            <div style="font-size:11px;color:var(--fg-3);font-family:var(--mono);border:1px solid var(--line);border-radius:var(--radius-control);padding:5px 8px">✓ read_page · 3 个表格</div>
+            <div class="assistant">已整理完成，共 42 行，包含商品名、价格、库存三列 ——</div>
+          </div>
+          <div class="composer" style="flex-direction:column;align-items:stretch;gap:6px">
+            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--fg-3)">📌 example.com <span style="opacity:.5">✕</span></div>
+            <div style="display:flex;align-items:center"><span style="color:var(--fg-3)">问问这个页面…</span><span class="send" style="margin-left:auto">↑</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="muted">（两边都用各自的真实结构画，不是示意图。差异肉眼可见：左边信息密度低、留白多、层级靠「底色的深浅」区分；右边信息挤在一起、层级靠「边框」区分。）</p>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>三、逐条评价：哪些值得复刻，哪些是坑</h2>
+
+  <h3>✅ 值得复刻（三条，我建议做）</h3>
+
+  <div class="card">
+    <b>1. 三层底色色阶 —— 这是它「稳」的最大原因</b>
+    <p>pie 用了三个几乎相同、只差一点点的灰：</p>
+    <table style="margin:10px 0">
+      <tr><td><span class="swatch" style="background:#FAFBFC"></span><code>--c-canvas</code> #FAFBFC</td><td>最底（面板背景）</td></tr>
+      <tr><td><span class="swatch" style="background:#FFFFFF"></span><code>--c-surface</code> #FFFFFF</td><td>浮起来的卡（composer、抽屉）</td></tr>
+      <tr><td><span class="swatch" style="background:#F4F6F8"></span><code>--c-field</code> #F4F6F8</td><td>凹陷的输入区</td></tr>
+    </table>
+    <p>本仓是 <b>「一块白底 + 到处画边框」</b>（<code>border-gray-200</code> 满天飞）。边框是最重的分隔手段，用得多了整屏都是线，反而吵。<b>用 3% 的明度差代替 1px 边框</b>是更高级的做法 —— 观感立刻从「拼装」变成「一体」。</p>
+    <p class="muted">代价：小。加 3 个 token + 把部分 <code>border</code> 换成 <code>bg</code>。不碰结构。</p>
+  </div>
+
+  <div class="card">
+    <b>2. 语义化的暗色不是「反相」，是重新配的</b>
+    <p>左边亮色 <code>--c-accent: #4A5C6E</code>（灰蓝），暗色 <code>--c-accent: #B8C8D6</code>（亮灰蓝）。<b>它不是把亮色调暗，而是重新选了一个在深底上才成立的亮色</b>。本仓的暗色基本是亮色的反相，所以 dark 下经常「灰得发闷」。</p>
+    <p class="muted">代价：小。就是那 20 个变量的暗色列重配一遍。</p>
+  </div>
+
+  <div class="card">
+    <b>3. 动效纪律：一条曲线、一个时长区间</b>
+    <p>pie 通篇只有 <code>cubic-bezier(0.32,0.72,0,1)</code> + 150–250ms。我做 T-200 时已经把这套 token 搬过来了（<code>ease-panel</code> / <code>duration-fast/base/slow</code>），但<b>只用在 3 个 transition 上</b>，覆盖面远不如它。</p>
+    <p class="muted">代价：小。把剩下的 transition 都挂上 token 即可，已有守卫兜底。</p>
+  </div>
+
+  <h3>⚠️ 可以借鉴形态，但要注意代价（四条）</h3>
+
+  <div class="card">
+    <b>4. 顶栏「一个栏、六个态」</b>
+    <p>pie 只有<b>一条顶栏</b>：会话态显示 <code>[☰][＋] 标题 [⏰][🔭][⚡]</code>，进设置就变成 <code>[←] 设置标题</code>。本仓现在是 <b>每个视图各有一个 header</b>，所以切视图时头会重排。</p>
+    <p><b>评价：可以学思路，但别照搬内容。</b> pie 的 <code>[⏰ 定时][🔭 研究][⚡ 技能]</code> 是它有、本仓没有的视图；照搬会得到三个点不动的按钮。<b>能学的只有「用一条栏承载所有态」这个原则</b> —— 而我做 T-207 时把 chat/history 两个 header 合成一个 chip，已经是在往这个方向走了。</p>
+    <p class="muted">代价：中。要动 <code>AgentPanel.vue</code> 的视图切换逻辑。</p>
+  </div>
+
+  <div class="card">
+    <b>5. 会话列表做成「从底部上滑的抽屉」</b>
+    <p>pie 点 ☰ 时会话列表从<b>底部滑上来盖住全屏</b>；本仓是「整块替换正文区」。抽屉的好处是不卸载正文（滚动位置保留）。</p>
+    <p><b>评价：形态可借，但收益看场景。</b> 本仓的历史视图用整块替换，注释里（<code>AgentPanel.vue:143-149</code>）已记录了这个选择的代价。抽屉能省掉一次卸载/重挂，但 Chrome 侧栏高度本来就矮，从底部滑出会显得局促。</p>
+    <p class="muted">代价：中。</p>
+  </div>
+
+  <div class="card">
+    <b>6. 步骤行（step line）而不是「工具卡」</b>
+    <p>pie 把工具调用渲染成一行很轻的 <code>› 读取页面 · 找到 3 个表格</code>（mono 10–11px，无边框）；本仓是带边框的折叠卡。</p>
+    <p><b>评价：这是**真差异**，但方向要对。</b> 工具卡是<b>本仓的有意设计</b>——工具调用的参数/观察值是排查问题的关键（T-174/T-175 花了大力气做它的溢出与字号）。pie 轻量化是因为它偏「消费者」，本仓偏「工作流自动化工具」的一个部件，信息密度需求不同。<b>建议不照搬，但可以借鉴「未展开时更像一行」。现有折叠态已经是这个思路。</b></p>
+    <p class="muted">代价：小（改折叠态样式），但可能倒退可调试性。</p>
+  </div>
+
+  <div class="card">
+    <b>7. 圆点网格底纹（dot-grid）</b>
+    <p><code>radial-gradient</code> 24px 网格，4–5% 透明度。</p>
+    <p><b>评价：好看，但它是**品牌资产**不是设计模式。</b> 那个点阵和 pie 的 IP 形象配套。本仓搬过来会显得莫名其妙 —— 除非你想给助手也做一个「图形身份」。</p>
+    <p class="muted">代价：极小（一行 CSS），但含义不对。</p>
+  </div>
+
+  <h3>❌ 不建议复刻（三条）</h3>
+
+  <div class="card">
+    <b>8. 五个并列视图（agent / schedules / research / skills / settings）</b>
+    <p>这是 pie 作为<b>独立产品</b>的形态。本仓的助手是<b>工作流编辑器里的一个面板</b>（还有三个宿主共用），塞五个视图进去 → 侧栏装不下，而且「定时/研究/技能」在本仓是别的东西。</p>
+  </div>
+
+  <div class="card">
+    <b>9. 会话的 paused / failed / archived 状态机</b>
+    <p>pie 的抽屉里每条会话有状态、可恢复、可归档。这是<b>数据模型</b>，不是 UI —— 本仓的会话模型简单得多，硬加上去要做存储迁移。</p>
+  </div>
+
+  <div class="card">
+    <b>10. 图片渲染 / KaTeX 公式</b>
+    <p>这是本仓<b>刻意砍掉</b>的：<code>markdown.js:112-114</code> 把图片降级为 alt 文本，有安全依据（页面内容一律 untrusted）。搬 KaTeX 等于把一个渲染面重新打开。</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>四、我的建议：分两步，先做 ①，②③ 只借原则</h2>
+
+  <div class="callout ok">
+    <b>第一步（建议现在做，低风险）：搬「观感三件套」</b><br />
+    三层底色阶 + 暗色重配 + 动效全覆盖。改动集中在 <code>tailwind.config.js</code> 与 <code>tailwind.css</code> 的 token 层，<b>不碰任何组件结构</b>。做完之后你会立刻觉得「像了」，而这是收益/风险比最高的一步。
+  </div>
+
+  <div class="callout warn">
+    <b>第二步（要你决定，中风险）：借「形态原则」但不搬「内容」</b><br />
+    顶栏统一成一条（本仓已走了一半）、抽屉式会话列表（可选）。这一步要动 <code>AgentPanel.vue</code>，有回归风险，建议单独排期。
+  </div>
+
+  <div class="callout">
+    <b>不要做的：</b>把 pie 的五个视图、会话状态机、KaTeX、IP 底纹搬进来 —— 那些不是「界面更好看」，是「换一个产品」。收益是观感，代价是架构。
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>五、设计稿：复刻后的 Automa 助手面板（长什么样）</h2>
+  <p>下面是<b>只应用第一步（观感三件套）</b>之后的样子 —— 保持本仓现有结构，只换底色/边框/圆角/暗色。这是我认为「复刻」应有的落点：<b>看起来像 pie，用起来还是 Automa。</b></p>
+
+  <div class="callout warn">
+    <b>落地状态（2026-10-10 补）：</b>本节画的是<b>三步做完的终态</b>，而不是第一步做完的样子。
+    T-208（第一步）只做了「底壳换色」—— 面板根/顶栏/左栏分隔/composer 卡换了 token，
+    但正文区的卡、输入区、下拉菜单当轮<b>没动</b>。所以第一步做完后界面上<b>看不到</b>
+    下面这张图的效果，有用户实拍反馈「跟设计稿长得不一样」，是对的。
+    <b>2026-10-10 已补做 T-209（第二步）</b>：把三层底色贯彻到卡片与输入区 ——
+    工具卡/思考卡 → surface、代码块/压缩卡/表头 → field、composer 输入区 → field 凹陷面、
+    下拉菜单 → surface。做完后本节的效果才真正成立。
+    <b>2026-10-10 又补做 T-211（第三步）</b>：语义文字色阶 fg-1/2/3（正文/次要/弱）——
+    消掉全目录 33 处 `text-gray-* + dark:text-gray-*` 双写，与三层「面」配套。
+    至此「观感三件套」（三层底色 + 暗色重配 + 语义文字/动效）全部落地；
+    <b>形态层</b>已在更早的 T-207（会话 chip 统一 / 整页引导 / composer 渐隐）借完，
+    剩余的是 pie 的产品内容（六个视图 / 抽屉 / 步骤行），评估结论本就是「不搬」。
+  </div>
+
+  <h3>5.1 亮色 · 对话态</h3>
+  <div class="pane" style="max-width:420px;background:#FAFBFC;border-color:#E4E8EC">
+    <header style="background:#fff;border-color:#E4E8EC;color:#5A6470"><span>复刻稿 · 亮色</span><span>三层底色</span></header>
+    <div class="body" style="background:#FAFBFC;padding:0">
+      <div style="height:420px;display:flex;flex-direction:column;font-size:12.5px;color:#14181D">
+        <!-- 顶栏：surface 白 -->
+        <div style="flex-shrink:0;background:#FFFFFF;border-bottom:1px solid #E4E8EC;padding:8px 12px;display:flex;align-items:center;gap:6px">
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;background:#F4F6F8;color:#5A6470">
+            <span>💬</span><span style="font-weight:500;color:#14181D">整理表格</span><span style="opacity:.5">›</span>
+          </div>
+          <div style="margin-left:auto;width:26px;height:26px;border-radius:6px;display:grid;place-items:center;color:#5A6470">＋</div>
+        </div>
+        <!-- 正文：canvas 底 -->
+        <div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+          <div style="align-self:flex-end;max-width:85%;background:#E4EAF0;color:#14181D;padding:8px 11px;border-radius:14px">帮我把这页的表格整理成 CSV</div>
+          <div style="align-self:flex-start;font-size:11px;font-family:var(--mono);color:#5A6470;background:#F4F6F8;border-radius:8px;padding:6px 10px">✓ read_page · 3 个表格</div>
+          <div style="color:#14181D">已整理完成，共 42 行 ——</div>
+        </div>
+        <!-- composer：surface 白 + field 输入区 -->
+        <div style="flex-shrink:0;margin:10px;background:#FFFFFF;border:1px solid #E4E8EC;border-radius:14px;padding:8px">
+          <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#5A6470;padding:2px 4px 6px">📌 example.com/products</div>
+          <div style="background:#F4F6F8;border-radius:8px;padding:7px 10px;display:flex;align-items:center;color:#98A1AC">
+            问问这个页面…
+            <span style="margin-left:auto;width:22px;height:22px;border-radius:6px;background:rgba(74,92,110,0.08);color:#4A5C6E;display:grid;place-items:center">↑</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="muted">注意三处变化：① 顶栏与 composer 是 <b>白 surface</b>，正文是 <b>灰 canvas</b> —— 层级靠底色不靠线；② 输入区是 <b>凹陷的 field 灰</b>，不是白底加边框；③ 用户气泡是 <b>灰蓝 bubble</b>（#E4EAF0），不再是亮蓝。</p>
+
+  <h3>5.2 暗色 · 对话态</h3>
+  <div class="pane" style="max-width:420px;background:#0B0D10;border-color:#22272F">
+    <header style="background:#14171C;border-color:#22272F;color:#8A929E"><span>复刻稿 · 暗色</span><span>重配不是反相</span></header>
+    <div class="body" style="background:#0B0D10;padding:0">
+      <div style="height:420px;display:flex;flex-direction:column;font-size:12.5px">
+        <div style="flex-shrink:0;background:#14171C;border-bottom:1px solid #22272F;padding:8px 12px;display:flex;align-items:center;gap:6px">
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;background:#1A1E25;color:#8A929E">
+            <span>💬</span><span style="font-weight:500;color:#E5E8EC">整理表格</span><span style="opacity:.5">›</span>
+          </div>
+          <div style="margin-left:auto;width:26px;height:26px;border-radius:6px;display:grid;place-items:center;color:#8A929E">＋</div>
+        </div>
+        <div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+          <div style="align-self:flex-end;max-width:85%;background:#2A333D;color:#E5E8EC;padding:8px 11px;border-radius:14px">帮我把这页的表格整理成 CSV</div>
+          <div style="align-self:flex-start;font-size:11px;font-family:var(--mono);color:#8A929E;background:#1A1E25;border-radius:8px;padding:6px 10px">✓ read_page · 3 个表格</div>
+          <div style="color:#E5E8EC">已整理完成，共 42 行 ——</div>
+        </div>
+        <div style="flex-shrink:0;margin:10px;background:#14171C;border:1px solid #22272F;border-radius:14px;padding:8px">
+          <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#8A929E;padding:2px 4px 6px">📌 example.com/products</div>
+          <div style="background:#1A1E25;border-radius:8px;padding:7px 10px;display:flex;align-items:center;color:#525965">
+            问问这个页面…
+            <span style="margin-left:auto;width:22px;height:22px;border-radius:6px;background:rgba(184,200,214,0.08);color:#B8C8D6;display:grid;place-items:center">↑</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>5.3 关键的 token 映射（照着填就行）</h3>
+  <table>
+    <thead><tr><th>用途</th><th>亮色</th><th>暗色</th><th>本仓 token（已落地）</th></tr></thead>
+    <tbody>
+      <tr><td>面板底</td><td><code>#FAFBFC</code></td><td><code>#0B0D10</code></td><td><code>bg-canvas</code></td></tr>
+      <tr><td>卡/浮起面</td><td><code>#FFFFFF</code></td><td><code>#14171C</code></td><td><code>bg-surface</code></td></tr>
+      <tr><td>凹陷面/输入底</td><td><code>#F4F6F8</code></td><td><code>#1A1E25</code></td><td><code>bg-field</code></td></tr>
+      <tr><td>分隔线</td><td><code>#E4E8EC</code></td><td><code>#22272F</code></td><td><code>border-line</code></td></tr>
+      <tr><td>正文</td><td><code>#14181D</code></td><td><code>#E5E8EC</code></td><td><code>text-fg-1</code></td></tr>
+      <tr><td>次要文字</td><td><code>#5A6470</code></td><td><code>#8A929E</code></td><td><code>text-fg-2</code></td></tr>
+      <tr><td>弱文字</td><td><code>#98A1AC</code></td><td><code>#525965</code></td><td><code>text-fg-3</code></td></tr>
+      <tr><td>强调（accent）</td><td><code>#4A5C6E</code></td><td><code>#B8C8D6</code></td><td>本仓的 <code>accent</code>（未改）</td></tr>
+      <tr><td>用户气泡</td><td><code>#E4EAF0</code></td><td><code>#2A333D</code></td><td><code>bg-blue-500/15</code>（刻意保留，语义独立）</td></tr>
+    </tbody>
+  </table>
+
+  <p class="muted">上表的 canvas/surface/field/line 于 T-208/T-209 落地，fg-1/2/3 于 T-211 落地；
+  用户气泡与 accent 刻意不归入这套灰阶 —— 它们各有独立语义（T-172 的「一种颜色只表示一件事」）。</p>
+
+  <p class="muted">上表每行都对应 pie 源码里的一个 <code>--c-*</code> 变量（<code>pie-ai-agent/src/sidepanel/index.css:55-108</code>），不是估的。</p>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>六、复刻的真实代价清单</h2>
+  <table>
+    <thead><tr><th>要做的事</th><th>碰哪些文件</th><th>风险</th></tr></thead>
+    <tbody>
+      <tr><td>加三层底色 token</td><td><code>tailwind.config.js</code></td><td>低（新增，不改旧）</td></tr>
+      <tr><td>暗色重配</td><td><code>tailwind.css</code> 的 <code>:root</code></td><td>低</td></tr>
+      <tr><td>把 <code>border-gray-200</code> 换 <code>bg</code>/<code>border-line</code></td><td>agent 目录 10 个 .vue</td><td>中（守卫会红，需逐条判断）</td></tr>
+      <tr><td>动效 token 全覆盖</td><td>各 .vue 的 transition</td><td>低（已有守卫）</td></tr>
+      <tr><td>用户气泡改灰蓝</td><td><code>AgentUserBubble.vue</code></td><td>低</td></tr>
+      <tr><td><b>若要做形态（第二步）</b></td><td><code>AgentPanel.vue</code></td><td><b>高</b>（结构 + 状态联动）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <b>一个必须提醒的坑：</b>本仓的旧守卫锚的是<b>具体 class 串</b>（例如 <code>border-gray-200 dark:border-gray-700</code>）。一旦把边框换成底色，<b>一批守卫会连锁变红</b>。这不是守卫坏，是它在如实报告「视觉语言变了」——就像我做 T-207 时 T-172/T-187 同时报红那样。所以这一步要<b>逐条判断「是回归还是有意迁移」</b>，不能批量改正则。
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>七、结论</h2>
+  <ul>
+    <li><b>能复刻的是「观感」</b> —— 三条视觉决策，收益高、风险低，我建议做。</li>
+    <li><b>「形态」可以借原则</b>，但 pie 的六个顶栏按钮/五个视图是它的产品内容，搬进来会是空壳。</li>
+    <li><b>「架构」不要碰</b> —— 那是换产品，不是改界面。</li>
+    <li>你现在的界面「不如它合理」的<b>主要落差在配色与层级（靠边框而非底色），不在结构</b>。修这一处的性价比，远高于重做结构。</li>
+  </ul>
+
+  <div class="callout ok">
+    <b>下一步：</b>如果你认同，我可以先只做第一步（观感三件套）—— 改 token 层 + 把边框分层替换，不碰任何组件结构，做完给你一份前后对比。这一步预计会让面板「一眼变好」，且不引入结构风险。要不要做、做多大范围，你定。
+  </div>
+
+</div>
+</body>
+</html>

@@ -12,7 +12,7 @@
             <th
               v-for="(cell, j) in block.head"
               :key="j"
-              class="border border-gray-200 bg-gray-50 px-2 py-1 font-medium dark:border-gray-700 dark:bg-gray-800"
+              class="border border-line bg-field px-2 py-1 font-medium"
               :style="{ textAlign: block.align[j] || 'left' }"
               v-html="cell"
             />
@@ -23,7 +23,7 @@
             <td
               v-for="(cell, k) in row"
               :key="k"
-              class="border border-gray-200 px-2 py-1 dark:border-gray-700"
+              class="border border-line px-2 py-1"
               :style="{ textAlign: block.align[k] || 'left' }"
               v-html="cell"
             />
@@ -38,12 +38,12 @@
          两个元素都 pointer-events-none，不挡滚动与拖拽。 -->
     <div
       v-if="overflowing"
-      class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-gray-200/80 to-transparent transition-opacity dark:from-gray-700/80"
+      class="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-gray-200/80 to-transparent transition-opacity duration-base ease-panel dark:from-gray-700/80"
       :class="{ 'opacity-0': atEnd }"
     />
     <span
       v-if="overflowing && !atEnd"
-      class="pointer-events-none absolute right-1 top-1 rounded bg-gray-700/80 px-1 py-0.5 text-[10px] leading-none text-gray-100"
+      class="pointer-events-none absolute right-1 top-1 rounded-chip bg-gray-700/80 px-1 py-0.5 text-[10px] leading-none text-gray-100"
       >{{ t('workflow.agent.tableScrollHint') }}</span
     >
   </div>

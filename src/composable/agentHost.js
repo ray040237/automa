@@ -31,11 +31,13 @@ import {
   createAgentRuntime,
   listTabs,
   loadConfig,
+  loadConfigDoc,
   resolveTarget,
+  saveConfig,
   sessionStore,
 } from '@/agent';
 import { buildConfirmation, createSessionAuth } from '@/agent/confirm';
-import { targetHealth } from '@/agent/tab';
+import { targetFollowPlan, targetHealth } from '@/agent/tab';
 import { AGENT_EVENTS, ERROR_KIND, errorEvent } from '@/agent/events';
 import { getActiveInstructionsFrom } from '@/agent/customizations';
 import { capabilityGroups } from '@/agent/examples';
@@ -102,6 +104,18 @@ export function useAgentHost(deps) {
   const agent = reactive({
     events: [],
     config: {},
+    /**
+     * T-201/T-213：模型选择器要枚举「有哪些连接、各自的模型」，而
+     * `config`（= resolveActiveConfig）只暴露**当前生效**的那一条
+     * （provider id + model id），拿不到候选列表 —— 那份数据在存储的 doc 上
+     * （`providers[].models`）。
+     *
+     * 这里另开一格存**脱敏后的 doc**（loadConfigDoc：apiKey 清空、密文挪到
+     * encryptedKey），绝不能让明文密钥进响应式对象 —— 它会被挂到组件实例上、
+     * 出现在 Vue devtools 里、也可能被某个 v-bind 带进 DOM。
+     * 只有 `providers[].models` 这一段是选择器要用的。
+     */
+    modelCatalog: [],
     targetTab: null,
     // T-08：目标页的健康状态与来源。targetState 取值见 targetHealth()：
     //   'ok' 正常 / 'closed' 页被关掉 / 'drift' 同一个 tab 跳到了别的 origin / 'none' 还没有目标页
@@ -117,6 +131,11 @@ export function useAgentHost(deps) {
      * 不取决于视口。写 `md:` 断点会在「拖宽的侧栏」上错误地切成左栏布局。
      */
     layout: deps.layout === 'wide' ? 'wide' : 'narrow',
+    /* T-213：删掉 T-212 的 host.shell。
+       它当初的作用是让面板根在侧栏宿主下改用 bg-shell、与 chrome 同色。
+       实测下来这个"续成一整块"的收益不抵代价：面板底色家族被劈成两套，
+       顶栏降层之后又多出一层过渡。现在面板根统一 bg-canvas，由 :root.dark
+       接管暗色，宿主不必再声明底色分档。 */
     busy: false,
     runtime: null,
     sessions: [],
@@ -178,20 +197,6 @@ export function useAgentHost(deps) {
       state: targetHealth(liveTab, agent.targetTab),
     });
   }
-
-  const onTabRemoved = (tabId) => {
-    if (agent.targetTab && tabId === agent.targetTab.id) markTargetHealth(null);
-  };
-
-  const onTabUpdated = (tabId, changeInfo, tab) => {
-    if (!agent.targetTab || tabId !== agent.targetTab.id) return;
-    // changeInfo 多数时候只有 favIconUrl / title；url 变了才算漂移，交给 targetHealth 判
-    if (!tab && !changeInfo) return;
-    markTargetHealth(tab || null);
-  };
-
-  browser.tabs.onRemoved.addListener(onTabRemoved);
-  browser.tabs.onUpdated.addListener(onTabUpdated);
 
   /**
    * 会话级授权 + 挂起确认的状态机（T-90，confirm.js 纯函数，有测试）。
@@ -295,6 +300,71 @@ export function useAgentHost(deps) {
     return next;
   }
 
+  /**
+   * 三个标签页事件监听（T-08 健康 + T-215 跟随）。
+   *
+   * T-215 之前只有 removed / updated 两条、且都只判健康 —— 用户切换标签页时
+   * 没有任何监听者在听，「跟随态」实际是「解除那一刻的页面快照」（用户实测
+   * 「切换到跟随态但是实际上无法跟随」）。现在三个事件统一问
+   * `targetFollowPlan`（tab.js 纯函数，有单测）拿动作：
+   *   'skip'      → 什么都不做
+   *   'reresolve' → resetTargetToAuto()：重解析 + 回写 runtime + syncTarget
+   *   'health'    → markTargetHealth()：只判 closed / drift
+   *
+   * 定义在 resetTargetToAuto 之后是本文件 lint 规则（no-use-before-define）
+   * 的要求 —— 见 syncTarget 注释同款约束。
+   *
+   * 重解析是异步的，监听器本身保持同步 —— fire 后挂 .catch 兜底（tabs 查询
+   * 失败时跟随静默失败一拍，下一事件还会再来；不能让扩展后台报未捕获拒绝）。
+   */
+  const followOrHealth = (plan) => {
+    if (plan === 'reresolve') {
+      resetTargetToAuto().catch(() => {});
+      return true;
+    }
+    return false;
+  };
+
+  const onTabRemoved = (tabId) => {
+    if (!agent.targetTab || tabId !== agent.targetTab.id) return;
+    const plan = targetFollowPlan({
+      pinned: agent.targetPinned,
+      event: 'removed',
+    });
+    if (followOrHealth(plan)) return;
+    markTargetHealth(null);
+  };
+
+  const onTabActivated = ({ tabId } = {}) => {
+    const plan = targetFollowPlan({
+      pinned: agent.targetPinned,
+      targetTabId: agent.targetTab && agent.targetTab.id,
+      event: 'activated',
+      eventTabId: tabId,
+    });
+    followOrHealth(plan);
+  };
+
+  const onTabUpdated = (tabId, changeInfo, tab) => {
+    if (!agent.targetTab || tabId !== agent.targetTab.id) return;
+    // changeInfo 多数时候只有 favIconUrl / title；url 变了才算导航，交给
+    // targetFollowPlan 分流（自动态：页签内导航 = 跟随的一部分 → 重解析；
+    // 固定态：照旧 markTargetHealth 判 drift）。
+    if (!tab && !changeInfo) return;
+    const plan = targetFollowPlan({
+      pinned: agent.targetPinned,
+      targetTabId: agent.targetTab.id,
+      event: 'updated',
+      urlChanged: Boolean(changeInfo && changeInfo.url),
+    });
+    if (followOrHealth(plan)) return;
+    markTargetHealth(tab || null);
+  };
+
+  browser.tabs.onRemoved.addListener(onTabRemoved);
+  browser.tabs.onUpdated.addListener(onTabUpdated);
+  browser.tabs.onActivated.addListener(onTabActivated);
+
   async function openAgentSession(id) {
     // id 为空是下拉里的占位项，不是一次切换 —— 交给它会把 runtime 的
     // 会话 id 置空但不清 pins/插话队列，落到一个不新不旧的状态。
@@ -392,10 +462,66 @@ export function useAgentHost(deps) {
     if (!agent.runtime.unpinTab()) return;
 
     await resetTargetToAuto();
+
+    // T-214：解除后 chip 从实底退成轻底 —— 一句话确认"没有丢目标页"，
+    // 只是回到了自动跟随；也防误触徽标后不知所措（设计稿 §7 拍板项）。
+    toast.success(t('workflow.agent.pickTab.unpinToast'));
   }
 
-  function goToAgentSettings() {
-    router.push({ path: '/settings', hash: '#agent' });
+  /**
+   * 换模型 / 换连接（T-201 / T-213）。
+   *
+   * **生效时机是「下一轮」**，这不是实现偷懒，是结构上的必然：
+   * runtime 的 send() 每次都现读 `getConfig()`（index.js:488），当前这一轮
+   * 早就拿着旧 config 在跑了。所以写盘之后不必重启任何东西 —— 下一轮自然读新的。
+   * 弹层底部那句「换模型后从下一轮开始生效，当前会话不重放」正是照实说。
+   *
+   * 走 saveConfig（而不是直接写存储）是为了复用它的校验：activeModelId 必须
+   * 真的在那个 provider 的 models 列表里，否则 resolveActiveConfig 会在
+   * `!model` 时整份退回 DEFAULT_CONFIG，用户看到的就成了「请先配置 API Key」——
+   * 一个指不到真因的错误。校验失败就把 errors 抛出来，别静默。
+   */
+  async function onSetModel({ providerId, modelId }) {
+    if (agent.busy) return;
+    if (!providerId || !modelId) return;
+
+    const doc = await loadConfigDoc(configIO);
+    const result = await saveConfig(configIO, {
+      ...doc,
+      activeProviderId: providerId,
+      activeModelId: modelId,
+    });
+
+    if (!result.ok) {
+      toast.error(t('workflow.agent.model.switchFailed'));
+      return;
+    }
+
+    // 面板上那两处（模型芯片、上下文窗口）都要跟着变。
+    // resolveActiveConfig 会顺带把新模型的 contextWindow 解出来 —— 所以
+    // config 整体重读一次，不必自己拼。
+    agent.config = await loadConfig(configIO);
+  }
+
+  /**
+   * 「去配置 API Key」的落点（T-199）。
+   *
+   * 默认走主面板路由 —— 编辑器侧栏宿主就在 newtab 里，`router.push` 是自然的。
+   * 但**浏览器侧边栏宿主不在 newtab 里、没有 router**：它的设置页在另一个页面
+   * （`newtab.html#/settings/agent`），必须由宿主自己决定怎么过去（开标签页）。
+   * 所以做成可注入：`deps.onOpenSettings` 给了就用它，没给才退回 router。
+   *
+   * 顺带修正旧写法：原先是 `{ path: '/settings', hash: '#agent' }`，而实际路由
+   * 是 `/settings/agent`（router.js:115），hash 形式并不指向那一页。
+   */
+  async function goToAgentSettings() {
+    if (typeof deps.onOpenSettings === 'function') {
+      await deps.onOpenSettings();
+
+      return;
+    }
+
+    router.push({ path: '/settings/agent' });
   }
 
   /**
@@ -540,6 +666,25 @@ export function useAgentHost(deps) {
     inited = true;
 
     agent.config = await loadConfig(configIO);
+    // T-201/T-213：模型选择器的候选列表。**只取 provider id/label + 模型 id**
+    // —— loadConfigDoc 已经把明文密钥清空，但这里再显式挑一次字段，
+    // 让"密钥不进这一格"成为形状上的必然，而不是依赖上游那一次的清洗。
+    try {
+      const doc = await loadConfigDoc(configIO);
+      agent.modelCatalog = (doc.providers || [])
+        .filter((p) => p.id)
+        .map((p) => ({
+          id: p.id,
+          label: p.label || p.id,
+          hasKey: Boolean(p.hasKey),
+          models: (p.models || []).map((m) => m.id).filter(Boolean),
+        }));
+    } catch (e) {
+      // 读不到候选列表不该拦住面板启动：设置页能改配置，选择器退化成
+      // 「只显示当前模型名、点开是空的」也不会误报 —— 但要说得出为什么。
+      agent.modelCatalog = [];
+      console.warn('[agent] load model catalog failed:', e);
+    }
 
     // 没有可注入的页面就别硬撑：agent 一开就报「读到的是编辑器自己」，比晚点报错更让人困惑。
     // windowId 显式取当前窗口 —— 早先是写死的 window.id（扩展页上没有这个属性），
@@ -590,10 +735,11 @@ export function useAgentHost(deps) {
     // 会话级授权随闭包一起消失，不用另置 false（技术方案 §8.2：面板卸载即失效）。
     if (agent.pendingConfirm) agent.pendingConfirm.resolve(false);
 
-    // T-08：这两个监听挂在 browser 上，不是组件上 —— 不摘就是泄漏，
+    // T-08：这三个监听挂在 browser 上，不是组件上 —— 不摘就是泄漏，
     // 面板反复开关后同一个 tab 的事件会被处理多次。
     browser.tabs.onRemoved.removeListener(onTabRemoved);
     browser.tabs.onUpdated.removeListener(onTabUpdated);
+    browser.tabs.onActivated.removeListener(onTabActivated);
   });
 
   return Object.assign(agent, {
@@ -611,5 +757,7 @@ export function useAgentHost(deps) {
     openSession: openAgentSession,
     newSession: newAgentSession,
     deleteSession: deleteAgentSession,
+    // T-201/T-213：换模型
+    setModel: onSetModel,
   });
 }

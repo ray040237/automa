@@ -78,14 +78,14 @@ test('T-131 回归守卫：面板的滚动容器必须用项目现成的 .scroll
   );
 });
 
-test('布局守卫：会话管理在 header，目标页 chip 在输入区上方', () => {
+test('布局守卫：header 两行（会话/标题/新建 + 标签页），目标页 chip 在第 2 行', () => {
   const src = stripComments(readFileSync(panelPath, 'utf8'));
 
   // 方案 C：会话 chip + 新建构成 header（删除收进会话下拉）
   assert.match(
     src,
     /<agent-session-list/,
-    '会话列表必须挂在面板上（header 的会话 chip 打开它）'
+    '会话列表必须挂在面板上（标题下拉 + 左栏/历史视图用它）'
   );
   // T-90：面板收 host 对象后，入口直调 host 方法（原来断言的是 emit 形状）
   assert.match(src, /host\.newSession\(\)/, '新建会话入口必须保留');
@@ -95,21 +95,25 @@ test('布局守卫：会话管理在 header，目标页 chip 在输入区上方'
     '删除会话入口必须保留，且要把要删的会话 id 传下去'
   );
   // 「⋯」溢出菜单已被用户否掉（为两个功能多加一层菜单，删除还要点两次）。
-  // 删除现在是会话下拉里的一行，见下面 session-list 那条守卫。
   assert.doesNotMatch(src, /session\.more/, 'header 不该再有「更多」溢出菜单');
   assert.doesNotMatch(src, /riMore2Fill/, 'header 不该再有「更多」按钮');
 
-  // T-166：chip 搬进了 composer 卡片 —— 现在是「表单内、输入框之前」，
-  // 而不再是「表单之前的一行」。它仍紧贴输入框（中间只隔 mb-1），
-  // 但归属变成了输入区的一部分：目标页是**这条消息的附件**，不是面板上
-  // 又一个控件。守卫跟着改判据，否则会把这次改动误判成回归。
+  // T-213：header 拆成两行，chip 从 composer 卡片里搬到 header 的第 2 行。
+  //
+  // 归类的变化是本质的：T-166 把目标页当「这条消息的附件」（所以放进 composer
+  // 卡片）；T-213 把它当「助手在看哪一页」这个**会话级状态**，那是 header 的
+  // 事，与「这次要发什么」无关。副作用是 composer 少了一行（整行宽的 chip），
+  // 而 header 多了一行 —— 总高度因此还能降（见设计稿 §6 的高度预算）。
+  //
+  // 判据跟着改：chip 必须**不在 form 内**（不再属于 composer），且在 header 的
+  // 第二行容器里（`h-tabsrow` 那个 div 的位置 —— 这里用「form 之前」锚住）。
   const chipAt = src.indexOf('<agent-tab-picker');
   const formAt = src.indexOf('<form');
-  const taAt = src.indexOf('<ui-textarea');
   assert.ok(chipAt > 0, '必须有目标页 chip');
+  assert.ok(formAt > 0, '必须能找到 composer 的 <form>');
   assert.ok(
-    chipAt > formAt && chipAt < taAt,
-    '目标页 chip 必须在 form 内、且在输入框之前 —— 它是 composer 的顶行，不是表单外的独立一行'
+    chipAt < formAt,
+    '目标页 chip 必须在 form **之前**（T-213 已把它从 composer 卡片搬到 header 第 2 行）'
   );
 });
 
@@ -159,27 +163,55 @@ test('回归守卫：面板下拉必须留在本列、absolute 定位', () => {
     /class="absolute/,
     '下拉面板必须是 absolute —— absolute 才不参与布局，点开不会撑开面板'
   );
+  // T-211：字色的**形态**从「text-gray-800 + dark:text-gray-100 双写」换成
+  // 单一语义 token `text-fg-1`（跨主题）。钉的不变量没变 —— 仍然是
+  // 「下拉必须显式给字色」，只是现在一个类就覆盖了亮暗两档。
   assert.match(
     dd,
-    /\btext-gray-\d+/,
-    '下拉必须显式给浅色字，否则菜单项会跟着父级继承成「与底色同色」而看不见'
-  );
-  assert.match(
-    dd,
-    /\bdark:text-gray-\d+/,
-    '下拉必须显式给深色模式的字色（底色是 dark:bg-gray-800）'
+    /\btext-fg-1\b/,
+    '下拉必须显式给字色（text-fg-1），否则菜单项会跟着父级继承成「与底色同色」而看不见'
   );
 });
 
-test('回归守卫：贴在面板底部的 chip 必须向上展开', () => {
-  // chip 在输入区顶上，往下展开在矮窗口里会被视口截断。
-  const src = stripComments(
+test('回归守卫：弹层方向跟随所在位置 —— header 里向下弹，底行里向上弹', () => {
+  // 原判据：「chip 在输入区顶上，必须 side="top" 向上展开」—— 那是标签页
+  // chip 还住在 composer 顶部（面板底部）时的不变量。
+  // T-213 把整格搬进 header 第 2 行（面板**顶部**）后方向翻转：往上弹会把
+  // 列表顶出页面（2026-10-10 用户截图实证）。现在钉的是新不变量 ——
+  // **方向由所在位置决定**，不逐个特调：
+  //   header 里（标签页 chip、标题会话下拉）→ 向下（默认 side，不写 side="top"）
+  //   底行里（模型芯片、圆环明细）           → side="top"
+  const tab = stripComments(
     read('src/components/newtab/workflow/agent/AgentTabPicker.vue')
   );
-  assert.match(
-    src,
+  assert.doesNotMatch(
+    tab,
     /<agent-dropdown[^>]*side="top"/s,
-    '标签页 chip 的下拉必须 side="top"（向上展开）'
+    '标签页 chip 在 header 里，下拉必须向下展开（写 side="top" 会把列表顶出页面）'
+  );
+
+  const model = stripComments(
+    read('src/components/newtab/workflow/agent/AgentModelPicker.vue')
+  );
+  assert.match(
+    model,
+    /<agent-dropdown[^>]*side="top"/s,
+    '模型芯片在 composer 底行（面板底部），必须 side="top" 向上展开，' +
+      '否则矮窗口里会被视口截断'
+  );
+
+  // 标题会话下拉也在 header 里 —— 同样不许向上。
+  const panel = stripComments(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
+  );
+  const titleAt = panel.indexOf('data-test="session-title"');
+  assert.ok(titleAt > 0, '找不到标题会话下拉，守卫要重写');
+  const ddEnd = panel.indexOf('</agent-dropdown>', titleAt);
+  assert.ok(ddEnd > titleAt, '找不到下拉闭合标签，守卫要重写');
+  assert.doesNotMatch(
+    panel.slice(titleAt, ddEnd),
+    /side="top"/,
+    '标题会话下拉在 header 里，必须向下展开'
   );
 });
 
@@ -215,15 +247,17 @@ test('守卫：删除在会话下拉里，且可点控件都有底色', () => {
   );
   // 删除按钮要有破坏性红信号。刻意接受 hover 才变红：满列表常红的垃圾桶
   // 很吵，而且这行的区分主要靠结构（独立按钮 + 垃圾桶图标 + 二次确认）而非颜色。
-  // 但「必须存在红色信号」这条不放宽 —— 浅色模式与深色模式各要一个。
+  // 但「必须存在红色信号」这条不放宽。
+  // T-213：色从 `text-red-500 dark:text-red-400` 双声明换成单一语义 token
+  // `text-danger`（跨主题）—— 与 fg-* 同一次迁移思路。判据因此同时接受两种形态。
   assert.match(
     list,
-    /(?:^|\s)hover:text-red-\d+|(?:^|\s)text-red-\d+/,
+    /hover:(?:text-danger|text-red-\d+)|(?:^|\s)text-danger|(?:^|\s)text-red-\d+/,
     '删除是破坏性操作，要有破坏性配色与「切换会话」区分开'
   );
   assert.match(
     list,
-    /hover:text-red-\d+/,
+    /hover:(?:text-danger|text-red-\d+)/,
     '删除按钮 hover 时要变红（常红太吵，但完全没有红信号也不行）'
   );
 
@@ -244,27 +278,44 @@ test('守卫：删除在会话下拉里，且可点控件都有底色', () => {
 
   // 可点控件用项目通用的 bg-box-transparent（工作流块、Autocomplete、Packages
   // 等 46+ 处在用）。只有 hover 没有底色的控件会与面板背景糊在一起。
-  // T-168：会话 chip 不再是下拉的 trigger，而是「进历史视图」的按钮。
-  // 判据跟着改 —— 盯的是「这个可点控件有没有底色」，不是「它是不是 dropdown」。
+  // T-213：header 拆两行，标题与新建都是可点控件。
+  // 2026-10-10：左侧的历史入口图标（session-chip）与它打开的历史视图一起
+  // 撤掉 —— T-213 让标题成了会话下拉后两者是同一份列表的两张脸（用户实证）。
+  // 可点控件只剩「标题（下拉触发器）」与「新建」两个。
   const panel = stripComments(readFileSync(panelPath, 'utf8'));
-  const chipAt = panel.indexOf('data-test="open-history"');
-  assert.ok(chipAt > 0, '会话 chip 必须存在（它是进历史视图的入口）');
-  assert.match(
-    panel.slice(Math.max(0, chipAt - 400), chipAt),
-    /bg-box-transparent/,
-    '会话 chip 的触发器必须有底色，否则看不出能点'
+  assert.doesNotMatch(
+    panel,
+    /data-test="session-chip"/,
+    '历史入口图标已随历史视图一起撤掉 —— 别把它加回来，下拉就是唯一入口'
   );
   assert.match(
     panel,
-    /bg-box-transparent[^>]*>[\s\S]{0,600}riAddLine/,
+    /bg-box-transparent[^>]*>[\s\S]{0,900}riAddLine/,
     '新建会话按钮必须有底色'
   );
+  // T-213：标题也是可点控件（点开 = 会话下拉），同样要有底色。
+  const titleAt = panel.indexOf('data-test="session-title"');
+  assert.ok(titleAt > 0, '标题必须存在（T-213 起它同时是会话下拉的触发器）');
   assert.match(
-    stripComments(
-      read('src/components/newtab/workflow/agent/AgentTabPicker.vue')
-    ),
+    panel.slice(Math.max(0, titleAt - 700), titleAt),
     /bg-box-transparent/,
-    '标签页 chip 的触发器必须有底色'
+    '标题（会话下拉触发器）必须有底色，否则看不出能点'
+  );
+  // T-213：标签页 chip 三态各有自己的"是个盒子"信号 —— 自动态用
+  // bg-box-transparent（最轻），固定态用 bg-surface + border-line（最实）。
+  // 两者都算数，只要它不是一个"裸文字行"。
+  const picker = stripComments(
+    read('src/components/newtab/workflow/agent/AgentTabPicker.vue')
+  );
+  assert.match(
+    picker,
+    /bg-box-transparent/,
+    '标签页 chip 的自动态必须有底色（bg-box-transparent）'
+  );
+  assert.match(
+    picker,
+    /border-line bg-surface/,
+    '标签页 chip 的固定态要有 surface + line 边 —— 这是三态里最重的一档'
   );
 });
 
@@ -1083,7 +1134,9 @@ test('T-14：AgentMarkdown 要走增量流，且首屏/SSR 仍能整段解析', 
 
 test('T-16：整条复制的按钮必须在 markdown 根容器上（定位要相对整条，不是某个块）', () => {
   const src = read('src/components/newtab/workflow/agent/AgentMarkdown.vue');
-  const rootAt = src.indexOf('<div class="group relative');
+  // 不写死属性顺序：ref / class 的先后由 vue/attributes-order 决定，
+  // 守卫盯的是「根容器带 relative group」这件事，不是它第几个属性。
+  const rootAt = src.search(/<div[^>]*class="group relative/);
   assert.ok(
     rootAt > 0,
     'markdown 根容器要带 relative group，按钮的 absolute 才有参照、hover 才认整条消息'
@@ -1091,6 +1144,112 @@ test('T-16：整条复制的按钮必须在 markdown 根容器上（定位要相
   assert.ok(
     src.indexOf('@click="copy(props.raw)"') > rootAt,
     '复制按钮要挂在根容器内部'
+  );
+});
+
+// —— T-206：悬停「复制全文」时高亮将被复制的范围 ——
+//
+// 参考实现 hover 复制按钮时会给被复制的内容加一层底色；本仓原来只给按钮自己
+// 加底色，长对话里多条消息各带一个同款按钮，用户分不清会复制到哪一段。
+//
+// 关键：`peer-hover` 认的是**前面的兄弟**，所以按钮必须带 `peer` 且在内容
+// **之前**。这条顺序一旦被谁调回去，高亮就静默失效（CSS 不报错）—— 必须钉死。
+test('T-206：复制按钮带 peer、且在被复制的范围之前（顺序错了高亮会静默失效）', () => {
+  const src = stripComments(
+    read('src/components/newtab/workflow/agent/AgentMarkdown.vue')
+  );
+
+  const btnAt = src.indexOf('@click="copy(props.raw)"');
+  assert.ok(btnAt > 0, '找不到整条复制的按钮');
+  // 从按钮往前找它自己的起始标签（class 在 @click 之前）。
+  const tagStart = src.lastIndexOf('<button', btnAt);
+  const tag = src.slice(tagStart, btnAt);
+  assert.match(
+    tag,
+    /\bpeer\b/,
+    '复制按钮要带 peer —— 否则下面的 peer-hover 认不到它，高亮永远是空的'
+  );
+
+  const scopeAt = src.indexOf('data-test="copy-scope"');
+  assert.ok(scopeAt > 0, '被复制范围（copy-scope）不见了');
+  assert.ok(
+    tagStart < scopeAt,
+    '复制按钮必须在 copy-scope **之前**：peer 只认前面的兄弟，放后面高亮会静默失效'
+  );
+  // class 在 data-test 之前，从标记往回取这一整个开标签。
+  const scopeTagStart = src.lastIndexOf('<div', scopeAt);
+  const scopeTag = src.slice(scopeTagStart, scopeAt);
+  assert.match(
+    scopeTag,
+    /peer-hover:bg-accent\/5/,
+    'copy-scope 要挂 peer-hover:bg-accent/5，hover 按钮时整段才亮'
+  );
+  assert.match(
+    scopeTag,
+    /peer-focus:bg-accent\/5/,
+    '键盘用户 tab 到按钮时同样要高亮（只做 hover 等于把键盘用户漏掉）'
+  );
+});
+
+// —— T-205：长用户气泡自动折叠 ——
+//
+// 判定逻辑在 foldText.test.js（纯模块，边界都在那边钉）；这里只钉组件接线：
+// 阈值必须来自纯模块（组件里再写一份 240 就又会两处各说各话）、必须真的量高度、
+// 必须有渐隐与开关、文案必须两种语言都在。
+test('T-205：长用户气泡折叠的组件接线（阈值来自纯模块 + 量高度 + 渐隐 + 开关）', () => {
+  const src = stripComments(
+    read('src/components/newtab/workflow/agent/AgentUserBubble.vue')
+  );
+
+  assert.ok(
+    /import\s*\{[^}]*foldDecision[^}]*\}\s*from\s*'@\/agent\/foldText'/.test(
+      src
+    ),
+    '折叠判定必须调 @/agent/foldText 的 foldDecision，不能在组件里就地写 if (h > 240)'
+  );
+  assert.ok(
+    /USER_FOLD_MAX_PX/.test(src),
+    '阈值要取自纯模块的 USER_FOLD_MAX_PX —— 组件里再写一份数字就会与单测脱节'
+  );
+  assert.ok(
+    /scrollHeight/.test(src),
+    '必须量 scrollHeight：折叠态外层被 max-height 夹住，offsetHeight 永远等于阈值，量不出真高'
+  );
+  assert.ok(
+    /maxHeight/.test(src),
+    '折叠要真的夹高度（max-height），否则「折叠」只是个没落地的变量'
+  );
+  assert.ok(
+    /data-test="user-bubble-fade"/.test(src),
+    '折叠态要有底部渐隐，提示「下面还有内容」'
+  );
+  assert.ok(
+    /data-test="user-bubble-toggle"/.test(src) && /aria-expanded/.test(src),
+    '展开/收起开关要在，且带 aria-expanded（键盘/读屏用户靠它知道当前状态）'
+  );
+  for (const lang of ['zh', 'en']) {
+    const { agent } = JSON.parse(
+      read(`src/locales/${lang}/newtab.json`)
+    ).workflow;
+    for (const key of ['expandUserMessage', 'collapseUserMessage']) {
+      assert.equal(
+        typeof agent[key],
+        'string',
+        `${lang}/newtab.json 缺 workflow.agent.${key}`
+      );
+    }
+  }
+});
+
+// 反向自检：用户气泡那一支必须真的用了折叠组件，不能只写了组件没人用。
+test('T-205：AgentTranscript 的用户气泡走 AgentUserBubble，旧的裸 div 不许回来', () => {
+  const src = stripComments(
+    read('src/components/newtab/workflow/agent/AgentTranscript.vue')
+  );
+  assert.match(
+    src,
+    /<agent-user-bubble[^>]*v-if="item\.type === 'user'"/,
+    '用户气泡要换成 AgentUserBubble（T-205）—— 换回裸 div 等于折叠没了'
   );
 });
 
@@ -1260,7 +1419,7 @@ test('T-153：圆环 tooltip 复用既有文案键，不留孤儿键', () => {
   );
 });
 
-test('T-164：目标页的解除键只在「用户固定且未失效」时出现', () => {
+test('T-164/T-214：解除动作只剩「点已固定徽标」一条路，且只在固定态出现', () => {
   // X 挂在 agent-dropdown 的 trigger slot 里，而 slot 在渲染桩里根本不渲染
   // （utils/sfc-render.mjs 的 GLOBAL_STUBS），所以这一条只能靠源码守卫 ——
   // 与同文件其它静态守卫同一档，不是偷懒。
@@ -1269,25 +1428,32 @@ test('T-164：目标页的解除键只在「用户固定且未失效」时出现
   );
   const panel = read('src/components/newtab/workflow/agent/AgentPanel.vue');
 
+  // T-214：独立的 unpin button 删除（与"徽标不可点"是三个同形状信号打架的
+  // 根因），解除动作内联进固定态徽标。showUnpin / 独立按钮不许再回来。
+  assert.doesNotMatch(
+    picker,
+    /showUnpin/,
+    'showUnpin 已随 T-214 删除 —— 解除动作内联进「已固定 ✕」徽标，别再引回来'
+  );
+
+  // 徽标是三兄弟分支：v-if="stale"（红）→ v-else-if="pinned"（可点解除）
+  // → v-else（跟随）。v-else-if="pinned" 天然排除失效态 —— 失效态该做的是
+  // 重选，不是解除。
+  assert.match(picker, /v-if="stale"/, '失效态徽标分支（红底只显示）不见了');
   assert.match(
     picker,
-    /v-if="showUnpin"/,
-    '解除键要由 showUnpin 控制 —— 不能无条件渲染（自动态没有可解除的东西）'
+    /v-else-if="pinned"[\s\S]{0,400}?data-test="unpin-target"/,
+    '「已固定 ✕」徽标必须是 button（内含 unpin-target）—— 解除动作只有这一条路'
   );
   assert.match(
     picker,
-    /showUnpin = computed\([\s\S]{0,80}?props\.pinned && !stale/,
-    'showUnpin 必须是 pinned && !stale：失效态该做的是重选，不是解除'
+    /v-else[\s\S]{0,200}?pickTab\.followBadge/,
+    '自动态要有「跟随」灰描边徽标（新键 followBadge）'
   );
   assert.match(
     picker,
     /@click\.stop/,
     '点解除必须 stopPropagation —— dropdown 靠父 div 的 @click 开合，不拦会顺手把列表也打开'
-  );
-  assert.match(
-    picker,
-    /data-test="unpin-target"/,
-    '解除键要有 data-test —— 后续补交互测试（test:dom）时靠它定位'
   );
   assert.match(
     panel,
@@ -1306,7 +1472,36 @@ test('T-164：目标页的解除键只在「用户固定且未失效」时出现
       'string',
       `${lang} 缺 workflow.agent.pickTab.unpin`
     );
+    assert.equal(
+      typeof agent.pickTab.followBadge,
+      'string',
+      `${lang} 缺 workflow.agent.pickTab.followBadge`
+    );
+    assert.equal(
+      typeof agent.pickTab.unpinToast,
+      'string',
+      `${lang} 缺 workflow.agent.pickTab.unpinToast`
+    );
+    assert.equal(
+      typeof agent.pickTab.tabsLabel,
+      'string',
+      `${lang} 缺 workflow.agent.pickTab.tabsLabel`
+    );
+    assert.equal(
+      typeof agent.pickTab.reselect,
+      'undefined',
+      `${lang} 还留着 workflow.agent.pickTab.reselect —— 「重新选择」已随 T-214 删除`
+    );
   }
+
+  // T-214 §7：解除后要有一句「已回到自动跟随」的确认（chip 从实底退成轻底，
+  // 一句话防误触后不知所措）
+  const host = read('src/composable/agentHost.js');
+  assert.match(
+    host,
+    /pickTab\.unpinToast/,
+    '解除固定后要 toast「已回到自动跟随」—— 设计稿 §7 拍板项'
+  );
 });
 
 test('T-177：换目标页只剩一个入口（composer 顶部的 chip），@ 整套不许回来', () => {
@@ -1369,6 +1564,38 @@ test('T-177：换目标页只剩一个入口（composer 顶部的 chip），@ �
   }
 });
 
+test('T-209：模板里不许有孤立的 `>` / `<` 文本节点（会渲染成可见的乱码字符）', () => {
+  // 症状：composer 卡片上沿浮着一个孤零零的「<」字符。成因是模板里多打了一个
+  // `>` —— 它落在「已经闭合的标签」之后，被 Vue 当成**文本节点**渲染出来，
+  // 不是标签、不报错、lint 也不拦（prettier 只把它当普通文本缩进）。
+  //
+  // 判定：某一行只含 `>`，且上一非空行本身已经以 `>` 结尾（说明上一个标签
+  // 已经闭合）—— 那这一行的 `>` 就是多余的文本节点。合法的多行标签是
+  // `<div\n  class="...">`，其 `>` 行前面是属性行，不以 `>` 结尾，不会被误判。
+  const stray = [];
+  for (const f of readdirSync(
+    join(ROOT, 'src/components/newtab/workflow/agent')
+  )) {
+    if (!f.endsWith('.vue')) continue;
+    const lines = stripComments(
+      read(`src/components/newtab/workflow/agent/${f}`)
+    ).split('\n');
+    let prev = '';
+    lines.forEach((line, i) => {
+      if (/^\s*[<>]\s*$/.test(line) && />\s*$/.test(prev)) {
+        stray.push(`${f}:${i + 1}`);
+      }
+      if (/\S/.test(line)) prev = line;
+    });
+  }
+
+  assert.deepEqual(
+    stray,
+    [],
+    '模板里出现孤立的 `>`/`<` 文本节点会渲染成可见乱码字符：' + stray.join('、')
+  );
+});
+
 test('T-169：宽窄形态由宿主声明（host.layout），不许用视口断点判', () => {
   const panel = stripComments(
     read('src/components/newtab/workflow/agent/AgentPanel.vue')
@@ -1399,10 +1626,12 @@ test('T-169：宽窄形态由宿主声明（host.layout），不许用视口断�
     '左栏必须挂在 v-if="wide" 上（窄宿主 320px 里切 240px 给列表，对话区只剩 80px）'
   );
   assert.match(panel, /data-test="session-side"/, '左栏要有 data-test');
-  assert.match(
+  // 2026-10-10：窄宿主的历史视图（session-chip 开关 + 整页列表）已撤——
+  // 标题下拉就是唯一会话入口，不许再长出第二张脸。
+  assert.doesNotMatch(
     panel,
-    /data-test="open-history"/,
-    '窄宿主的「进历史」chip 要留着 —— 它那条路还没被左栏取代'
+    /data-test="session-chip"|data-test="open-all-sessions"/,
+    '历史入口图标与「查看全部历史会话」已随历史视图一起撤掉，别加回来'
   );
 
   // ③ 左栏里挂的得是历史列表本身（渲染桩是通用桩，认不出组件名，只能守源码）
@@ -1416,16 +1645,17 @@ test('T-169：宽窄形态由宿主声明（host.layout），不许用视口断�
     '左栏里必须挂 agent-session-list（只留一个空壳标题等于没做）'
   );
 
-  // ④ 宽宿主的正文区永远是对话：chip 不出现、composer 不隐藏
-  assert.match(
+  // ④ 宽宿主的正文区永远是对话：composer 不隐藏，且不再有视图切换机制。
+  // 2026-10-10：view / inHistory 整套撤掉（历史视图与标题下拉重复）。
+  assert.doesNotMatch(
     panel,
-    /!wide && view === 'chat'/,
-    '「进历史」chip 只在窄宿主出现 —— 宽宿主点它等于跳到一个已经显示在屏幕上的列表'
+    /\binHistory\b|view\.value\s*=\s*'history'|view = ref\('chat'\)/,
+    '视图切换机制已撤：正文区恒为对话，会话浏览全走标题下拉 / 宽宿主左栏'
   );
-  assert.match(
+  assert.doesNotMatch(
     panel,
-    /inHistory = computed\([\s\S]{0,80}?!wide\.value/,
-    'inHistory 必须在宽宿主恒为 false —— 正文区永远是对话，composer 永远在'
+    /v-if="!wide"/,
+    '不该再有「只在窄宿主渲染」的会话入口 —— chip 已撤，两形态共用同一 header'
   );
 
   // ⑤ host 侧：宿主没声明时按 narrow 兜底
@@ -1628,9 +1858,22 @@ test('T-171：覆盖 UiTextarea 的工具类必须加 !，否则被组件自身�
   // 这个核对是必要的 —— 守卫读的是上一次构建的 CSS 快照，而源码改了没重新构建时，
   // 快照与源码会脱节；没有这道核对，一次「把 px-4 改成 px-3」的重构能悄悄
   // 让 MUST_OVERRIDE 变成一张过期的清单，从此再没人发现覆盖失效。
+  //
+  // T-209 有意迁移：面板给的值从 `!px-1 !py-1 !bg-transparent !rounded-none`
+  // 改成 `!px-2 !py-1.5 !bg-field !rounded-control` —— 输入区从「透出卡片白」
+  // 变成「凹陷的 field 面」。**被盖掉的 base（组件自带的那一侧）一个没变**，
+  // 变的是面板想给自己的值。所以这里只更新 want 列，断言逻辑原样不动：
+  // 它钉的是「必须带 ! 才能盖掉组件自身」这条不变量，不是某个具体的值。
+  //
+  // T-213 又迁移了一次，方向相反：凹陷感从**输入框自身**上移到了**卡片**上。
+  // T-209 是 textarea 自己 `!bg-field`（输入框是凹的、卡片是白的）；
+  // T-213 把 composer 整张卡改成 `bg-field` + `border-line`，于是 textarea
+  // 必须重新变透明（`!bg-transparent`）才能把卡片的 field 面透出来 ——
+  // 否则会在卡片里再叠一层同色底，看着像输入框没对齐。base 侧（bg-input）
+  // 依然没变，所以仍然只动 want 列。
   const MUST_OVERRIDE = [
-    ['px-4', '!px-1'],
-    ['py-2', '!py-1'],
+    ['px-4', '!px-2'],
+    ['py-2', '!py-1.5'],
     ['bg-input', '!bg-transparent'],
   ];
 
@@ -1689,14 +1932,20 @@ test('T-171：覆盖 UiTextarea 的工具类必须加 !，否则被组件自身�
       risky.join(' ')
   );
 
-  // 输入框必须 flush：UiTextarea 根节点自带 rounded-lg，不中和掉就会在 composer
-  // 卡片里又套一层圆角框 —— 与设计稿「一条边框包住整个输入区」冲突，且正是 T-171
-  // 同型的「边框里又有框」（只是这回是圆角不是底色）。与上面 px/py/bg 三项同一手法：
-  // 一律带 `!`（T-174 复查时 cssSpecificity 守卫把无 `!` 的 rounded-none 判成冲突）。
+  // 输入框的圆角必须由面板显式接管：UiTextarea 根节点自带 rounded-lg，
+  // 不中和掉就会在 composer 卡片里套出第二层圆角框。
+  // T-209 有意迁移：输入区从「透出卡片白、无自己的圆角」改成「凹陷的 field 面」，
+  // 于是它现在**自己也该有**圆角 —— 从 `!rounded-none` 改成 `!rounded-control`。
+  // 断言随之从「必须是 none」改成「必须是带 ! 的圆角类」：钉的仍是
+  // 「圆角由面板一侧 `!` 接管」这条不变量，而不是某个具体档位。
   assert.ok(
-    cls.includes('!rounded-none'),
-    '输入框必须 !rounded-none —— UiTextarea 自带的 rounded-lg 会在 composer 卡片里再裹一层圆角，' +
-      '与设计稿「一条边框包住整个输入区」冲突'
+    cls.some((c) => /^!rounded-/.test(c)),
+    '输入框的圆角必须由面板一侧带 ! 接管（如 !rounded-control）—— ' +
+      'UiTextarea 自带的 rounded-lg 不受控时会在 composer 卡片里裹出第二层圆角框'
+  );
+  assert.ok(
+    !cls.includes('rounded-lg'),
+    '面板的 <ui-textarea> 上出现了不带 ! 的 rounded-lg —— 它赢不了组件自身的同名类，是哑类'
   );
 });
 
@@ -1718,11 +1967,24 @@ test('T-171b：面板高度必须被约束在侧栏内，否则窄宿主逼出�
     /class="flex min-h-0 min-w-0 flex-1 flex-col"/,
     '右栏必须 min-h-0：否则中部展示区无法被高度约束，面板溢出侧栏、整页出现滚动条'
   );
+  // T-204 给 form 加了 relative（渐隐层要以它为定位基准），钉的是
+  // shrink-0 + 16px 横向起线这两件事，class 串里多一个 relative 不影响判据。
   assert.match(
     src,
-    /<form class="shrink-0 px-4 pb-2\.5 pt-0"/,
+    /<form class="[^"]*\bshrink-0\b[^"]*\bpx-4\b[^"]*\bpb-2\.5\b[^"]*\bpt-0\b/,
     'composer 表单必须 shrink-0 —— 窄宿主下输入框要常驻底部、不能被压没' +
       '（T-187 把 p-2 换成 px-4 pb-2.5 pt-0，钉的是 shrink-0 + 16px 横向起线）'
+  );
+
+  // T-204：渐隐层必须挂在 composer 上方且不吃鼠标事件
+  const fadeAt = src.indexOf('data-test="composer-fade"');
+  assert.ok(fadeAt > 0, 'composer 上方的渐隐层不见了（T-204）');
+  const fade = src.slice(Math.max(0, fadeAt - 300), fadeAt + 120);
+  assert.match(fade, /-top-5/, '渐隐层要悬在 composer 边界上方（负偏移）');
+  assert.match(
+    fade,
+    /pointer-events-none/,
+    '渐隐层必须 pointer-events-none —— 它盖在消息上，吃鼠标事件会挡滚动与文本选择'
   );
 });
 
@@ -1923,26 +2185,45 @@ test('T-187：助手面板这一列的左边缘必须处处 16px（header/流/�
     read('src/components/newtab/workflow/agent/AgentSessionList.vue')
   );
 
-  // 两个 header（宽宿主左栏 + 右栏）必须同构，否则两栏顶边/左边会错开。
-  const headerCount = (
-    panel.match(/class="flex items-center gap-1\.5 px-4 py-1"/g) || []
-  ).length;
-  assert.equal(
-    headerCount,
-    2,
-    '左右两栏的 header 必须都是 px-4 py-1 —— 少一个说明有一栏还停在 px-2，两栏会对不齐'
+  // 两个 header（宽宿主左栏 + 右栏）必须**同高**，否则两栏的 border-b 不在
+  // 一条水平线上，错位一眼可见。
+  //
+  // T-213：右栏 header 拆成两行（行 1：会话/标题/新建；行 2：标签页
+  // chip），总高 82px（2026-10-10「太挤」反馈后从 74px 放松：行 1 py-1.5
+  // + 标题钮 py-2）。左栏没有第二行的东西可放（它就是「历史会话」四个字），
+  // 所以用 min-h-[82px] 把高度对齐 —— 这条不变量从「同样的类串」变成了
+  // 「同样的高度」，判据跟着换。
+  assert.match(
+    panel,
+    /min-h-\[82px\][^>]*\bborder-b\b|\bborder-b\b[^>]*min-h-\[82px\]/,
+    '左栏 header 要用 min-h-[82px] 对齐右栏两行 header 的总高'
+  );
+
+  // 左边缘仍统一 px-4（T-187 的不变量没变，只是容器变了）。
+  const px4Count = (panel.match(/class="[^"]*\bpx-4\b[^"]*"/g) || []).length;
+  assert.ok(
+    px4Count >= 3,
+    `header / transcript / form 几处都要 px-4，实际只有 ${px4Count} 处`
   );
 
   for (const [name, needle, why] of [
     [
       panel,
-      'class="border-b border-red-300 bg-red-500/10 px-4 py-1.5',
-      '「未配置 Key」横幅是整列级的元素，它要跟正文同一起始',
+      'data-test="not-configured-guide"',
+      '「未配置 Key」是整页引导，它要占满这一列（T-207 后不再是横幅）',
     ],
     [panel, 'class="mx-4 mb-3"', '确认卡'],
-    [panel, 'class="shrink-0 px-4 pb-2.5 pt-0"', 'composer 表单'],
+    // T-207：composer 表单加了 `relative`（为了挂顶部渐隐层）。针脚是
+    // 完整类串，加一个布局类就会变红 —— 但这里保留精确匹配，因为
+    // 「composer 的左边缘与 py 值」是 T-187 当初要钉死的东西，允许它
+    // 悄悄漂移反而失去意义。改类串时必须同步改这一行，是刻意的摩擦。
+    [panel, 'class="relative shrink-0 px-4 pb-2.5 pt-0"', 'composer 表单'],
     [transcript, 'overflow-y-auto px-4 py-3', 'transcript 滚动容器'],
-    [list, '<div class="px-4 pb-2">', '会话列表的搜索框'],
+    [
+      list,
+      '<div v-if="mode === \'view\'" class="px-4 pb-2">',
+      '会话列表的搜索框',
+    ],
   ]) {
     assert.ok(
       name.includes(needle),
@@ -2070,5 +2351,555 @@ test('T-196/T-197 守卫：runtime.openSession 必须回 pinned 与 state 两个
     src,
     /restoredTarget\(pin,\s*liveTab\)/,
     'openSession 必须走 restoredTarget 纯函数判定（有单测）'
+  );
+});
+
+// —— T-200：从参考实现 sidepanel 借鉴的四条（圆角语义名 / 两段式停止 / 富文本复制）——
+
+test('T-200：面板圆角一律走 chip / control / card 语义名，不许回到刻度值', () => {
+  const dir = join(ROOT, 'src/components/newtab/workflow/agent');
+  const bad = [];
+
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith('.vue')) continue;
+    const src = stripComments(readFileSync(join(dir, f), 'utf8'));
+
+    // sm / full 是两处特例，不在语义档的管辖内：
+    //   rounded-sm  = favicon 那种 4px 小方角（不是"控件"，是图片裁切）
+    //   rounded-full = 「回到底部」那种胶囊按钮
+    for (const m of src.matchAll(/\brounded-(lg|md|xl|2xl|3xl)\b/g)) {
+      bad.push(`${f}: rounded-${m[1]}`);
+    }
+  }
+
+  assert.deepEqual(
+    bad,
+    [],
+    '这些圆角用的是刻度名。语义名（chip=小贴块 / control=可点小卡 / card=整块容器）' +
+      '是为了让「该用哪个」有名字可依据 —— 退回刻度名就又要靠手感选了。' +
+      '若确实是不在上述三档内的特例，请显式说明理由并使用 rounded-sm / rounded-full。'
+  );
+
+  // 三档必须真的定义在 config 里 —— 写了语义名但没定义，Tailwind 会静默不产出，
+  // 结果是元素变成直角（和 T-171 同一类「静默失效」）。
+  const cfg = read('tailwind.config.js');
+  for (const key of ['chip', 'control', 'card']) {
+    assert.match(
+      cfg,
+      new RegExp(`${key}:\\s*'\\d+px'`),
+      `tailwind.config.js 里没有定义 borderRadius.${key} —— 语义名会静默失效`
+    );
+  }
+});
+
+test('T-200：动效走统一曲线与时长 token，且 token 不是死定义', () => {
+  const cfg = read('tailwind.config.js');
+  const css = read('src/assets/css/tailwind.css');
+
+  // ① 两个 token 都要定义
+  assert.match(cfg, /panel:\s*'var\(--ease-panel/, '缺 ease-panel');
+  for (const d of ['fast', 'base', 'slow']) {
+    assert.match(
+      cfg,
+      new RegExp(`${d}:\\s*'var\\(--dur-${d}`),
+      `缺 duration-${d}`
+    );
+  }
+  assert.match(css, /--ease-panel:\s*cubic-bezier/, 'CSS 变量缺 --ease-panel');
+
+  // ② 定义了必须有人用。Tailwind 只为**用到**的类产出 CSS，
+  //    所以「token 存在但没人用」的表现不是报错，是**静默地什么都没发生**——
+  //    与 T-171 同一类失效，没有运行时信号，只能在这儿钉。
+  const dir = join(ROOT, 'src/components/newtab/workflow/agent');
+  const users = [];
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith('.vue')) continue;
+    const src = stripComments(readFileSync(join(dir, f), 'utf8'));
+    if (/duration-(fast|base|slow)/.test(src)) users.push(f);
+  }
+  assert.ok(
+    users.length > 0,
+    '面板里没有任何一处用 duration-fast/base/slow —— token 定义了却没落地，' +
+      'Tailwind 不会为它产出 CSS，等于没做'
+  );
+
+  // ③ 系统级「减少动态效果」兜底必须在，且不能把加载转圈一起压掉
+  assert.match(
+    css,
+    /@media \(prefers-reduced-motion: reduce\)/,
+    '缺 prefers-reduced-motion 兜底 —— 开了这个偏好的用户不该被界面追着动'
+  );
+  const block = css.slice(css.indexOf('prefers-reduced-motion'));
+  assert.match(
+    block,
+    /animation-duration:\s*0\.01ms/,
+    '压到 0.01ms 而不是 0 —— 0 会让 transitionend 不触发，依赖它收尾的逻辑会卡住'
+  );
+  assert.match(
+    block,
+    /\.animate-spin[\s\S]{0,160}?animation-iteration-count:\s*infinite/,
+    '加载转圈是「还在跑」的唯一指示，一并压掉用户会以为界面卡死 —— 它要单独放回来'
+  );
+});
+
+test('T-200：停止是两段式 —— 首触只 armed，窗口内二次才真的 abort', () => {
+  const panel = stripComments(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
+  );
+
+  // ① 按钮走 requestStop，不许再直连 host.abort（直连 = 一段式）
+  assert.match(panel, /@click="requestStop"/, '停止按钮必须走 requestStop');
+  assert.doesNotMatch(
+    panel,
+    /@click="host\.abort\(\)"/,
+    '停止按钮不许直连 host.abort —— 忙碌时它就在手指下面，一次点击就杀太便宜'
+  );
+
+  // ② 首触 armed 后必须 return，不能顺手把任务也杀了
+  const fnAt = panel.indexOf('function requestStop()');
+  assert.ok(fnAt > 0, 'requestStop 不见了，两段式保护等于没有');
+  const body = panel.slice(fnAt, panel.indexOf('\n}', fnAt));
+  assert.match(body, /stopArmed\.value = true/, '首触要置 armed');
+  assert.match(body, /host\.abort\(\)/, 'armed 之后的第二次要真的 abort');
+  assert.match(
+    body,
+    /stopArmed\.value\s*\)[\s\S]{0,80}?return;|return;[\s\S]{0,80}?host\.abort/,
+    '首触分支必须 return（置完 armed 就退出，不 abort）'
+  );
+
+  // ③ armed 会过期：不自动解除的话按钮停在「看起来已确认过」的假状态
+  assert.match(
+    body,
+    /setTimeout\(/,
+    'armed 必须带超时自动解除 —— 过期不解除，按钮就成了假的已确认态'
+  );
+
+  // ④ 两个解除点：busy 结束（否则下一次忙碌直接开局 armed）与面板卸载
+  assert.match(
+    panel,
+    /watch\(\s*\(\)\s*=>\s*props\.host\.busy/,
+    'busy 结束时必须解除 armed —— 留着的话下一次忙碌会跳过第一段保护'
+  );
+  const unmountAt = panel.indexOf('onBeforeUnmount(() => {');
+  assert.ok(unmountAt > 0, 'onBeforeUnmount 不见了');
+  assert.match(
+    panel.slice(unmountAt, unmountAt + 400),
+    /disarmStop\(\)/,
+    '卸载时必须清掉 armed 的 timer —— 它挂的是 setTimeout，不摘会对已卸载组件写 ref'
+  );
+
+  // ⑤ 文案键少一边就显示裸键名
+  for (const lang of ['zh', 'en']) {
+    const { agent } = JSON.parse(
+      read(`src/locales/${lang}/newtab.json`)
+    ).workflow;
+
+    assert.equal(
+      typeof agent.stopArmed,
+      'string',
+      `${lang}/newtab.json 缺 workflow.agent.stopArmed`
+    );
+  }
+});
+
+test('T-200：整条复制走双通道（text/html 富文本 + text/plain 原文）', () => {
+  const md = stripComments(
+    read('src/components/newtab/workflow/agent/AgentMarkdown.vue')
+  );
+
+  // ① 富文本通道：助手常产出表格与列表，纯文本粘到 Word/Notion 结构全散
+  assert.match(md, /ClipboardItem/, '要走 ClipboardItem 才能一次写两个通道');
+  assert.match(md, /'text\/html'/, '缺 text/html 通道');
+  assert.match(
+    md,
+    /'text\/plain'/,
+    '缺 text/plain 通道 —— 只写 html 的话粘到纯文本编辑器会变成空'
+  );
+
+  // ② plain 通道给的是 markdown 原文（T-16 的语义不许丢）：粘回聊天框/编辑器
+  //    时保留标记比保留渲染结果有用。
+  assert.match(
+    md,
+    /new Blob\(\[text\]/,
+    'text/plain 必须是 props.raw 原文，不能换成渲染文本'
+  );
+
+  // ③ 克隆里要摘掉复制按钮 —— 它是 absolute 浮在首行上的，不摘会把
+  //    「复制全文」四个字一起复制走
+  assert.match(
+    md,
+    /querySelectorAll\('button'\)/,
+    '取 innerHTML 前要克隆并摘掉按钮，否则按钮文字会被复制进去'
+  );
+
+  // ④ 降级：没有 ClipboardItem 时退回纯文本 —— 富文本是增强，不是依赖
+  assert.match(
+    md,
+    /writeText\(text\)/,
+    '没有 ClipboardItem 的环境（非安全上下文）必须退回纯文本复制'
+  );
+
+  // ⑤ 按钮调用点没变（T-16 的守卫钉的是这个形状）
+  assert.match(md, /@click="copy\(props\.raw\)"/, '复制入口的形状不能变');
+});
+
+test('T-208：三层底色 token 必须在 tailwind.css 里成对定义（亮/暗各一套）', () => {
+  const css = stripComments(read('src/assets/css/tailwind.css'));
+
+  // ① 四个变量都要出现。它们是 RGB 三元组（`250 251 252` 这种），
+  //    配合 tailwind.config.js 的 withOpacityValue 才能让 bg-canvas/80
+  //    这类透明度写法仍然可用 —— 若有人改成 hex，透明度写法会静默失效。
+  for (const v of [
+    '--color-canvas',
+    '--color-surface',
+    '--color-field',
+    '--color-line',
+  ]) {
+    const hits = css.match(new RegExp(v.replace(/-/g, '\\-') + ':', 'g')) || [];
+    assert.equal(
+      hits.length,
+      2,
+      `${v} 要在 :root 与 .dark 各定义一次，实际 ${hits.length} 次`
+    );
+  }
+
+  // ② 值必须是空格分隔的 RGB 三元组（三条数字），不能是 hex —— hex 之下
+  //    `bg-canvas/80` 不产出 CSS，是 T-171 那类静默失效。
+  const triplets =
+    css.match(/--color-(?:canvas|surface|field|line):\s*[^;]+;/g) || [];
+  assert.equal(triplets.length, 8, '四个变量 × 亮暗两套 = 8 条定义');
+  for (const decl of triplets) {
+    assert.match(
+      decl,
+      /:\s*\d{1,3} \d{1,3} \d{1,3};/,
+      `${decl} 必须是 "R G B" 三元组（供 withOpacityValue 用），不能是 hex/其它形式`
+    );
+  }
+});
+
+test('T-208：面板底壳必须换上三层底色，且不再靠 gray 边框分层', () => {
+  const panel = stripComments(readFileSync(panelPath, 'utf8'));
+
+  // ① 面板根统一吃 canvas。T-213 撤掉了 T-212 的「按宿主壳色切透明」——
+  //    面板根不再读 host.shell，也不再透父级，自己画 bg-canvas。
+  //    暗色由 :root.dark 接管，与宿主无关。回归迹象：写死 bg-shell，
+  //    或又冒出第二个底色档把家族劈开。
+  assert.match(
+    panel,
+    /\bbg-canvas\b/,
+    '面板根节点必须带 bg-canvas（T-213 起统一，不再按宿主壳色切透明）'
+  );
+  assert.doesNotMatch(
+    panel,
+    /\bbg-shell\b/,
+    '面板根不该再用 bg-shell（T-213 已删掉 shell 色阶）'
+  );
+
+  // ② 顶栏降到 canvas（T-213）。
+  //    T-208 当初把顶栏抬到 surface，理由是「与正文区分」；但 T-213 又把面板根
+  //    收回 canvas，于是 header(surface) 与 composer(field) 夹着正文(canvas)，
+  //    顶底两头重、中间轻，层次反而读不出来。参考实现 pie 的 TopBar 就是
+  //    bg-canvas + border-b —— header 是"容器的一部分"，靠一条 border-b 与
+  //    正文分开，不靠抬升一档底色。
+  //    这里钉的是「header 用 canvas 且带 border-b」：左栏会话头 + 右栏对话头。
+  const canvasHeaders = (
+    panel.match(/class="(?=[^"]*\bbg-canvas\b)(?=[^"]*\bborder-b\b)[^"]*"/g) ||
+    []
+  ).length;
+  assert.ok(
+    canvasHeaders >= 2,
+    `左/右两处顶栏都要挂 bg-canvas + border-b，实际 ${canvasHeaders} 处`
+  );
+  // 反向：不该再有「surface + border-b」的顶栏（那是 T-213 之前的形态）
+  const surfaceHeaders = (
+    panel.match(/class="(?=[^"]*\bbg-surface\b)(?=[^"]*\bborder-b\b)[^"]*"/g) ||
+    []
+  ).length;
+  assert.equal(
+    surfaceHeaders,
+    0,
+    `顶栏不该再抬到 surface（T-213 已降回 canvas），实际 ${surfaceHeaders} 处`
+  );
+
+  // ③ 分隔线走 line，不再用 gray —— 三层底色 + 一根 line，才有派的分层感。
+  //    这里只钉「根/顶栏/输入卡」这几个关键面，不遍历全文件：逐条锁死 class 串
+  //    会把有意迁移也判成回归（T-208 就是一次有意迁移）。
+  assert.match(panel, /border-r border-line/, '左栏右分隔线要走 border-line');
+  assert.match(panel, /border-b border-line/, '顶栏下分隔线要走 border-line');
+
+  // ④ 输入卡（composer）是**凹陷的场**（T-213 反向）。
+  //    T-209/T-212 走「浮起」（surface 无边框）；T-213 改回凹陷：卡片 bg-field +
+  //    border-line，输入区透明 —— 「输入区」不再是另一个矩形，而是凹陷面里的
+  //    一块空处。这正是参考实现 pie 的 Composer 形态。
+  assert.match(
+    panel,
+    /rounded-card border border-line bg-field/,
+    'composer 卡要靠 bg-field + border-line 呈现凹陷面（T-213 反向）'
+  );
+  assert.doesNotMatch(
+    panel,
+    /rounded-card bg-surface(?:\s|\b)/,
+    'composer 卡不该再是 bg-surface 浮起（T-213 已改成凹陷）'
+  );
+});
+
+test('T-209：三层底色要贯彻到卡片与输入区，不许再散落 gray/white 面', () => {
+  const read2 = (p) => stripComments(read(p));
+  const agentFile = (f) => read2(`src/components/newtab/workflow/agent/${f}`);
+
+  // ① composer 的输入区**透明**，凹陷由卡片整体提供 —— T-213 反向。
+  //
+  //    经历了一次完整的往返，值得写清为什么最后落在透明：
+  //      T-209：卡片 surface（浮），输入区 !bg-field（凹）→ 白卡里挖一块灰
+  //      T-213：卡片 bg-field（凹），输入区 !bg-transparent
+  //    前者的观感是「两层实心矩形嵌套，视觉重量全压在底部」；后者是
+  //    「一个凹进去的面，输入区是它里面的一块空处」。参考实现 pie 的 Composer
+  //    是 `rounded-card border bg-field` + **透明** textarea，取的正是后一种。
+  //    所以这里钉 `!bg-transparent`，并且反向钉住 `!bg-field` 不该再出现 ——
+  //    两者同时存在就是「同一个面画了两次」，分层反而消失。
+  const panel = readFileSync(panelPath, 'utf8');
+  const ta = panel.match(/<ui-textarea[\s\S]*?\/>/);
+  assert.ok(ta, '面板里应有 <ui-textarea>，找不到说明结构变了，守卫要重写');
+  const taCls = (ta[0].match(/class="([^"]*)"/) || [])[1] || '';
+  assert.match(
+    taCls,
+    /!bg-transparent/,
+    'composer 输入区必须 !bg-transparent —— 凹陷由卡片的 bg-field 提供，' +
+      '输入区再铺一层 field 等于同一个面画两次'
+  );
+  assert.doesNotMatch(
+    taCls,
+    /!bg-field/,
+    'composer 输入区不该又是 !bg-field（那是 T-209 的旧形态，T-213 已反向）'
+  );
+  // 全局那条 `textarea:focus { ring-2 ring-accent }` 会与卡片的
+  // focus-within 描边叠成两道线，所以 textarea 自己要把 ring 关掉。
+  assert.match(
+    taCls,
+    /focus:!ring-0/,
+    'textarea 自身要 focus:!ring-0 —— 否则与卡片的 focus-within 描边叠两道'
+  );
+
+  // ② 正文区里的卡片要落在 canvas/surface/field 家族里，不许再散落旧 gray 面。
+  //    只钉「卡片的外壳 class」这一类，不遍历全文件的每个 className —— 逐条锁死
+  //    会把有意迁移也判成回归（T-208/T-209 都是有意迁移）。
+  //    thinking 卡 = surface（浮起）、compaction 卡 = field（凹陷），这是 T-154 的
+  //    「两张卡必须在不同的面上」那条不变量在 token 时代的落点。
+  const transcript = agentFile('AgentTranscript.vue');
+  assert.match(
+    transcript,
+    /rounded-control border border-line bg-surface/,
+    'thinking 卡要是 border-line + bg-surface 的浮起面'
+  );
+  assert.match(
+    transcript,
+    /rounded-control border border-dashed border-line bg-field/,
+    'compaction 卡要是 border-dashed border-line + bg-field 的凹陷面'
+  );
+
+  // ③ 工具卡外壳改用 field —— T-212 观感迭代。
+  //    工具卡是**元信息行**，不是独立卡片。三条工具并排时三个带边框的
+  //    surface 卡在 canvas 底上像「表单错误列表」；用 field（最暗一档）作为
+  //    「这一行和正文不一样」的信号——底色差本身就在分层，不必再画外框。
+  //    bg-field 在 canvas 上是「淡灰斑」，三条并排时只是「这里有三条元信息行」，
+  //    不再是「三个独立卡片」。
+  const tool = agentFile('AgentToolStep.vue');
+  assert.match(
+    tool,
+    /rounded-control bg-field/,
+    '工具卡外壳要是 bg-field 凹陷面（不再 border-line + bg-surface）'
+  );
+
+  // ④ 工具状态徽标：去底色 + 去边框，只留字色 + 图标。
+  //    原形态 `bg-green-500/15 text-green-700 rounded-chip` 配上色块 + 边框
+  //    = 三个「完成/失败/完成」胶囊框并排像错误列表。
+  //    语义**完全靠字色 + 图标**（绿=成功 / 红=失败 / 琥珀=拒绝 / 灰=进行中），
+  //    色块是冗余通道。钉「不写 rounded-chip + 不写 bg-*/15 类」——任一回归
+  //    都会让三条工具卡重新变「表单错误列表」。
+  assert.doesNotMatch(
+    tool,
+    /rounded-chip[^"]*bg-(?:green|red|amber|gray)-\d+\/\d+/,
+    '工具状态徽标不该用 rounded-chip + 透明底色（语义靠字色 + 图标）'
+  );
+  assert.match(
+    tool,
+    /text-green-\d+ dark:text-green-\d+/,
+    '工具状态徽标：成功态用绿字'
+  );
+  assert.match(
+    tool,
+    /text-red-\d+ dark:text-red-\d+/,
+    '工具状态徽标：失败态用红字'
+  );
+
+  // ⑤ 下拉菜单（会话/换页/设置等浮层）是 surface，不再 bg-white / dark:bg-gray-800
+  const dropdown = agentFile('AgentDropdown.vue');
+  assert.match(
+    dropdown,
+    /rounded-card border border-line bg-surface/,
+    '下拉菜单面板要是 border-line + bg-surface'
+  );
+
+  // ⑥ markdown 代码块是**凹陷的 field 面**（与正文的 surface/canvas 相对）
+  assert.match(
+    agentFile('AgentMarkdown.vue'),
+    /rounded-control bg-field/,
+    '代码块要是 bg-field 的凹陷面'
+  );
+});
+
+test('T-211：语义文字色 fg-1/2/3 必须在 tailwind.css 成对定义，且面板不再双写 gray', () => {
+  const css = stripComments(read('src/assets/css/tailwind.css'));
+
+  // ① 三档变量都要出现，且亮/暗各一次（成对）
+  for (const v of ['--color-fg-1', '--color-fg-2', '--color-fg-3']) {
+    const hits = css.match(new RegExp(v + ':', 'g')) || [];
+    assert.equal(
+      hits.length,
+      2,
+      `${v} 要在 :root 与 .dark 各定义一次，实际 ${hits.length} 次`
+    );
+  }
+
+  // ② 值必须是 RGB 三元组（配 withOpacityValue 才能用 text-fg-2/70 这类写法）
+  const triplets = css.match(/--color-fg-[123]:\s*[^;]+;/g) || [];
+  assert.equal(triplets.length, 6, '三档 × 亮暗两套 = 6 条定义');
+  for (const decl of triplets) {
+    assert.match(
+      decl,
+      /:\s*\d{1,3} \d{1,3} \d{1,3};/,
+      `${decl} 必须是 "R G B" 三元组（供 withOpacityValue 用）`
+    );
+  }
+
+  // ③ 迁移后不许再有「次要/弱文字靠 text-gray-* + dark:text-gray-* 双写」——
+  //    那正是这一步要消灭的（同一件事两处声明，漏一处就在某个主题下看不清）。
+  //    只查 agent 目录；红/绿/accent 等语义色不受影响（它们不叫 text-gray-*）。
+  const dir = join(ROOT, 'src/components/newtab/workflow/agent');
+  const offenders = [];
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith('.vue')) continue;
+    const src = stripComments(
+      read(`src/components/newtab/workflow/agent/${f}`)
+    );
+    // 只统计「文字色」双写：text-gray-N 与 dark:text-gray-M 出现在同一 class 串里。
+    for (const m of src.matchAll(/class="([^"]*)"/g)) {
+      const cls = m[1];
+      if (/\btext-gray-\d/.test(cls) && /\bdark:text-gray-\d/.test(cls)) {
+        offenders.push(`${f}: ${cls.slice(0, 60)}…`);
+      }
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    '这些 class 串还在用 text-gray-* + dark:text-gray-* 双写次要/弱文字：\n' +
+      offenders.join('\n') +
+      '\n改用 text-fg-2（次要）/ text-fg-3（弱）—— 单类即可跨主题。'
+  );
+});
+
+test('T-212/T-213：用户气泡用 accent 而不是蓝、composer 提示搬到顶、壳色机制已退场', () => {
+  const panel = stripComments(readFileSync(panelPath, 'utf8'));
+  const bubble = stripComments(
+    read('src/components/newtab/workflow/agent/AgentUserBubble.vue')
+  );
+  const css = stripComments(read('src/assets/css/tailwind.css'));
+  const agentHost = stripComments(read('src/composable/agentHost.js'));
+  const sidepanel = stripComments(read('src/sidepanel/App.vue'));
+
+  // ① 用户气泡 bg-accent/10 —— 不再 bg-blue-500/15。
+  //    蓝色透明是「标签/通知」的语义色（错误横幅、未配 Key 提示、上下文将满），
+  //    用户自己的提问用它就把"我说了什么"读成"系统提示"。
+  //    accent 是项目里的语义色（确认门、配置按钮），用 accent/10 借底色系
+  //    的灰蓝淡档，「我发的」与「系统提示」分得开。
+  assert.match(
+    bubble,
+    /bg-accent\/10/,
+    '用户气泡必须用 bg-accent/10（语义色淡档）而不是 bg-blue-500/15'
+  );
+  assert.doesNotMatch(
+    bubble,
+    /bg-blue-\d+\/\d+/,
+    '用户气泡不该再用 bg-blue-* 透明色（那是「标签/通知」语义色）'
+  );
+
+  // ② T-213：composer 顶部那条提示行**被删掉了**。
+  //    T-212 把它从底行搬到顶部（靠"与按钮视觉重量相当"这个理由）；
+  //    T-213 发现它根本不该常驻 —— 那句话只在用户学会之前有用，占着 14px 的
+  //    永久高度是浪费。整句并进发送键的 title（hover 才付费）。
+  //    这条断言因此**反向**：那个 <p> 不该再存在。
+  assert.doesNotMatch(
+    panel,
+    /data-test="composer-hint"/,
+    'composer 顶部不该再有常驻提示行（T-213 已把它并进发送键 title）'
+  );
+  // 但它不能就这么消失 —— 那句话还得在，只是换了位置。
+  // 钉的是「提示仍在 AgentPanel 里被引用」：从常驻行挪进 title 是一次
+  // 位置变更，不是删除。少了这条，"顺手删掉"也能全绿。
+  assert.match(
+    panel,
+    /workflow\.agent\.inputHint/,
+    '快捷键提示仍要存在于面板里（现在挂在发送键的 title 上）'
+  );
+  assert.doesNotMatch(
+    panel,
+    /inputHint[\s\S]{0,200}<\/span>/,
+    'composer 底行不该再渲染 inputHint 提示（它并进 title 了，不是同行 span）'
+  );
+
+  // ③④⑤⑥ T-213：撤掉 T-212 的「面板壳色」整套机制（host.shell /
+  //        bg-shell / --color-shell）。当初引入它是为了让侧栏面板与 chrome
+  //        同色、消除白卡浮在深壳上，代价是把底色家族劈成两套。现在统一回
+  //        canvas/surface/field 三层，面板根自画 bg-canvas。
+  //        这里钉「整套机制已彻底退场」—— 任一处残留都会让底色家族重新分裂。
+  assert.doesNotMatch(
+    panel,
+    /host\.shell/,
+    '面板根不该再读 host.shell（T-213 已废弃壳色分档）'
+  );
+  assert.doesNotMatch(
+    agentHost,
+    /deps\.shell/,
+    'useAgentHost 不该再读 deps.shell（T-213 已废弃壳色分档）'
+  );
+  assert.doesNotMatch(
+    sidepanel,
+    /shell:\s*['"]dark['"]/,
+    '浏览器侧栏宿主不该再声明 shell: "dark"（T-213 已废弃壳色分档）'
+  );
+  assert.doesNotMatch(
+    sidepanel,
+    /bg-shell/,
+    '侧栏根容器不该再挂 bg-shell（T-213 统一走 bg-canvas）'
+  );
+  assert.match(
+    sidepanel,
+    /bg-canvas/,
+    '侧栏根容器要走 bg-canvas，与面板根同色'
+  );
+  const shellHits =
+    css.match(/--color-shell:\s*\d{1,3} \d{1,3} \d{1,3};/g) || [];
+  assert.equal(
+    shellHits.length,
+    0,
+    '--color-shell 必须彻底删掉（T-213 撤销了 T-212 的第五个底色），' +
+      `实际还剩 ${shellHits.length} 次`
+  );
+
+  // ⑦ 工具状态徽标根 class 不再带 rounded-chip —— 钉「容器不带框」这一条
+  //    不变量，与 STATUS_STYLE 内的颜色一起构成「徽标退到字色 + 图标」这一形态。
+  const tool = stripComments(
+    read('src/components/newtab/workflow/agent/AgentToolStep.vue')
+  );
+  // 找 statusTextClass 应用的那个 span，class 串里不该有 rounded-chip
+  const badgeMatch = tool.match(
+    /<span[^>]*class="[^"]*"[^>]*:class="statusTextClass"[^>]*>/
+  );
+  assert.ok(badgeMatch, '工具徽标 span 应存在（class 含 statusTextClass）');
+  assert.doesNotMatch(
+    badgeMatch[0],
+    /rounded-chip/,
+    '工具徽标不该再是 rounded-chip（去框退到字色 + 图标）'
   );
 });

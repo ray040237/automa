@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Agent 面板设计稿 · 标签页切换组件重构 v2（T-214）</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:32px 40px 80px; font:14px/1.75 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color:#1c1e21; background:#f5f6f7; }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  h2 { font-size:19px; margin:44px 0 12px; padding-bottom:8px; border-bottom:2px solid #d8dce0; }
+  h3 { font-size:15.5px; margin:24px 0 8px; }
+  p, li { margin:6px 0; }
+  code { font:12.5px/1.5 ui-monospace,Consolas,monospace; background:#eceef0; border:1px solid #dde1e5; border-radius:4px; padding:1px 5px; }
+  .meta { color:#7a828a; font-size:12.5px; margin-bottom:20px; }
+  .banner { background:#e8f5ec; border:1px solid #bfe3cc; color:#226b3a; border-radius:8px; padding:10px 14px; margin:16px 0; font-size:13px; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:13px; }
+  th,td { border:1px solid #dde1e5; padding:6px 10px; text-align:left; vertical-align:top; }
+  th { background:#eef0f2; font-weight:600; }
+  .good { color:#1e7a3c; font-weight:600; }
+  .bad { color:#b3362c; font-weight:600; }
+  .note { color:#7a828a; font-size:12.5px; }
+  .quote { background:#eef2f8; border-left:3px solid #7a9bd0; border-radius:0 8px 8px 0; padding:8px 14px; margin:10px 0; font-size:13px; color:#3a4a63; }
+
+  /* ══ mock 主题变量（真实 token 值）══ */
+  .mock { border-radius:10px; padding:18px; border:1px solid var(--mline); background:var(--mcanvas); }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+  .mock-label { font:11px/1 monospace; color:#8a9199; margin:0 0 8px; }
+  .light { --mcanvas:rgb(250 251 252); --msurface:#ffffff; --mfield:rgb(244 246 248); --mline:rgb(228 232 236); --mfg1:rgb(20 24 29); --mfg2:rgb(90 100 112); --mfg3:rgb(152 161 172); --maccent:rgb(24 24 27); --maccent15:rgb(24 24 27 / .15); --mdanger:rgb(217 84 74); --mdanger15:rgb(217 84 74 / .15); --mbox:rgba(0,0,0,.05); --mshadow:0 8px 24px rgba(0,0,0,.10); }
+  .dark  { --mcanvas:rgb(11 13 16);  --msurface:rgb(20 23 28); --mfield:rgb(26 30 37);  --mline:rgb(34 39 47);  --mfg1:rgb(229 232 236); --mfg2:rgb(138 146 158); --mfg3:rgb(82 89 101); --maccent:rgb(244 244 245); --maccent15:rgb(244 244 245 / .15); --mdanger:rgb(240 113 103); --mdanger15:rgb(240 113 103 / .15); --mbox:rgba(229,232,236,.05); --mshadow:0 8px 24px rgba(0,0,0,.5); color-scheme:dark; }
+
+  /* ══ chip ══ */
+  .chip { display:flex; align-items:center; width:100%; border-radius:6px; border:1px solid transparent; padding:0; font:inherit; }
+  .chip .main { display:flex; align-items:center; gap:6px; flex:1; min-width:0; border:0; background:transparent; padding:5px 8px; text-align:left; cursor:pointer; color:inherit; }
+  .chip.pinned { border-color:var(--mline); background:var(--msurface); }
+  .chip.auto { background:var(--mbox); }
+  .chip.stale { background:var(--mdanger15); }
+  .chip .favicon { width:16px; height:16px; flex:0 0 16px; border-radius:3px; background:linear-gradient(135deg,#5b8def,#8b5bef); }
+  .chip .title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--mfg1); }
+  .chip.stale .title { color:var(--mdanger); }
+  /* 三态徽标规范 */
+  .badge { display:inline-flex; align-items:center; gap:3px; flex:0 0 auto; border-radius:6px; padding:1px 5px; font:inherit; font-size:10.5px; }
+  .badge-auto { border:1px solid var(--mline); color:var(--mfg3); background:transparent; cursor:default; }
+  .badge-pinned { border:0; color:var(--maccent); background:var(--maccent15); cursor:pointer; margin-right:4px; }
+  .badge-pinned:hover { background:var(--mdanger15); color:var(--mdanger); }
+  .badge-pinned .x { font-size:11px; line-height:1; opacity:.55; }
+  .badge-pinned:hover .x { opacity:1; }
+  .badge-stale { border:0; color:var(--mdanger); background:var(--mdanger15); cursor:default; }
+  .chev { flex:0 0 14px; color:var(--mfg3); opacity:.9; margin-right:8px; }
+  .callout { font-size:12.5px; color:#8a5a1e; background:#fdf3e7; border-radius:6px; padding:6px 10px; margin:8px 0 0; }
+
+  /* ══ 下拉 mock ══ */
+  .dd { width:288px; border-radius:14px; border:1px solid var(--mline); background:var(--msurface); box-shadow:var(--mshadow); overflow:hidden; color:var(--mfg1); }
+  .dd .sec { padding:8px 12px 4px; font-size:12px; font-weight:600; color:var(--mfg3); }
+  .dd .it { display:flex; align-items:center; gap:8px; width:100%; padding:6px 12px; border:0; background:transparent; text-align:left; cursor:pointer; color:inherit; font:inherit; }
+  .dd .it:hover { background:var(--mbox); }
+  .dd .it .fav { width:16px; height:16px; flex:0 0 16px; border-radius:3px; background:linear-gradient(135deg,#5b8def,#8b5bef); }
+  .dd .it .tt { flex:1; min-width:0; }
+  .dd .it .t1 { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+  .dd .it .t2 { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; color:var(--mfg3); }
+  .dd .it .win { flex:0 0 auto; font-size:10px; color:var(--mfg3); border:1px solid var(--mline); border-radius:4px; padding:0 4px; }
+  .dd .it .ck { flex:0 0 14px; color:var(--maccent); }
+  .flow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0; font-size:12.5px; }
+  .flow .node { border:1px solid #c9ced4; background:#fff; border-radius:8px; padding:6px 10px; }
+  .flow .arr { color:#7a828a; }
+  ul { padding-left:22px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Agent 面板设计稿 · 标签页切换组件重构 v2</h1>
+<p class="meta">对应票 <b>T-214</b> · 2026-10-10 · v1 出稿同日，用户以「徽标三态统一」提议修订 · 状态：<b>待确认开工</b>（仅剩 1 个小项）</p>
+
+<div class="banner">v2 变化：采纳用户提议 —— <b>三个状态都带徽标</b>（自动态徽标只显示、固定态徽标可点解除），失效态砍掉「重新选择」文字；下拉不再设「跟随当前页」行，✓ 的语义统一为「助手当前读的来源」。</div>
+
+<div class="quote">用户提议原文：「固定态和失效态都有徽标作为显示，那自动态也加上徽标，逻辑是默认自动态（徽标不可交互只显示），在下拉中选中标签后变成固定态（可点击徽标取消固定态）。失效态的重新选择问题略显多余，只用红色的已关闭作为提示，用户自行点击下拉按钮重新选择标签。」</div>
+
+<h2>§0 结论（v2）</h2>
+<ul>
+  <li><b>三态统一为「图标 + 标题 + 徽标」同一个骨架</b>，徽标是三态的"状态灯"：
+    <table>
+      <tr><th>状态</th><th>徽标</th><th>样式</th><th>可交互</th></tr>
+      <tr><td>自动（默认）</td><td>跟随</td><td>灰描边（line 边 + fg-3 字），最轻</td><td class="bad">否（只显示）</td></tr>
+      <tr><td>已固定</td><td>已固定 ✕</td><td>accent/15 实底，hover 转 danger 红</td><td class="good">是（点击 = 解除）</td></tr>
+      <tr><td>失效</td><td>已关闭 / 已跳转</td><td>danger/15 红底红字</td><td class="bad">否（chip 本身可点 = 重选）</td></tr>
+    </table>
+    三个徽标长在同一个位置、同一套圆角字号，<b>只有颜色深浅和可点性不同</b> —— 视觉连续谱替代 v1 的"有没有徽标"。
+  </li>
+  <li><b>徽标内不放状态图标（v2 修订）</b>：⚡ 撤掉。三个徽标已有三重区分（颜色深浅 / 文案 / 可点性），10.5px 的小胶囊里再塞图标只有拥挤没有信息。唯一例外是固定态的 ✕ —— 它不是状态图标，是"这个徽标能点"的动作线索，且只在可点的那个徽标上出现。</li>
+  <li><b>解除动作只有一条路</b>：点固定态徽标。下拉 = 纯标签页清单（选某页 = 固定），不再有「跟随当前页」行。</li>
+  <li><b>失效态去掉「重新选择」文字</b>：红徽标已经把话说完，chip 本身点开就是列表 —— 重选路径本来就在，行内 CTA 是同一个动作的第二张脸。</li>
+  <li><b>✓ 语义统一</b>：下拉里 ✓ 永远标在「助手此刻正在读的那一行」—— 自动态时它落在解析出的当前页上，固定态时落在被固定的页上。永不多于一个。</li>
+  <li><b>「窗口 N」组标照 v1 撤</b>：节标改「标签页 · N」（12px 中字重）；单窗口不分组；多窗口窗口号降级为行内右缀小徽标。</li>
+</ul>
+
+<h2>§1 现状问题（不变，v1 §1-§2 的分析仍成立）</h2>
+<p>固定态右侧三个同形状信号（徽标不可点 / ✕ hover 解除 / 箭头 hover 开列表）打架；解除后 chip 失去边框、徽标、实底，看起来像"没了目标页"；失效态的「重新选择」与"点 chip 开列表"是同一动作的两个入口。</p>
+
+<h2>§3 目标态：三态渲染（v2）</h2>
+
+<div class="row3">
+  <div class="mock light">
+    <p class="mock-label">① 自动态 · light（默认）</p>
+    <div class="chip auto">
+      <button class="main"><span class="favicon"></span><span class="title">Z.ai - Advanced AI Chatbot</span></button>
+      <span class="badge badge-auto">跟随</span>
+      <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+    <p class="callout">徽标「跟随」说状态，标题说"跟的是哪页"——两者分工。徽标无 hover、无 pointer，纯指示。</p>
+  </div>
+  <div class="mock light">
+    <p class="mock-label">② 固定态 · light（徽标可点 = 解除）</p>
+    <div class="chip pinned">
+      <button class="main"><span class="favicon"></span><span class="title">Z.ai - Advanced AI Chatbot</span></button>
+      <button class="badge badge-pinned">已固定 <span class="x">✕</span></button>
+      <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+    <p class="callout">徽标 hover 整块转 danger 红 = 解除确认色。chip 主体（图标+标题）仍是开列表的 trigger。</p>
+  </div>
+  <div class="mock light">
+    <p class="mock-label">③ 失效态 · light（只提示，CTA 撤）</p>
+    <div class="chip stale">
+      <button class="main"><span class="favicon" style="filter:grayscale(1);opacity:.5"></span><span class="title">example.com</span></button>
+      <span class="badge badge-stale">已关闭</span>
+      <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+    <p class="callout">「重新选择」撤掉 —— chip 点开就是列表，重选路径不变，少一个同义入口。</p>
+  </div>
+</div>
+
+<div class="row3" style="margin-top:14px">
+  <div class="mock dark">
+    <p class="mock-label">① 自动态 · dark</p>
+    <div class="chip auto">
+      <button class="main"><span class="favicon"></span><span class="title">Z.ai - Advanced AI Chatbot</span></button>
+      <span class="badge badge-auto">跟随</span>
+      <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+  <div class="mock dark">
+    <p class="mock-label">② 固定态 · dark（hover 徽标转红）</p>
+    <div class="chip pinned">
+      <button class="main"><span class="favicon"></span><span class="title">Z.ai - Advanced AI Chatbot</span></button>
+      <button class="badge badge-pinned">已固定 <span class="x">✕</span></button>
+      <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+  <div class="mock dark">
+    <p class="mock-label">③ 失效态 · dark</p>
+    <div class="chip stale">
+      <button class="main"><span class="favicon" style="filter:grayscale(1);opacity:.5"></span><span class="title">example.com</span></button>
+      <span class="badge badge-stale">已跳转</span>
+      <svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+  </div>
+</div>
+
+<h2>§4 状态流（v2 简化）</h2>
+<div class="flow">
+  <span class="node">⚡ 跟随（默认）<br><span class="note">徽标灰描边、只显示</span></span>
+  <span class="arr">── 下拉点选某页 ──▶</span>
+  <span class="node">「已固定 ✕」<br><span class="note">徽标可点</span></span>
+  <span class="arr">── 点徽标 ──▶</span>
+  <span class="node">跟回<br><span class="note">+ toast（§7 唯一待拍板）</span></span>
+</div>
+<ul>
+  <li>固定：下拉点选，唯一来源（显式动作才固定，T-164 理由不变）。</li>
+  <li>解除：点固定态徽标，唯一路径 —— 没有第二条路，也就没有"两个入口打架"。</li>
+  <li>重选：失效态直接点 chip —— 路径本来就在，行内 CTA 撤掉。</li>
+</ul>
+
+<h2>§5 下拉（v2：无「跟随」行，✓ = 当前读的来源）</h2>
+
+<div class="row2">
+  <div class="mock light">
+    <p class="mock-label">目标态 · 单窗口（节标「标签页 · 3」，无组标）</p>
+    <div class="dd">
+      <div class="sec">标签页 · 3</div>
+      <button class="it"><span class="fav"></span><span class="tt"><span class="t1">Z.ai - Advanced AI Chatbot</span><span class="t2">z.ai/chat</span></span><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12l5 5L20 7"/></svg></button>
+      <button class="it"><span class="fav" style="background:linear-gradient(135deg,#4c9f70,#2f7d52)"></span><span class="tt"><span class="t1">GitHub Pull Requests</span><span class="t2">github.com/pulls</span></span></button>
+      <button class="it"><span class="fav" style="background:linear-gradient(135deg,#d08b3c,#b06a20)"></span><span class="tt"><span class="t1">淘宝网 - 淘!我喜欢</span><span class="t2">taobao.com</span></span></button>
+    </div>
+    <p class="callout">✓ 落在「Z.ai」行 —— 自动态下它是解析出的当前页；若处于固定态，✓ 移到被固定的那页。永远恰好一个。</p>
+  </div>
+  <div class="mock dark">
+    <p class="mock-label">目标态 · 多窗口（窗口号 = 行内右缀）· dark</p>
+    <div class="dd">
+      <div class="sec">标签页 · 4</div>
+      <button class="it"><span class="fav"></span><span class="tt"><span class="t1">Z.ai - Advanced AI Chatbot</span><span class="t2">z.ai/chat</span></span><svg class="ck" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12l5 5L20 7"/></svg></button>
+      <button class="it"><span class="fav" style="background:linear-gradient(135deg,#4c9f70,#2f7d52)"></span><span class="tt"><span class="t1">GitHub Pull Requests</span><span class="t2">github.com/pulls</span></span><span class="win">窗口 2</span></button>
+      <button class="it"><span class="fav" style="background:linear-gradient(135deg,#d08b3c,#b06a20)"></span><span class="tt"><span class="t1">淘宝网 - 淘!我喜欢</span><span class="t2">taobao.com</span></span><span class="win">窗口 2</span></button>
+      <button class="it"><span class="fav" style="background:linear-gradient(135deg,#7a6bd0,#5a48b0)"></span><span class="tt"><span class="t1">Docs: Agent API</span><span class="t2">docs.example.com/agent</span></span><span class="win">窗口 3</span></button>
+    </div>
+    <p class="callout" style="background:rgba(224,122,74,.08);border:1px solid rgba(224,122,74,.3);color:#caa">节标只有一层「标签页 · N」，窗口信息下沉到行内小徽标；首个窗口（通常是当前窗口）不打标 —— 少即是多。</p>
+  </div>
+</div>
+
+<h2>§6 改动清单（确认后照此实施）</h2>
+<table>
+  <tr><th>文件</th><th>改动</th></tr>
+  <tr><td><code>AgentTabPicker.vue</code></td><td>三态统一徽标：自动态加「⚡ 跟随」灰描边徽标（新键 <code>pickTab.followBadge</code>，不可交互）；固定态徽标改 button（内含常驻小 ✕，hover 转 danger，点击 emit <code>unpin</code>），独立 unpin 按钮删除；失效态删「重新选择」span；<code>pinnedHint</code> 文案改「点『已固定』徽标回到自动跟随」。</td></tr>
+  <tr><td><code>AgentTabList.vue</code></td><td>节标改「标签页 · N」（新键 <code>pickTab.tabsLabel</code>）；单窗口不分组；多窗口行内右缀窗口小徽标（<code>pickTab.window</code> 复用）。</td></tr>
+  <tr><td><code>AgentPanel.vue</code></td><td>解除后 toast「已回到自动跟随」（新键 <code>pickTab.unpinToast</code>，§7 待拍板）。</td></tr>
+  <tr><td>i18n</td><td>新增 <code>followBadge</code> / <code>tabsLabel</code> /（可选）<code>unpinToast</code>；<code>reselect</code> 键随 CTA 撤销删除；<code>unpin</code>（tooltip）保留。</td></tr>
+  <tr><td>守卫</td><td>panelUi 三态断言更新为「三态都有徽标 + 固定态徽标可点」；T-164「解除只在 pinned」不变；panelRender 的 stale 渲染断言去掉「重新选择」。</td></tr>
+</table>
+
+<h2>§7 待拍板（只剩一项）</h2>
+<table>
+  <tr><th>#</th><th>问题</th><th>推荐</th></tr>
+  <tr><td>1</td><td>解除固定后要不要 toast「已回到自动跟随」？</td><td><b>要</b> —— chip 从实底变轻底，一句话确认"没有丢目标页"，也防误触徽标后不知所措</td></tr>
+</table>
+
+<h2>§8 决定记录</h2>
+<table>
+  <tr><th>日期</th><th>决定</th></tr>
+  <tr><td>2026-10-10（v1）</td><td>确认混乱根因（三信号打架 / 自动态不说话）；出 v1：徽标即解除 + 「跟随当前页」标题 + 下拉跟随行。</td></tr>
+  <tr><td>2026-10-10（v2 · 用户提议）</td><td><b>三态统一徽标</b>：自动态徽标只显示、固定态徽标可点解除；<b>失效态撤「重新选择」</b>，红徽标提示 + 点 chip 重选；下拉去掉「跟随当前页」行（✓ 直接标在当前读的行上）。</td></tr>
+  <tr><td>2026-10-10（v2.1）</td><td><b>徽标去图标</b>：⚡ 撤掉，徽标 = 纯文字状态词；✕ 保留（动作线索，非状态图标，只在可点的固定态徽标上出现）。</td></tr>
+  <tr><td>2026-10-10（依赖登记）</td><td>用户实测发现<b>跟随态实际不跟随</b>（切标签页 chip 与助手读的页面都不动）→ 登记 <b>T-215</b>。本稿的「跟随」徽标必须等 T-215 修完才名副其实 —— UI（本稿）与 bug 修复同轮落地。</td></tr>
+</table>
+
+<p class="meta" style="margin-top:28px">设计稿 v2 终 · T-214 · 渲染自检 <code>.scratch/t214-full.png</code>（pageerrors=0）</p>
+</div>
+</body>
+</html>
