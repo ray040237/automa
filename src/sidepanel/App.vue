@@ -21,10 +21,11 @@
 
 <script setup>
 import { onMounted, ref } from 'vue';
-import browser from 'webextension-polyfill';
 import AgentPanel from '@/components/newtab/workflow/agent/AgentPanel.vue';
 import { useAgentHost } from '@/composable/agentHost';
+import { useTheme } from '@/composable/theme';
 import { loadLocaleMessages, setI18nLanguage } from '@/lib/vueI18n';
+import { sendMessage } from '@/utils/message';
 import { useStore } from '@/stores/main';
 
 /**
@@ -55,16 +56,37 @@ const agent = useAgentHost({
   // 没有工作流就没有工作流上下文段（prompt 里那一段直接不出现）
   getWorkflowContext: () => null,
   /**
-   * 「去配置 API Key」的落点（T-199）。侧栏不在 newtab 里、没有 settings 路由，
-   * 所以由宿主自己开一个主面板标签页指到设置页。UI 是同一个面板、同一句
-   * 「去设置里配置」，但底下走的是开标签页而不是 router.push。
+   * 「去配置 API Key」的落点（T-199 / T-219 / T-220）。
+   *
+   * 侧栏不在 newtab 里、没有 settings 路由，必须由宿主自己把用户送到设置页。
+   * 走项目既有的 dashboard 通道 `open:dashboard`（后台 → `BackgroundUtils.
+   * openDashboard`）：没有 dashboard 时开一个 popup 窗口、有就复用已有标签页。
+   *
+   * 为什么不用 `browser.tabs.create`（T-220）：那会在**普通窗口**新建一个
+   * `newtab.html` 标签页，而 `newtab/App.vue:331-339` 在非 popup 窗口里会
+   * `browser.tabs.remove([tabs[0].id])` 并 `return`（跳过初始化）—— 新标签页
+   * 立刻消失。`openDashboard` 走 popup 窗口，天然不踩这条。
+   *
+   * 路径是 `/agent` 而不是 `/settings/agent`（T-219）：见 `agentHost.js`
+   * `goToAgentSettings` 的说明 —— `router.js` 的子路由是绝对路径，真实 URL 是
+   * `/agent`，`/settings/agent` 实测匹配 0 条路由。
    */
   onOpenSettings: async () => {
-    await browser.tabs.create({
-      url: browser.runtime.getURL('newtab.html#/settings/agent'),
-    });
+    await sendMessage('open:dashboard', '/agent', 'background');
   },
 });
+
+/**
+ * 主题跟随（T-221）。
+ *
+ * 侧栏是独立 HTML 入口，不吃 newtab 的启动链 —— `newtab/App.vue:125` 调了
+ * `theme.init()` 把 `<html>` 的 `dark` 类挂上，侧栏没调，于是设置里选暗色
+ * （或系统暗色）也恒亮。主题存 `browser.storage.local.theme`（与
+ * `store.settings` 分开），与语言包同款：侧栏已在读 storage，无额外依赖。
+ */
+const theme = useTheme();
+
+theme.init();
 
 onMounted(() => {
   // agent 初始化失败不该影响侧栏本身：这里不上报，

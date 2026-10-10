@@ -504,15 +504,18 @@ export function useAgentHost(deps) {
   }
 
   /**
-   * 「去配置 API Key」的落点（T-199）。
+   * 「去配置 API Key」的落点（T-199 / T-219）。
    *
    * 默认走主面板路由 —— 编辑器侧栏宿主就在 newtab 里，`router.push` 是自然的。
    * 但**浏览器侧边栏宿主不在 newtab 里、没有 router**：它的设置页在另一个页面
-   * （`newtab.html#/settings/agent`），必须由宿主自己决定怎么过去（开标签页）。
+   * （`newtab.html#/agent`），必须由宿主自己决定怎么过去（开 dashboard）。
    * 所以做成可注入：`deps.onOpenSettings` 给了就用它，没给才退回 router。
    *
-   * 顺带修正旧写法：原先是 `{ path: '/settings', hash: '#agent' }`，而实际路由
-   * 是 `/settings/agent`（router.js:115），hash 形式并不指向那一页。
+   * T-219：路由是 `/agent` 而不是 `/settings/agent` —— `router.js:120-127` 把
+   * `/settings` 的子路由写成了**绝对路径**（`{ path: '/agent' }` 等），Vue Router 4
+   * 把以 `/` 开头的子路径当根路径，所以真实 URL 是 `/agent`（`Settings.vue:52`
+   * 的菜单项也用它）。早先这里写 `/settings/agent`，实测 `router.resolve` 匹配
+   * 0 条 → 落到空白页。
    */
   async function goToAgentSettings() {
     if (typeof deps.onOpenSettings === 'function') {
@@ -521,7 +524,7 @@ export function useAgentHost(deps) {
       return;
     }
 
-    router.push({ path: '/settings/agent' });
+    router.push({ path: '/agent' });
   }
 
   /**

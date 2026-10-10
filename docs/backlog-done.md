@@ -3964,3 +3964,66 @@ if (process.env.OFFLINE_MODE === '1' && manifestObj.content_security_policy) {
 
 **构建故障插曲（本票附带的根修，2026-10-10）**：重建时全部 66 个 Vue SFC 样式块同时报 `You forgot to add 'mini-css-extract-plugin' plugin`，而 tailwind.css 等普通 css 幸存 —— 与本票源码无关（HEAD 同样炸）。逐层探针（编译器 tap 清单 → NormalModule loader hook → require 缓存）定位根因：**Windows 盘符大小写把同一个包加载成两个实例** —— 本配置 require 插件拿到 `D:\`（大写）实例，而 enhanced-resolve 为 vue-loader 克隆规则重新解析 loader 路径时产出 `d:\`（小写）实例；Node require 缓存按字符串精确匹配，两个实例各持一个 `pluginSymbol`，插件用大写实例打标记、SFC 样式链上的小写 loader 读不到 → pitch 报「忘了加插件」。修法（`webpack.config.js`）：把已加载的 mini-css 缓存条目按两种盘符大小写各注册一份别名，任何大小写的 require 都命中同一实例。附带修复：`eventContract.test.js` 的 T-40 守卫按 `\n` 切行 + `//.*$` 剥注释，JS 正则 `.` 不匹配 `\r`，autocrlf 工作区里注释被误报成违规 —— 改为先归一 CRLF。
 状态：已清（2026-10-10 完成，与 T-215 同轮）
+
+---
+
+### T-217 — AI 助手设置页空态直接渲染 i18n 键：`settings.agent.empty` 在 en/zh 语言包都缺失
+
+类型：bug（i18n）
+登记日期：2026-10-10
+来源：2026-10-10 用户截图（`Clipboard_Screenshot.png`：`AI 助手` 页空状态显示 `settings.agent.empty`）；触发 `src/newtab/pages/settings/SettingsAgent.vue:28`
+现象：`SettingsAgent.vue:28` 调用 `t('settings.agent.empty')`，但 en/zh `newtab.json` 的 `settings.agent` 段都没有 `empty` 键。空态分支整块只显示裸键名 `settings.agent.empty`，下方「新建连接」按钮文案正常 —— 其他键都齐，问题只在 `empty` 这一个键。
+证据：**实测** —— `grep 'settings\.agent\.empty' src/` 全仓只命中 `SettingsAgent.vue:28` 一处；`node utils/check-i18n.js` 当时通过（en/zh 同步缺失此键，检测器只报中-英不一致，同缺不算漂移）；`git show HEAD:src/locales/zh/newtab.json` 读出的 `settings.agent.empty` 为 `undefined`。
+影响：每个首次进入 `/settings/agent` 且尚未配置任何连接的用户，看到的不是引导文案而是裸 i18n 键 —— 比没有引导更糟（用户以为页面 bug）。
+状态：已清（2026-10-11 完成）
+结论：在 `settings.agent` 段新增 `empty` 键，en/zh 同步补：zh「还没有连接。添加一个之后助手才能工作。」、en「No connections yet. Add one and the assistant can work.」。文案刻意压短（一句现象 + 一句引导），对齐同段 `commands.empty`/`skills.empty` 风格，并避开 T-103 用户抱怨过的「设置页塞说明段落」。新增守卫 `src/agent/settingsAgent.test.js` T-217：断言 `SettingsAgent.vue` 引用该键 + zh/en locale 里该键是非空字符串（`check:i18n` 拦不住「两边同缺」，必须单独钉）。守卫有效性实测：对 HEAD 版本跑同样断言，`settings.agent.empty` 为 `undefined` → 会红，非恒真。
+
+### T-218 — 常规设置页还留着「AI 助手 + 打开助手设置」入口，与侧栏独立菜单项重复
+
+类型：bug（UI 冗余入口）
+登记日期：2026-10-10
+来源：2026-10-10 用户截图（`Clipboard_Screenshot-1.png`：`常规` 页底部红框「AI 助手 + 打开助手设置」按钮）；触发 `src/newtab/pages/settings/SettingsIndex.vue:57-64`
+现象：设置侧栏已有独立菜单项 `AI 助手`（`src/newtab/pages/Settings.vue:52` 的 `id: 'agent', path: '/agent'`，T-98 落地），但「常规」页底部仍保留一条 `AI 助手` 区块 + `打开助手设置` 按钮（`$router.push('/agent')`），两条路指向同一处。源码注释自陈是「留给旧版升级用户」的过渡入口。
+证据：**源码核对** —— `SettingsIndex.vue:57-64` 整块夹在「语言选择」与「删除日志」之间；`grep 'settings\.agent\.goto' src/` 全仓只命中 `SettingsIndex.vue:62`；`t('settings.agent.title')` 还被 `SettingsAgent.vue:3` 引用，不能一起删。`git show HEAD` 版本实跑断言：含 `t('settings.agent.title')` = true、含 `'/agent'` = true、zh 有 `settings.agent.goto` = true。
+影响：每个进常规设置页的用户都看到重复入口；删后 `settings.agent.goto` 成死键，不清理则键悬空。
+状态：已清（2026-10-11 完成）
+结论：① 删除 `SettingsIndex.vue:57-64` 整块（含上方解释性注释）；② 从 `src/locales/zh/newtab.json` 与 `src/locales/en/newtab.json` 的 `settings.agent` 段删 `"goto"` 行；③ `settings.agent.title` 保留（`SettingsAgent.vue:3` 仍在用）。新增守卫 `src/agent/settingsAgent.test.js` T-218：断言 `SettingsIndex.vue` 不再含 `t('settings.agent.title')` 与 `'/agent'`，且 zh/en locale 的 `settings.agent.goto` 为 `undefined`、`title` 仍在。守卫有效性实测：对 HEAD 版本跑同样断言全部会红，非恒真。
+验收（两票同轮）：`npm test` **804 tests / 803 pass / 0 fail / 1 skipped**（新增 2 条守卫）；`npx eslint` 改动文件 exit 0；`npm run check:i18n` 通过（en/zh 对齐 + 无硬编码）；`npm run build` 产物重建，`grep` 实测产物 bundle：zh/en locale bundle 均含新 `empty` 文案、均不含旧 `goto` 文案（各 0 命中）。
+**构建故障插曲**：首次 `npm run build` 在 clean-webpack-plugin 清空 `build/` 阶段撞文件安全守卫（`node-safe-delete-shim` unlinkSync EPERM）中断 —— 即 AGENTS.md「构建会先清空 build/」记录过的坑。按文档办法把 `build/` 重命名为 `build.stale-20261011` 后重建成功，验完删掉旧目录。
+
+---
+
+### T-219 — 无 LLM 状态的「去设置页填写」两个入口都不通：`/settings/agent` 根本不是有效路由
+
+类型：bug（路由）
+登记日期：2026-10-11
+来源：2026-10-11 用户报告「工作流中的助手页面和侧边栏的助手页面，在无 LLM 状态下会弹出去设置页填写的按钮，两处的入口都不成功」；触发 `src/composable/agentHost.js:524` 与 `src/sidepanel/App.vue:64`
+现象：`AgentPanel.vue:201-208` 的「去设置页填写」按钮 → `host.goToSettings()` → `goToAgentSettings()`。两个宿主都到不了设置页：编辑器侧栏 `router.push({path:'/settings/agent'})` 落在空白页；浏览器侧栏新建的标签页随即消失（另见 T-220）。
+证据：**实测** —— 用 vue-router `createMemoryHistory` 按 `src/newtab/router.js:117-128` 的结构跑 `router.resolve`：`/settings/agent` → `matched=0`（`No match found`），`/agent` → `matched=2`。根因：`router.js:120-127` 的 `/settings` 子路由全写成**绝对路径**，Vue Router 4 把以 `/` 开头的子路径当根路径 → 真实路由是 `/agent`；`Settings.vue:52` 菜单项也正是 `path:'/agent'`（唯一走得通的一处）。`agentHost.js` 旧注释与 ADR 0005 都写着「实际路由是 `/settings/agent`」——与实测相反。
+影响：未配置 LLM 的用户在任一宿主点「去设置页填写」都到不了设置页，而这是「未配置」状态唯一的出路（T-203），等于新用户卡死。
+状态：已清（2026-10-11 完成）
+结论：采用最小改法 ① —— `agentHost.js` 的默认落点 `router.push({ path: '/settings/agent' })` 改为 `router.push({ path: '/agent' })`，侧栏落点同步为 `/agent`，并订正两处误导性注释（写明「router.js 子路由是绝对路径，真实 URL 是 /agent」）。备选方案 ②（把 `/settings` 子路由改相对路径让 `/settings/agent` 成立）**未做** —— 需连带动 `Settings.vue` 菜单的 7 个路径与外部引用，blast radius 大，留待独立立项。守卫 `agentSettingsEntry.test.js` T-219：断言 agentHost 用 `/agent` 落点、不含 `path:'/settings/agent'`，侧栏含 `'/agent'`、不含 `newtab.html#/settings/agent`（剥注释后断言）。有效性实测：对 HEAD 版本跑同样断言会红。
+
+### T-220 — `newtab/App.vue` 在普通窗口加载时无差别删除一个 newtab 标签页（侧栏「开设置页」闪退的直接原因）
+
+类型：bug（标签页生命周期）
+登记日期：2026-10-11
+来源：2026-10-11 用户报告「侧边栏会在浏览器标签新建一个页面后迅速消失」；触发 `src/newtab/App.vue:331-339`
+现象：侧栏 `onOpenSettings` 用 `browser.tabs.create({url:'newtab.html#/settings/agent'})` 在**普通窗口**新建标签页 → 新页加载 `newtab/App.vue` → 初始化 IIFE 先 `tabs.query` 再 `windows.getCurrent()`，当 `currentWindow.type !== 'popup'` 时执行 `browser.tabs.remove([tabs[0].id])` 并 `return`（跳过全部初始化）→ 新标签页被立刻关掉。
+证据：**代码位置 + 用户实证** —— `App.vue:331-339` 的删除分支，由上游提交 `1945ea90`（2022-10-10）引入。`manifest.chrome.json` 无 `chrome_url_overrides`，`newtab.html` 由 `BackgroundUtils.openDashboard()` 主动打开：无标签页时建 **popup 窗口**，有则 update 已有标签页 —— 设计上 dashboard 只活在 popup 窗口，普通窗口里的 newtab 页被当杂散页删掉。**注：该删除分支的原始意图代码/文档均未说明，属推断。**
+影响：任何从非 newtab 上下文用 `tabs.create` 直接开 `newtab.html` 的写法都会闪退；若已有 dashboard 标签页还可能被误关。
+状态：已清（2026-10-11 完成）
+结论：侧栏改用项目既有的开 dashboard 通道 —— `sendMessage('open:dashboard', '/agent', 'background')`（`src/utils/message.js`；内容脚本 `commandPalette/App.vue:419` 与 `webService.js:50` 同款，后台 `background/index.js:100` 接到后走 `BackgroundUtils.openDashboard`）→ popup 窗口 / 复用已有标签页，天然绕过删除分支。**没有改** `App.vue` 的删除逻辑（上游语义未明，且是「dashboard 只在 popup」这一设计的守卫）。守卫 `agentSettingsEntry.test.js` T-220：断言侧栏含 `sendMessage('open:dashboard', '/agent', 'background')`、不含 `browser.tabs.create`。有效性实测：对 HEAD 版本会红。
+
+### T-221 — 浏览器侧边栏 UI 不跟随主题设置，恒为亮色
+
+类型：bug（UI 主题）
+登记日期：2026-10-11
+来源：2026-10-11 用户报告「侧边栏的页面的 UI 亮暗切换不会随着项目设置中响应，一直保持着亮色」；触发 `src/sidepanel/App.vue`
+现象：侧栏是独立 HTML 入口（`sidepanel.html`），`sidepanel/App.vue` 只加载了语言包，**从未调用 `useTheme()`**。主题靠 `<html>` 上的 `dark` 类驱动（`tailwind.config.js:44` `darkMode:'class'`），newtab 在 `newtab/App.vue:125` 调了 `theme.init()`，侧栏没有 → `dark` 类永不加，恒亮色。
+证据：**源码核对** —— `grep -n 'theme' src/sidepanel/App.vue` 零命中；对照 `newtab/App.vue:79,115,125`。
+影响：用户在设置里选暗色（或系统暗色）后，主面板 / 编辑器都变暗，唯独浏览器侧栏恒亮 —— 侧栏是助手主要形态（T-199），观感割裂。
+状态：已清（2026-10-11 完成）
+结论：`sidepanel/App.vue` 补 `const theme = useTheme(); theme.init();`（与 newtab 同款）。主题存 `browser.storage.local.theme`（与 `store.settings` 分开），侧栏已在读 storage，无额外依赖。守卫 `agentSettingsEntry.test.js` T-221：断言侧栏含 `useTheme()` 与 `theme.init()`。有效性实测：对 HEAD 版本会红。
+
+**验收（T-219/T-220/T-221 同轮）**：`npm test` **807 tests / 806 pass / 0 fail / 1 skipped**（新增 3 条守卫，均在 HEAD 版本上实测会红，非恒真）；`npx eslint` 三个改动文件 exit 0；`npm run check:i18n` 通过；`npm run build` 产物重建，`grep` 实测产物 bundle：`sidepanel.bundle.js` 含 `open:dashboard`、`settings/agent` 0 命中，`newtab.bundle.js` 的 `settings/agent` 也 0 命中。**构建插曲**：按 T-217/T-218 那轮的办法，先把 `build/` 重命名为 `build.stale-20261011b` 再构建，验完删除。

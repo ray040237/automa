@@ -345,7 +345,7 @@
     },
     "agent": {
       "title": "AI 助手",
-      "goto": "打开助手设置",
+      "empty": "还没有连接。添加一个之后助手才能工作。",
       "currentInUse": "当前在用：",
       "nextTurnTakesEffect": "改动下一轮消息生效",
       "unnamed": "（未命名）",

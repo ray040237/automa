@@ -345,7 +345,7 @@
     },
     "agent": {
       "title": "AI assistant",
-      "goto": "Open assistant settings",
+      "empty": "No connections yet. Add one and the assistant can work.",
       "currentInUse": "In use:",
       "nextTurnTakesEffect": "changes take effect on your next message",
       "unnamed": "(unnamed)",

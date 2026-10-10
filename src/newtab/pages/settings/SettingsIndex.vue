@@ -54,14 +54,6 @@
       {{ t('settings.language.reloadPage') }}
     </p>
   </div>
-  <!-- 助手配置已独立成菜单项（/settings/agent）。这里留一条入口，
-       否则从旧版升上来的用户打开「常规」会以为助手配置被删了。 -->
-  <div class="mt-12">
-    <p class="mb-1 font-semibold">{{ t('settings.agent.title') }}</p>
-    <ui-button @click="$router.push('/agent')">
-      {{ t('settings.agent.goto') }}
-    </ui-button>
-  </div>
 
   <div id="delete-logs" class="mt-12">
     <p class="mb-1 font-semibold">{{ t('settings.deleteLog.workflowLogs') }}</p>
