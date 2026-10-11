@@ -2347,10 +2347,13 @@ test('T-196/T-197 守卫：runtime.openSession 必须回 pinned 与 state 两个
     /targetState:\s*restored\.state/,
     'openSession 必须回 targetState'
   );
+  // T-224 起 restoredTarget 的调用收进了账本（targetPage.js）——
+  // 守卫跟着搬：判定必须仍走那个有单测的纯函数，只是位置变了。
+  const ledgerSrc = read('src/agent/targetPage.js');
   assert.match(
-    src,
+    ledgerSrc,
     /restoredTarget\(pin,\s*liveTab\)/,
-    'openSession 必须走 restoredTarget 纯函数判定（有单测）'
+    'restoreTarget 必须走 restoredTarget 纯函数判定（有单测）'
   );
 });
 

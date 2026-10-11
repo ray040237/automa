@@ -4027,3 +4027,43 @@ if (process.env.OFFLINE_MODE === '1' && manifestObj.content_security_policy) {
 结论：`sidepanel/App.vue` 补 `const theme = useTheme(); theme.init();`（与 newtab 同款）。主题存 `browser.storage.local.theme`（与 `store.settings` 分开），侧栏已在读 storage，无额外依赖。守卫 `agentSettingsEntry.test.js` T-221：断言侧栏含 `useTheme()` 与 `theme.init()`。有效性实测：对 HEAD 版本会红。
 
 **验收（T-219/T-220/T-221 同轮）**：`npm test` **807 tests / 806 pass / 0 fail / 1 skipped**（新增 3 条守卫，均在 HEAD 版本上实测会红，非恒真）；`npx eslint` 三个改动文件 exit 0；`npm run check:i18n` 通过；`npm run build` 产物重建，`grep` 实测产物 bundle：`sidepanel.bundle.js` 含 `open:dashboard`、`settings/agent` 0 命中，`newtab.bundle.js` 的 `settings/agent` 也 0 命中。**构建插曲**：按 T-217/T-218 那轮的办法，先把 `build/` 重命名为 `build.stale-20261011b` 再构建，验完删除。
+
+---
+
+### T-224 — 目标页状态机收敛成 TargetPageController 深模块（index.js 拆账）
+
+登记日期：2026-10-11
+来源：2026-10-11 会话 improve-codebase-architecture 架构评审（用户点名分析 agent 部分），用户从 6 候选中选定本项，经 grilling 三轮敲定设计（顺带项=A、注入按 tab.js 先例、preStepNotice 进盒子、票流程=A、验收三条+活值回归、锁进盒子、严格等价、盒子无副作用）
+现象：目标页账本（`targetTab`/`pins`/`focusedTabId`/`lastNoticeKey`/`lastRead`/`fpNoticeKey`/`fpCheckPending` 共 7 个闭包变量）摊在 `index.js` 的 `createAgentRuntime` 闭包里，`targetState.js` 只装了叶子纯函数、编排树干留在原地；preStepNotice 编排、pin 增删聚焦、首轮钉页捕获、openSession/newSession 恢复与重置全部内联在装配层。测试无法穿过 interface：preStepNotice 无任何直接行为测试，唯一够得着的守卫是 T-164 文本半截（正则查 `unpinTab()` 附近 400 字符内有 `pins = []`）。另有 `getWorkflowId`/`sessionWorkflowId` 双旋钮必须一致而无人检查。
+证据：**源码核对（探索 agent 全量清单，file:line 已逐条核过）** —— `index.js:285-304`（闭包变量区）、`:389-446`（preStepNotice 编排）、`:465-485`（guardedTools 锁守卫）、`:117-118`（`tabLocks`/`runtimeSeq` 模块级单例）、`:537-546`（首轮捕获+锁注册的顺序敏感）、`:799-846`（openSession 恢复）、`:858-864`（newSession 重置）；`targetState.js:23-140`（9 个纯函数）；`assembly.test.js:136-170`（T-164 文本半截；其余约 15 处源码正则守卫经核对**均与目标页无关**，属标题回写/enabledGroups/指令技能注入/面板单绑定等别的病）；`agentHost.js:250-253`（`sessionWorkflowId` 全仓唯一消费点）、`:172-176`（`syncTarget` 单写入点）；`workflows/[id].vue:701-702`（双旋钮同发）。
+影响：改目标页相关行为必须同时理解 11 个闭包变量的联动——近期事故与返工全在这一带（T-132 getter 双方理解不一致致 focus_tab 生产全挂测试全绿、T-195~198 专门收敛写入点）；preStepNotice 行为零直测，回归只能靠 grep；双旋钮填岔的形态是「会话存到 A 工作流名下、列表却在 B 工作流下找」，静默错乱。
+建议（方案，grilling 已敲定）：
+1. **新模块** `src/agent/targetPage.js`：收 7 个目标页闭包变量 + `tabLocks`/`runtimeSeq`（在新文件里保持**模块级单例**语义——锁的本意就是同一页面跨 runtime 共享，两个宿主同住一个 newtab 页）。
+2. **interface 无副作用**：`current` / `pickTab` / `unpin` / `addPin` / `focusTab`（返回新目标页快照，不发事件）/ `preStepNotice` / 锁三件（acquire/release/isLocked）/ `restoreFromRecord` / `resetForSession`。`agent:target-tab` 事件由 index.js 拿返回值后发（轮内通道开着才发，保持现状时序）。
+3. **IO 注入按 tab.js 先例**：`browserApi` 整体传入（`tabs.get`/`tabs.query`）+ `readPageFromTab` 函数依赖（指纹探针的读页，来自 browserAdapter）——盒子不 import polyfill，node:test 直跑。
+4. **严格等价重构**：两个已知怪癖**原样搬入、不顺手修**——① `lastRead` 是唯一切会话不重置的变量（跨会话残留指纹，今天无害：探针要求 tabId 匹配才触发）；② `newSession` 清 pins/focusedTabId/lastNoticeKey 却不清 `lastRead`/`fpNoticeKey`/`targetTab`。两怪癖在票批准后单独裁决修不修。
+5. **顺带**（同轮已批）：删 `sessionWorkflowId`——`agentHost.js` 的列表过滤改由 `deps.getWorkflowId()` 派生，`[id].vue` 少传一个旋钮，双旋钮问题连根拔；T-164 文本半截换成盒子的行为测试（断言 unpin 清**整个** pins 列表）。
+6. **红线不动**：G5（无任何落盘符号）、TARGET_TAB→宿主 `syncTarget` 单写入点的方向（T-195~198 成果）、getter 活值习语（adapter 每次 execute spread 求值）。
+验收线：① `index.js` 中目标页闭包变量归零（全部进盒子）；② 盒子有直接行为测试，含 preStepNotice 的**首个直测**与 T-132 式跨 seam 活值回归（宿主传 JS getter → 工具 execute 时刻拿到活值，钉死真实链路）；③ 现有全部测试绿 + `npm run build` 产物正常；④ `index.test.js` 的 exports 基线随本次有意更新。实施时把「目标页控制器」一词按规矩登记进 CONTEXT.md。
+状态：已清（2026-10-11 完成）
+结论：新建 `src/agent/targetPage.js`（目标页账本，createTargetPageLedger）：7 个目标页闭包变量 + `tabLocks`/`runtimeSeq`（保持**模块级单例**语义）整本收入，index.js 内目标页闭包变量归零（grep 复核只剩注释提及）；interface 无副作用 —— focusTab/pickTab/setTarget 只返回结果，`agent:target-tab` 事件由 index.js 拿返回值后发（轮内通道时序不变）；browserApi + readPage 走注入，不 import polyfill。**严格等价**：lastRead 跨会话残留、resetForNewSession 清一半这两个怪癖原样搬入，并在 targetPage.test.js 里钉成绿的（注释标明是裁决项）。顺带：删 sessionWorkflowId（agentHost.js 列表过滤改由 deps.getWorkflowId() 派生，[id].vue 少传）；T-164 文本守卫半截退役（行为断言移入 targetPage.test.js）；panelUi.test.js 的 restoredTarget 守卫改抓 targetPage.js。新增 22 条账本行为测试 —— 含 preStepNotice 的**首个直测**（关页/漂移/指纹 latch/去重各一）与 T-132 式活值回归（getter 经 spread 是数组且是活的）。**验收**：`npm test` 829 tests / 828 pass / 0 fail；`npx eslint` 0 error（仅存量 no-console 警告）；`npm run build` 产物重建（[build] target: offline）。术语以实际命名为准登记 CONTEXT.md：「目标页账本(targetPage)」——比票名「控制器」更贴它的角色（持状态记账，不只控制）。
+
+---
+
+### T-226 — 工具回话契约从民间传说变成 seam：toolOk/toolError + 元数据回巢 + 错形静默路径堵死
+
+登记日期：2026-10-11
+来源：2026-10-11 会话架构评审候选 2（用户从报告剩余候选中选定），经 grilling 两轮敲定设计（存量全迁=A、元数据回巢含三处=A、票流程=A、显式构造器=A、adapter 硬化=A、rememberable 经 loop 送标志=A、wrap 信登记表=A、验收五条全要）
+现象：工具给模型回话的 `{status:'ok'|'error', payload}` 信封契约只活在 `adapter.js:25-41` 的注释里，全仓 **~54 处手抄**（28 error / 26 ok）+ `page.js` 6 处裸字符串（其中「块目录为空」`page.js:326-329` 是语义错误、成功形态）。两条「失败变成功」的静默通路被证实：① `{error:'x'}` 错形信封（无 own `payload` 键）走裸值路径 → JSON 化 → **isError:false** 发给模型，无测试钉住；② `{status:'failure'}` 非法状态值一律当成功（`adapter.js:66`）。工具元数据散落三处：确认卡类型→scope 表（`confirm.js:99-108`，未知 kind **静默降级** local 卡）；可记授权名单 `REMEMBERABLE_TOOLS`（`confirm.js:24`，工具身份住在确认门模块）；包装标签 group→tag 在 `adapter.js:175-181` 与 `events.js:149-152` 各判一次。另有「没有确定目标页」守卫 3 处逐字复制 + browserAdapter 第 4 处漂移（后者已单登记 T-225）；通道 try/catch 壳 3 份复制；`(err && err.message) || String(err)` 工具内 6 处。
+证据：**源码核对（探索 agent 全量清单，含信封判定 `adapter.js:42-97`、defineTool 校验面 `define.js:56-99`、confirmScope 各 kind 产出点、REMEMBERABLE_TOOLS 三个消费点、两处 tag 映射原文、测试钉位明细）**。`events.test.js` 对 wrapObservation **零覆盖**。
+影响：新工具作者今天要知道 4 处暗规则才能写对回话；写错是静默失败（错误观察值被模型当成功读、UI 工具卡按 isError 分流也错）；第二个可记授权工具出现时必须去改确认门模块；新 kind 拼错无任何报错。关联事故基因：T-65（绕过包装的暗门）同属「契约只活在注释里」。
+建议（方案，grilling 已敲定）：
+1. **显式构造器**（define.js 导出）：`toolOk(payload, meta?)` / `toolError(payload)`，产 `{status:'ok'|'error', payload, ...meta}`。~54 处机械替换，现有 `res.status`/`res.payload` 断言全部照旧成立；page.js 6 处裸字符串迁成信封（唯一翻转断言处：index.test.js 裸值断言改 `res.payload`）。**不做** defineTool 自动包装 return→throw 的归一化（54 处改语义风险配不上收益，将来可作小步升级）。
+2. **共用壳 helper**：「无目标页」守卫（3 处逐字复制）与「调通道 + `!res.ok` + 取人话错误」壳（3 份）沉进 define.js（或 tools 内 helper 模块）；错误消息提取 `(err && err.message) || String(err)` 一并归一。守卫文案与现逐字一致（browserAdapter 的漂移版归 T-225 处理，不碰）。
+3. **adapter 硬化**：带 own `status` 但值非法 → 按**错误**观察值处理（带原值）；带 own `error` 键却无 payload/status → 按错误观察值处理。新增测试把 `{error:'x'}` / `{status:'failure'}` 钉成 isError:true——「让对的容易（构造器）+ 让错的可见（硬化）」两条腿。
+4. **元数据回巢（不动视图层）**：① 工具定义加 `rememberable: true`（仅 test_js），loop `beforeToolCall` 往 requestConfirmation 载荷加 `rememberable` 布尔，`createSessionAuth` 的 ask/answer 改读标志，删 `REMEMBERABLE_TOOLS` 名单；`validateTools` 加校验——**read 工具带 rememberable 直接 throw**。不给 confirm.js 反向 import 工具表（canvas.js/page-write.js 已 import confirm.js，反向成环）。② `confirmScope` 的 kind→scope 表删除，scope 随 kind 的合法值定义；`validateTools` 装配期校验每个 write 工具 `confirmDetail({})` 的 kind ∈ 合法集（从 confirm.js 导出），**未知 kind 装配期红**（不再静默 local 卡）。确认卡文案插值（title/hint 分支、i18n 键）明确不动——视图层知识。
+5. **wrap 单点化**：`wrapObservation` 改「`outcome.wrap` 是 UNTRUSTED_WRAPPER_TAGS 已登记标签则用之，否则回落 `untrusted_tool_result`」，删掉对 `'untrusted_page_content'` 具体字符串的二次判断；**补 events.test.js 对 wrapObservation 的首批直测**（登记表内信 / 缺省回落两条）。
+6. **红线不动**：G5、确认门分级（ADR 0002）、canRemember 归属钉死（工具 confirmDetail 不得覆盖，方向不变——只是判定源从名单换标志）、untrusted 9 标签登记表。
+验收线：① `grep "status: '"` 在 src/agent/tools/ 归零，全部经构造器产出；② 错形 `{error:'x'}`/`{status:'failure'}` 有测试钉 isError:true；③ `REMEMBERABLE_TOOLS` 与 kind→scope 表删除，未知 kind 装配期红；④ events.test.js 有 wrapObservation 直测；⑤ 现有测试全绿（有意翻转除外：index.test.js 裸值断言、confirm.test.js 名字串断言）+ lint + `npm run build` 产物正常。实施时 CONTEXT.md「观察值」条目补一句契约出处（构造器）。
+状态：已清（2026-10-11 完成）
+结论：按票内方案六件全落地。① `define.js` 导出 `toolOk(payload, meta?)`/`toolError(payload)`/`noTargetTabError()`/`callChannel`/`errText`，tools/ 目录 `grep "status: '" 归零`（含 adapter 自产的两处与装配层锁守卫）；page.js 6 处裸字符串迁成信封，get_block_schema 的「缺参/目录为空/查不到」三支按语义归位为 error（观察值多了「工具未成功执行：」前缀，测试翻转同步）。② adapter 硬化：`{error:'x'}` 与非法 status（非 ok/error/rejected）都按**错误**观察值处理并点名病灶，各 1 条测试钉死。③ `REMEMBERABLE_TOOLS` 名单删除，资格=工具定义的 `rememberable: true`（现值只有 test_js），状态机经 req.tool 读资格、闭包自记；kind→scope 表升级为 `CONFIRM_KINDS` 登记表，validateTools 两道新闸（未知 kind 装配期红 / read 带 rememberable 红）各 1 条测试。④ `wrapObservation` 改信 `UNTRUSTED_WRAPPER_TAGS` 登记表（未登记回落 tool_result），events.test.js 补 5 条首批直测。**验收**：`npm test` 839 tests / 838 pass / 0 fail（+10：wrapObservation 直测 5、错形硬化 3、装配期闸 2；有意翻转 page.js/confirm.test.js 断言若干）；触碰文件 eslint 0 error；`npm run build` 产物重建（target: offline）；确认卡视图层（AgentConfirmCard 文案插值与 i18n）零改动。契约出处补进 CONTEXT.md「观察值」条目。

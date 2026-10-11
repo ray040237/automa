@@ -95,6 +95,10 @@ _Avoid_: activeTab(那是浏览器 UI 的概念)。
 `{tabId, origin, title}`,会话级的目标页身份记录。**origin 是真身份,tabId 会被 Chrome 复用**——任何基于 tabId 的操作前必须校验 origin。
 _Avoid_: 把 tabId 单独当 pin 用。
 
+**目标页账本(targetPage)**:
+`src/agent/targetPage.js`(T-224)。targetTab / pins / focusedTabId / notice 去重键 / 指纹基线(lastRead)/ 每轮 probe latch / 跨会话锁(tabLocks,**模块级单例**,跨 runtime 共享)整本收在这一个 module 里,index.js 只剩装配与事件发射。三条契约:① interface 无副作用——focusTab/pickTab/setTarget 只返回结果,`agent:target-tab` 事件由 index.js 拿返回值后发;② browserApi 与 readPage 走注入,不 import polyfill(`targetPage.test.js` 直跑,含 preStepNotice 的直测与 T-132 式活值回归);③ **严格等价**——lastRead 跨会话残留、resetForNewSession 清一半这两个怪癖是 T-224 拍板暂不修的裁决项,测试里钉着,改行为先改那两条。
+_Avoid_: 在 index.js 另设目标页闭包变量;往账本里塞事件发射;把 tabLocks 搬进工厂闭包(那会失去跨 runtime 共享)。
+
 **预检(preStepNotice)**:
 每步开工前的 advisory 检查(tab 存活、origin 漂移),产出 `system-notice` 由模型自决,**绝不硬停任务**(良性重定向链会误杀)。
 _Avoid_: 把它叫"闸门/校验失败"。
@@ -136,8 +140,8 @@ write 工具执行前的用户裁决,以 pending promise 挂在宿主。闸的�
 _Avoid_: 「卡片被藏起来了,先挂着等用户切回来再批」——切回来之前 loop 已经永久挂起;在工具外另建「哪个参数危险」的映射表(知识归工具自身)。
 
 **观察值(observation)**:
-工具结果经 untrusted 包装 + 8K 截断后喂回模型的形式。工具抛错转成 error 观察值让模型自纠,不终止循环。
-_Avoid_: result(与 tool_call_id 配对的 wire tool 消息易混)。
+工具结果经 untrusted 包装 + 8K 截断后喂回模型的形式。工具抛错转成 error 观察值让模型自纠,不终止循环。**回话契约（T-226）**:工具只能用 `tools/define.js` 的 `toolOk(payload, meta?)` / `toolError(payload)` 产信封,不许手写 `{status:...}` 字面量——`{error:'x'}` 这类错形会被 adapter 硬化成错误观察值（不再伪装成成功）;无目标页守卫用 `noTargetTabError()`,通道调用壳用 `callChannel`。确认卡 kind 与「可记授权」资格都长在工具定义上（`CONFIRM_KINDS` 登记表 + `rememberable`）,validateTools 装配期把关。
+_Avoid_: result(与 tool_call_id 配对的 wire tool 消息易混);手写 `{status:'error', payload}` 字面量。
 
 **通道超时兜底(channel timeout)**:
 每条跨进程通道的**发送侧**都有硬超时,且**外层必须大于内层**:页内求值 10s → background `executeScript` 15s(`AGENT_PAGE_TIMEOUT_MS`)与 `tabs.sendMessage` 15s(`TAB_CHANNEL_TIMEOUT_MS`)→ 发送侧 `toBackground` round trip 20s(`BACKGROUND_CHANNEL_TIMEOUT_MS`)。超时一律回 `{ok:false, error}` 的**人话观察值**而不是 reject —— 模型拿到「这一步是否已执行无法确认」才知道先读页再决定,抛栈只会让它原地重调。根因(如 SW 回程丢失)不会因此消失,但任何一层失灵都不能再把整轮 agent 挂死(T-39)。

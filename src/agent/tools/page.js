@@ -8,7 +8,7 @@
  * 因为 P0 的验收标准是「能不能一次写出正确的 selector」，与写操作无关。
  */
 
-import { defineTool } from './define';
+import { defineTool, toolOk, toolError } from './define';
 
 /**
  * @typedef {Object} ToolCtx
@@ -135,7 +135,7 @@ export const readPage = defineTool({
   },
   async execute(args, ctx) {
     const norm = normalizeReadPageArgs(args);
-    if (norm.error) return { status: 'error', payload: norm.error };
+    if (norm.error) return toolError(norm.error);
 
     const res = await ctx.readPage({
       detail: norm.detail,
@@ -144,13 +144,13 @@ export const readPage = defineTool({
     });
 
     if (res && typeof res === 'object') {
-      return {
-        payload: res.text,
-        ...(res.fingerprint ? { pageFingerprint: res.fingerprint } : {}),
-      };
+      return toolOk(
+        res.text,
+        res.fingerprint ? { pageFingerprint: res.fingerprint } : {}
+      );
     }
 
-    return { payload: res };
+    return toolOk(res);
   },
 });
 
@@ -188,10 +188,7 @@ export const findText = defineTool({
   async execute(args, ctx) {
     const keyword = String((args && args.keyword) || '').trim();
     if (!keyword)
-      return {
-        status: 'error',
-        payload: 'keyword 不能为空：告诉我要在页面里找什么文本。',
-      };
+      return toolError('keyword 不能为空：告诉我要在页面里找什么文本。');
 
     const limitRaw = Number(args && args.limit);
     const limit =
@@ -200,7 +197,7 @@ export const findText = defineTool({
         : 5;
 
     const res = await ctx.findText({ keyword, limit });
-    return { payload: res && typeof res === 'object' ? res.text : res };
+    return toolOk(res && typeof res === 'object' ? res.text : res);
   },
 });
 
@@ -241,11 +238,13 @@ export const getVariables = defineTool({
     // 绝不落到下面的「（空）」分支 —— 那个分支的语义是「这个工作流确实没定义变量」，
     // 两句结论对模型完全不同，混起来它就会以为该工作流没有变量而凭空编一个名字。
     if (!data || data.bound === false) {
-      return [
-        '## 变量',
-        '未绑定工作流：助手当前不在任何工作流的编辑页里，拿不到工作流变量与全局变量。',
-        '若用户要讨论某个具体工作流的变量，请让其在那个工作流的编辑页打开助手。',
-      ].join('\n');
+      return toolOk(
+        [
+          '## 变量',
+          '未绑定工作流：助手当前不在任何工作流的编辑页里，拿不到工作流变量与全局变量。',
+          '若用户要讨论某个具体工作流的变量，请让其在那个工作流的编辑页打开助手。',
+        ].join('\n')
+      );
     }
 
     const vars = data.variables || {};
@@ -270,7 +269,7 @@ export const getVariables = defineTool({
     if (data && data.workflowId)
       lines.push('当前工作流 id: ' + data.workflowId);
 
-    return lines.join('\n');
+    return toolOk(lines.join('\n'));
   },
 });
 
@@ -301,7 +300,8 @@ export const getBlockSchema = defineTool({
   async execute(args, ctx) {
     const { name } = args || {};
 
-    if (!name) return '请提供块名。';
+    // 缺参是失败，不是一句成功的提示（T-226：裸字符串迁信封，语义归位）
+    if (!name) return toolError('请提供块名。');
 
     const raw = await ctx.getBlockSchema(name);
 
@@ -323,18 +323,20 @@ export const getBlockSchema = defineTool({
       // 必须说破，否则模型看到的是「没有任何块可用」，和事实表矛盾，
       // 会陷进 read_page ↔ get_block_schema 的重试循环。
       if (Array.isArray(all) && all.length === 0) {
-        return (
+        return toolError(
           '块目录查不到任何块——get_block_schema 没接上线（agent runtime 缺陷），' +
-          '这不是块名写错。请停止用本工具重试，改用其他方式完成任务。'
+            '这不是块名写错。请停止用本工具重试，改用其他方式完成任务。'
         );
       }
 
-      return [
-        `没有名为 ${name} 的块。`,
-        '可用块（add_block 用第一个）：',
-        list.map((b) => `- ${b.id}（${b.name}）`).join('\n') ||
-          '（一个都没有）',
-      ].join('\n');
+      return toolError(
+        [
+          `没有名为 ${name} 的块。`,
+          '可用块（add_block 用第一个）：',
+          list.map((b) => `- ${b.id}（${b.name}）`).join('\n') ||
+            '（一个都没有）',
+        ].join('\n')
+      );
     }
 
     // 字段清单是这一段的重点：add_block 的 data 要按这些键填。
@@ -352,6 +354,6 @@ export const getBlockSchema = defineTool({
       lines.push('可用的数据引用: ' + schema.refDataKeys.join('、'));
     }
 
-    return lines.join('\n');
+    return toolOk(lines.join('\n'));
   },
 });

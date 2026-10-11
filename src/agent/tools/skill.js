@@ -19,7 +19,7 @@
  */
 
 import { READ_SKILL_MAX_CHARS } from '../skills';
-import { defineTool } from './define';
+import { defineTool, toolOk, toolError } from './define';
 
 export const readSkillTool = defineTool({
   name: 'read_skill',
@@ -49,12 +49,11 @@ export const readSkillTool = defineTool({
     const { skill, available } = await ctx.readSkill(name);
 
     if (!skill) {
-      return {
-        status: 'error',
-        payload: available.length
+      return toolError(
+        available.length
           ? `没有叫「${name}」的技能。可用技能：${available.join('、')}。`
-          : '当前没有任何可用技能。',
-      };
+          : '当前没有任何可用技能。'
+      );
     }
 
     if (path) {
@@ -63,25 +62,22 @@ export const readSkillTool = defineTool({
       if (content === undefined) {
         const paths = Object.keys(skill.files);
 
-        return {
-          status: 'error',
-          payload: paths.length
+        return toolError(
+          paths.length
             ? `技能「${
                 skill.name
               }」没有附带文件「${path}」。可用文件：${paths.join('、')}。`
-            : `技能「${skill.name}」没有任何附带文件，只有 SKILL.md 正文。`,
-        };
+            : `技能「${skill.name}」没有任何附带文件，只有 SKILL.md 正文。`
+        );
       }
 
-      return {
-        payload: `【技能附带文件 ${path}】\n${content}`,
+      return toolOk(`【技能附带文件 ${path}】\n${content}`, {
         maxChars: READ_SKILL_MAX_CHARS,
-      };
+      });
     }
 
-    return {
-      payload: `【技能「${skill.name}」全文】\n${skill.body}`,
+    return toolOk(`【技能「${skill.name}」全文】\n${skill.body}`, {
       maxChars: READ_SKILL_MAX_CHARS,
-    };
+    });
   },
 });

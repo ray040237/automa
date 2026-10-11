@@ -9,7 +9,13 @@
  */
 
 import { countLines } from '../confirm';
-import { defineTool } from './define';
+import {
+  defineTool,
+  toolOk,
+  toolError,
+  noTargetTabError,
+  callChannel,
+} from './define';
 
 /**
  * 试跑一段 JS。只在目标页的 MAIN world 里跑，跑完即弃。
@@ -25,31 +31,28 @@ export async function testJs(ctx, params) {
   const { targetTab, sendMessage } = ctx;
 
   if (!targetTab || !targetTab.id) {
-    return { status: 'error', payload: '没有确定目标页。' };
+    return noTargetTabError();
   }
 
-  try {
-    const res = await sendMessage({
+  const out = await callChannel(
+    sendMessage,
+    {
       type: 'agent:run-js',
       tabId: targetTab.id,
       code: params.code,
       ...(params.frame ? { frame: params.frame } : {}),
-    });
-
-    if (!res || !res.ok) {
-      const why = (res && res.error) || '执行没有返回结果（页面可能在跳转）。';
-
-      return { status: 'error', payload: why };
+    },
+    {
+      fallback: '执行没有返回结果（页面可能在跳转）。',
+      errorPrefix: '执行失败：',
     }
+  );
 
-    const tail = res.json ? '' : '（无法序列化成 JSON，按字符串展示）';
+  if (!out.ok) return toolError(out.error);
 
-    return { status: 'ok', payload: '返回：' + res.value + tail };
-  } catch (err) {
-    const why = (err && err.message) || String(err);
+  const tail = out.res.json ? '' : '（无法序列化成 JSON，按字符串展示）';
 
-    return { status: 'error', payload: '执行失败：' + why };
-  }
+  return toolOk('返回：' + out.res.value + tail);
 }
 /**
  * 查选择器命中了几个、命中的是什么。
@@ -69,71 +72,64 @@ export async function queryElements(ctx, params) {
   const { targetTab, sendMessage } = ctx;
 
   if (!targetTab || !targetTab.id) {
-    return { status: 'error', payload: '没有确定目标页。' };
+    return noTargetTabError();
   }
 
   if (!params.selector || !params.selector.trim()) {
-    return { status: 'error', payload: 'selector 不能为空。' };
+    return toolError('selector 不能为空。');
   }
 
-  try {
-    const res = await sendMessage({
+  const out = await callChannel(
+    sendMessage,
+    {
       type: 'agent:query',
       tabId: targetTab.id,
       selector: params.selector,
       limit: params.limit || 5,
       ...(params.frame ? { frame: params.frame } : {}),
-    });
+    },
+    { fallback: '查询失败。', errorPrefix: '查询失败：' }
+  );
 
-    if (!res || !res.ok) {
-      const why = (res && res.error) || '查询失败。';
+  if (!out.ok) return toolError(out.error);
 
-      return { status: 'error', payload: why };
-    }
+  const { res } = out;
 
-    if (res.count === 0) {
-      const msg =
-        '命中 0 个：' + params.selector + ' 在当前页面上找不到任何元素。';
+  if (res.count === 0) {
+    const msg =
+      '命中 0 个：' + params.selector + ' 在当前页面上找不到任何元素。';
 
-      return { status: 'ok', payload: msg };
-    }
-
-    const lines = res.sample.map((el, i) =>
-      [
-        i +
-          1 +
-          '. ' +
-          (el.frame !== undefined ? '[frame ' + el.frame + '] ' : '') +
-          '<' +
-          el.tag +
-          (el.id ? ' #' + el.id : '') +
-          (el.class ? '.' + el.class : '') +
-          '> ' +
-          (el.visible ? '' : '[隐藏] ') +
-          (el.text || '') +
-          (el.href ? ' → ' + el.href : '') +
-          (el.inputType ? ' [input type=' + el.inputType + ']' : ''),
-      ].join('')
-    );
-
-    const head =
-      '命中 ' +
-      res.count +
-      ' 个：' +
-      params.selector +
-      (res.frames !== undefined ? '（跨 ' + res.frames + ' 个 frame）' : '');
-
-    return {
-      status: 'ok',
-      payload: [head, '前 ' + lines.length + ' 个：', lines.join('\n')].join(
-        '\n'
-      ),
-    };
-  } catch (err) {
-    const why = (err && err.message) || String(err);
-
-    return { status: 'error', payload: '查询失败：' + why };
+    return toolOk(msg);
   }
+
+  const lines = res.sample.map((el, i) =>
+    [
+      i +
+        1 +
+        '. ' +
+        (el.frame !== undefined ? '[frame ' + el.frame + '] ' : '') +
+        '<' +
+        el.tag +
+        (el.id ? ' #' + el.id : '') +
+        (el.class ? '.' + el.class : '') +
+        '> ' +
+        (el.visible ? '' : '[隐藏] ') +
+        (el.text || '') +
+        (el.href ? ' → ' + el.href : '') +
+        (el.inputType ? ' [input type=' + el.inputType + ']' : ''),
+    ].join('')
+  );
+
+  const head =
+    '命中 ' +
+    res.count +
+    ' 个：' +
+    params.selector +
+    (res.frames !== undefined ? '（跨 ' + res.frames + ' 个 frame）' : '');
+
+  return toolOk(
+    [head, '前 ' + lines.length + ' 个：', lines.join('\n')].join('\n')
+  );
 }
 
 /**
@@ -145,6 +141,9 @@ export const testJsTool = defineTool({
   class: 'write',
   group: 'page',
   ctx: ['targetTab', 'sendMessage'],
+  // T-226：「本会话允许试跑代码」的授权资格长在工具身上（原先是 confirm.js
+  // 里的 REMEMBERABLE_TOOLS 名单）。全仓目前只有这一个可记授权的写类工具。
+  rememberable: true,
   confirmDetail(args) {
     const code = args ? String(args.code ?? '') : '';
 

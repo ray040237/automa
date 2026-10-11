@@ -47,17 +47,12 @@ import { agentLog } from './log';
 import { buildFacts } from './facts';
 import { createAgent } from './loop';
 import { AGENT_EVENTS } from './events';
-import { TOOLS } from './tools';
+import { TOOLS, toolError } from './tools';
 import { createPiProvider, toPiContext } from './provider';
 import { wrapUntrusted } from './untrusted';
 import { buildUserMessage } from './prompt';
 import { readSkillFrom } from './skills';
-import {
-  resolveTargetTab,
-  listTargetableTabs,
-  originOf,
-  normalize,
-} from './tab';
+import { resolveTargetTab, listTargetableTabs } from './tab';
 import { isHttpUrl, loadConfig, loadConfigDoc, saveConfig } from './config';
 import {
   createSessionId,
@@ -71,17 +66,8 @@ import {
   createCheckpointSaver,
   pruneEphemeralEvents,
 } from './turnRecord';
-import {
-  fingerprintChangedNotice,
-  fingerprintKey,
-  initialPinsFromTab,
-  originDriftKey,
-  originDriftNotice,
-  restoredTarget,
-  tabClosedNotice,
-  upsertPin,
-} from './targetState';
 import { buildTitleMessages, cleanTitle } from './title';
+import { createTargetPageLedger } from './targetPage';
 
 /** 见上（文件头的 adapter 注释）：过渡期的 re-export，导出面保持不变。 */
 export { toBackground, readPageFromTab, agentLog };
@@ -108,14 +94,6 @@ if (typeof window !== 'undefined') {
     a.click();
   };
 }
-
-/**
- * 轻量跨会话锁（P2）：tabId -> 锁持有者 id。
- * 只在「会话正在跑一轮」的窗口内持有——空闲会话不挡人（pie 的 R7 收窄语义）。
- * 这是 UX 防误伤，不是安全边界：锁的双方都是同一个用户的 BYOK 扩展。
- */
-const tabLocks = new Map();
-let runtimeSeq = 0;
 
 /**
  * 生成会话标题（fire-and-forget）：复用当轮的模型配置发一次小请求。
@@ -282,38 +260,31 @@ export function createAgentRuntime(deps) {
     );
   }
 
-  let targetTab = deps.targetTab || null;
+  // 目标页账本（T-224）：targetTab / pins / focusedTabId / lastNoticeKey /
+  // lastRead / fpNoticeKey / fpCheckPending 与跨会话锁全在 targetPage.js 里。
+  // 这里只保留轮次侧的 currentOnEvent（对外事件通道）与会话 id。
+  const ledger = createTargetPageLedger({
+    browserApi: browser,
+    readPage: readPageFromTab,
+    initialTab: deps.targetTab || null,
+  });
 
-  // 会话 pin（P2 标签页定位）：{tabId, origin, title?} 列表。
-  // pin 必须带 origin——Chrome 会复用已关闭 tab 的 id，裸信 tabId 会操作到
-  // 复用后的陌生页面。pin 在会话内持续存在，首轮 send 自动捕获、
-  // open_url/用户选择追加，删除会话即清空。
-  let pins = [];
-  let focusedTabId = null;
-  // 同一条 notice 不逐条重复刷：只在内容变化时再次注入
-  let lastNoticeKey = '';
-  // 模型最后一次 read_page 看到的页面指纹（{tabId, fingerprint}）。
-  // 只有它非空才说明「模型的结论依赖过某个页面状态」，才有比对的必要。
-  let lastRead = null;
-  // 指纹比对结果的去重键：页面变了提示一次，模型没重读不逐轮重复刷
-  let fpNoticeKey = '';
-  // 每轮 send 开头做一次轻量 probe（advisory，不进 prompt，每轮最多一次）
-  let fpCheckPending = false;
   // 当前这轮的对外事件通道，focus_tab 等工具改目标页时用它同步 UI
   let currentOnEvent = null;
-  const lockId = `rt_${(runtimeSeq += 1)}`;
 
   const toolCtx = {
     readPage: async (params) => {
-      const res = await readPageFromTab(targetTab, params);
-      // 记住模型最后一次真正看到的页面指纹（按 tabId 记，切页不串味）。
-      // 下一轮 send 开头拿它和一次轻量 probe 比，变了才提示重读（设计稿 §6.4）。
-      if (res && typeof res === 'object' && res.fingerprint && targetTab)
-        lastRead = { tabId: targetTab.id, fingerprint: res.fingerprint };
+      const res = await readPageFromTab(ledger.current(), params);
+      // 基线指纹记进账本（按 tabId 记，切页不串味）—— 判定在账本内
+      ledger.recordRead(res);
       return res;
     },
     findText: (params) =>
-      readPageFromTab(targetTab, { op: 'find-text', frame: 'top', ...params }),
+      readPageFromTab(ledger.current(), {
+        op: 'find-text',
+        frame: 'top',
+        ...params,
+      }),
     getVariables,
     getBlockSchema,
     // read_skill 工具（T-81b）的查找实现：缺省读 configIO 里的技能库。
@@ -341,108 +312,32 @@ export function createAgentRuntime(deps) {
     sendMessage: toBackground,
     // 工具执行时读到的是「这一刻」的目标页：getter 每次求值 —— adapter 每次
     // execute 都重新 spread（tools/adapter.js），工具拿到的就是本步执行时刻的
-    // 快照。setTargetTab 只改闭包变量，不再需要手动回写 toolCtx（T-133）。
+    // 快照。活值底座是账本的 current()/getPins()（T-224）。
     get targetTab() {
-      return targetTab;
+      return ledger.current();
     },
 
     // —— P2 标签页定位（tabs.js 工具用）——
-    // getter：focus_tab 改的是内部数组，工具要读到最新值
+    // getter：focus_tab 改的是账本内部数组，工具要读到最新值
     get pins() {
-      return pins;
+      return ledger.getPins();
     },
     listTabs: () => listTargetableTabs(browser),
     getTab: (id) => browser.tabs.get(id),
     /** 开新页（不抢焦点）。tabs.create 在扩展页可直接调，不用过 background。 */
     createTab: (url) => browser.tabs.create({ url, active: false }),
-    /** 追加 pin（按 tabId 去重）。 */
-    addPin: async (pin) => {
-      pins = upsertPin(pins, pin);
-      focusedTabId = pin.tabId;
-    },
+    /** 追加 pin（按 tabId 去重）并设焦点 —— 账本的动作。 */
+    addPin: (pin) => ledger.addPin(pin),
   };
 
-  const setTargetTab = (tab) => {
-    targetTab = tab;
-
-    return targetTab;
-  };
-
-  // focusTab 依赖 setTargetTab，在其定义之后挂到 ctx 上。
-  // 切换焦点：刷新快照（标题/URL 可能已变）+ 记焦点 + 通知 UI。
+  // focusTab：账本只负责换目标（无副作用出口，T-224）；
+  // UI 同步事件由这里发 —— 轮内通道开着才发，时序与重构前一致。
   toolCtx.focusTab = async (tabId) => {
-    const fresh = normalize(await browser.tabs.get(tabId));
-    setTargetTab(fresh);
-    focusedTabId = tabId;
+    const fresh = await ledger.focusTab(tabId);
     if (currentOnEvent) {
       currentOnEvent({ kind: AGENT_EVENTS.TARGET_TAB, tab: fresh });
     }
     return fresh;
-  };
-
-  /**
-   * 每步预检（advisory，由 loop 在每步开头调用）：
-   *   - 焦点 tab 被关 → 通知模型
-   *   - origin 与 pin 记录不一致（用户导航/重定向）→ 通知模型，由它决定去留
-   * 顺带把快照刷新成「这一刻」的 url/title。
-   */
-  const preStepNotice = async () => {
-    if (!targetTab || typeof targetTab.id !== 'number') return null;
-
-    let tab;
-    try {
-      tab = await browser.tabs.get(targetTab.id);
-    } catch {
-      return tabClosedNotice(targetTab.id);
-    }
-
-    setTargetTab(normalize(tab));
-
-    const pin = pins.find((p) => p.tabId === tab.id);
-    const expected = pin ? pin.origin : '';
-    const actual = originOf(tab.url);
-
-    const drift = originDriftNotice({
-      expected,
-      actual,
-      url: tab.url,
-    });
-    if (drift) {
-      const key = originDriftKey(expected, actual);
-      if (key === lastNoticeKey) return null;
-      lastNoticeKey = key;
-      return drift;
-    }
-
-    // 指纹比对（设计稿 §6.4）：advisory，runtime 不替模型决定读不读。
-    // 每轮最多一次 probe；模型从没读过页就没有基线，跳过省一次 content 往返。
-    if (fpCheckPending) {
-      fpCheckPending = false;
-
-      if (lastRead && lastRead.tabId === tab.id) {
-        const res = await readPageFromTab(targetTab, {
-          detail: 'probe',
-          frame: 'top',
-        });
-        const fp = res && typeof res === 'object' ? res.fingerprint : null;
-
-        if (fp && fp !== lastRead.fingerprint) {
-          const notice = fingerprintChangedNotice({
-            before: lastRead.fingerprint,
-            after: fp,
-          });
-          if (notice) {
-            const key = fingerprintKey(lastRead.fingerprint, fp);
-            if (key !== fpNoticeKey) {
-              fpNoticeKey = key;
-              return notice;
-            }
-          }
-        }
-      }
-    }
-
-    return null;
   };
 
   // 在途的 agent 实例（send 期间可被 abort() 中止）
@@ -460,7 +355,8 @@ export function createAgentRuntime(deps) {
   /**
    * page 组写类工具（test_js / highlight_selector）加跨会话锁检查：
    * 目标 tab 被另一个 runtime 的在途会话占住时直接返回 error 观察值，
-   * 模型能据此等待或换页。锁的登记/释放都在 send 的窗口里做。
+   * 模型能据此等待或换页。锁的登记/释放都在 send 的窗口里做（账本持有锁表，
+   * 判定走 isLockedByOther —— T-224）。
    */
   const guardedTools = TOOLS.map((tool) => {
     if (tool.group !== 'page' || tool.class !== 'write') return tool;
@@ -469,14 +365,11 @@ export function createAgentRuntime(deps) {
       ...tool,
       execute: async (args, ctx) => {
         const tabId = ctx.targetTab && ctx.targetTab.id;
-        const owner = tabId != null ? tabLocks.get(tabId) : null;
 
-        if (owner && owner !== lockId) {
-          return {
-            status: 'error',
-            payload:
-              '目标页正被另一个助手会话使用。为避免两个会话互相干扰，本次写入被拒绝；请稍后再试或先和用户确认。',
-          };
+        if (ledger.isLockedByOther(tabId)) {
+          return toolError(
+            '目标页正被另一个助手会话使用。为避免两个会话互相干扰，本次写入被拒绝；请稍后再试或先和用户确认。'
+          );
         }
 
         return tool.execute(args, ctx);
@@ -522,8 +415,7 @@ export function createAgentRuntime(deps) {
       initialHistory = (rec && rec.events) || [];
       createdAt = rec && rec.createdAt;
       // 恢复本会话的 pin；首次 send 的捕获在拿到 targetTab 之后做
-      pins = (rec && rec.pins) || [];
-      focusedTabId = (rec && rec.focusedTabId) || null;
+      ledger.restoreFromRecord(rec && rec.pins, rec && rec.focusedTabId);
       usageBefore = (rec && rec.usage) || usageBefore;
     }
 
@@ -533,17 +425,9 @@ export function createAgentRuntime(deps) {
       currentSessionId = createSessionId();
     }
 
-    // pin 的首轮自动捕获（id<0 是浏览器会话恢复/分离页的假 tab，不能当 pin）
-    const initial = initialPinsFromTab(pins, targetTab, originOf);
-    if (initial) {
-      pins = initial;
-      focusedTabId = targetTab.id;
-    }
-
-    // 在途锁：本轮期间占住全部 pin，别让另一个面板会话把页从脚底下抽走
-    pins.forEach((p) => {
-      if (!tabLocks.has(p.tabId)) tabLocks.set(p.tabId, lockId);
-    });
+    // pin 的首轮自动捕获 + 在途锁（顺序敏感：捕获在恢复之后、锁登记之前）
+    ledger.captureInitialPin();
+    ledger.acquireLocks();
 
     // 按宿主声明过滤工具组：page/context/tab 通用，canvas 只在有画布的宿主启用
     // enabledGroups 支持数组或 () => 数组（T-135/T-84）：函数形式每次 send
@@ -555,10 +439,7 @@ export function createAgentRuntime(deps) {
       ? guardedTools.filter((t) => groups.includes(t.group))
       : guardedTools;
 
-    lastNoticeKey = '';
-    // 只有模型读过页才值得花一次 probe 去比指纹（没有基线就无从比起）。
-    // fpNoticeKey 故意不在每轮重置：页面变了提示一次，模型没重读就别逐轮刷屏。
-    fpCheckPending = Boolean(lastRead);
+    ledger.prepareTurn();
     currentOnEvent = onEvent || null;
 
     // 票 08：provider 层交给 pi。这里只把 config 翻成 pi 的 Model + streamFn，
@@ -601,7 +482,7 @@ export function createAgentRuntime(deps) {
       wrapUntrusted,
       buildUserMessage,
       requestConfirmation,
-      preStepNotice,
+      preStepNotice: () => ledger.preStepNotice(),
       // busy 期间用户补充的指令，每步开工前送达模型（P3 插话队列）
       drainInstructions: () => instructionQueue.splice(0),
       // T-76：上下文窗口驱动压缩阈值；用户在设置页按自己的模型调
@@ -620,8 +501,8 @@ export function createAgentRuntime(deps) {
           workflowId: getWorkflowId(),
           createdAt,
           events: pruneEphemeralEvents(agent.getHistory()),
-          pins,
-          focusedTabId,
+          pins: ledger.getPins(),
+          focusedTabId: ledger.getFocusedTabId(),
           usage: usageBefore,
         }),
       save: (rec) =>
@@ -651,7 +532,7 @@ export function createAgentRuntime(deps) {
       });
       const result = await agent.send({
         userText,
-        targetTab,
+        targetTab: ledger.current(),
         workflowContext,
         onEvent: onEventWithCheckpoint,
         initialHistory,
@@ -673,8 +554,8 @@ export function createAgentRuntime(deps) {
             workflowId: getWorkflowId(),
             createdAt,
             events,
-            pins,
-            focusedTabId,
+            pins: ledger.getPins(),
+            focusedTabId: ledger.getFocusedTabId(),
             usage,
           })
         );
@@ -724,54 +605,31 @@ export function createAgentRuntime(deps) {
       checkpoints.cancel();
       activeAgent = null;
       currentOnEvent = null;
-      [...tabLocks.entries()].forEach(([tabId, owner]) => {
-        if (owner === lockId) tabLocks.delete(tabId);
-      });
+      ledger.releaseLocks();
     }
   };
 
   return {
     send,
-    setTargetTab,
-    getTargetTab: () => targetTab,
+    // 目标页的读写全部委托账本（T-224）；宿主 resetTargetToAuto 走 setTargetTab
+    setTargetTab: (tab) => ledger.setTarget(tab),
+    getTargetTab: () => ledger.current(),
 
     /**
-     * 用户手动选定目标页（TabPicker）：设焦点、并入 pin。
+     * 用户手动选定目标页（TabPicker）：账本内设焦点、并入 pin。
      * 用户的意图是「以后就用这个页」，所以 pin 一起更新。
      */
     pickTab(tab) {
-      setTargetTab(tab);
-      if (tab && typeof tab.id === 'number' && tab.id >= 0) {
-        pins = [
-          ...pins.filter((p) => p.tabId !== tab.id),
-          { tabId: tab.id, origin: originOf(tab.url), title: tab.title },
-        ];
-        focusedTabId = tab.id;
-      }
-      return targetTab;
+      return ledger.pickTab(tab);
     },
 
     /**
-     * 解除固定（T-164）。
-     *
-     * 语义是「**取消固定 → 回到自动跟随**」，不是「变成无目标」——
-     * `resolveTargetTab` 永远解析得出一个目标（pinned → lastAccessed → 当前窗口
-     * → 其他窗口），「无目标」不是一个运行时支持的状态，UI 上造出它只会显示一个
-     * 假状态。所以这里只摘 pin、清焦点，targetTab 由宿主重新解析（要读 tabs API，
-     * 是异步的，不该在这里做）。
-     *
-     * 清空整份 pins 而不是只摘当前这一个：pins 里还可能躺着模型 open_url 追加的
-     * 页，只摘一个的话下一轮解析仍会命中 pins[0]，用户看到的是「按了 X 没反应」。
-     * 「回到自动跟随」这个语义本来就要求没有 pin 参与解析。
-     *
-     * @returns {boolean} 之前确实有 pin（false = 本来就是自动态，无需重解析）
+     * 解除固定（T-164）—— 账本内清空整份 pins 并回到「无 pin」态，目标页由
+     * 宿主重新解析。返回 false = 本来就是自动态，宿主可跳过重解析。
+     * 语义细节见 targetPage.js 的 unpin。
      */
     unpinTab() {
-      const had = pins.length > 0;
-      pins = [];
-      focusedTabId = null;
-
-      return had;
+      return ledger.unpin();
     },
 
     /**
@@ -783,7 +641,7 @@ export function createAgentRuntime(deps) {
      */
     async openSession(id) {
       currentSessionId = id || null;
-      lastNoticeKey = '';
+      ledger.clearNoticeDedup();
 
       if (!sessionStore || !id) {
         return {
@@ -796,8 +654,7 @@ export function createAgentRuntime(deps) {
 
       const rec = await sessionStore.load(id);
       let events = (rec && rec.events) || [];
-      pins = (rec && rec.pins) || [];
-      focusedTabId = (rec && rec.focusedTabId) || null;
+      ledger.restoreFromRecord(rec && rec.pins, rec && rec.focusedTabId);
       // 插话属于原会话的上下文，切走就丢
       instructionQueue.length = 0;
 
@@ -830,20 +687,9 @@ export function createAgentRuntime(deps) {
       }
 
       // 目标页从 pin 恢复（focus_tab 会改 focusedTabId，比扫 TARGET_TAB
-      // 事件更准）。判定收在 targetState.restoredTarget（纯函数、有单测）：
+      // 事件更准）。判定与快照回写都收在账本的 restoreTarget 里：
       // 「有 pin 无活页」返回 closed，面板据此进红色失效态（T-197）。
-      const pin = pins.find((p) => p.tabId === focusedTabId) || pins[0] || null;
-      let liveTab = null;
-      if (pin) {
-        try {
-          liveTab = normalize(await browser.tabs.get(pin.tabId));
-        } catch {
-          liveTab = null;
-        }
-      }
-
-      const restored = restoredTarget(pin, liveTab);
-      if (restored.tab) setTargetTab(restored.tab);
+      const restored = await ledger.restoreTarget();
 
       return {
         events,
@@ -857,9 +703,7 @@ export function createAgentRuntime(deps) {
     /** 开新会话：下一次 send 成功后才落盘。 */
     newSession() {
       currentSessionId = null;
-      pins = [];
-      focusedTabId = null;
-      lastNoticeKey = '';
+      ledger.resetForNewSession();
       instructionQueue.length = 0;
     },
 

@@ -11,17 +11,16 @@
  * 展开的是整个 call）。早先宿主读 `req.code`，恒为 `''`，确认卡的代码框永远是
  * 空的 —— 用户在盲批。本模块只认 `args`，顶层字段一律忽略。
  *
- * 红线（docs/adr/0002 已知欠账 / B5）：会话级授权只允许出现在 `test_js` 上。
- * workflow 写操作（add_block / update_block）永远逐次确认，`canRemember`
- * 就是那个闸；`shouldSkipConfirmation` 是它在放行路径上的同一件事。
+ * 红线（docs/adr/0002 已知欠账 / B5）：会话级授权只允许出现在声明了
+ * `rememberable` 的写类工具上（现值只有 test_js —— 资格长在工具定义里，
+ * T-226 起不再是本文件的名单）。workflow 写操作（add_block / update_block）
+ * 永远逐次确认，`canRemember` 就是那个闸；`shouldSkipConfirmation` 是它在
+ * 放行路径上的同一件事。
  *
  * 本文件是纯函数，不 import 浏览器 API，也不 import 任何 i18n ——
  * 文案由卡片按 kind 取。「危险面」的事实（kind/detail）由工具自带的
  * confirmDetail 提供（T-134），本模块负责载荷形状、归属与兜底。
  */
-
-/** 只有这一类工具允许「本会话不再问」。workflow 写操作永远不在其列。 */
-const REMEMBERABLE_TOOLS = ['test_js'];
 
 function asObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -70,14 +69,20 @@ export function joinLines(...parts) {
 }
 
 /**
- * 这个工具能不能给「本会话允许试跑代码」。
+ * 确认卡 kind 的登记表（T-226）：kind → scope，同时就是**合法 kind 的全集**。
  *
- * @param {string} name
- * @returns {boolean}
+ * 卡片的标题/提示文案按 kind 分支（视图层知识，AgentConfirmCard.vue +
+ * 各语言包），scope 按这张表定。写类工具的 confirmDetail 返回的 kind 必须
+ * 在表内 —— validateTools 装配期校验，拼错的 kind 不再静默降级成 generic 卡。
+ * 新增 kind：在此登记 + 卡片加分支 + 语言包补键，三处都动才算数。
  */
-export function canRememberSession(name) {
-  return REMEMBERABLE_TOOLS.indexOf(name) !== -1;
-}
+export const CONFIRM_KINDS = {
+  code: 'local',
+  selector: 'browser',
+  url: 'browser',
+  canvas: 'local',
+  generic: 'local',
+};
 
 /**
  * 这次确认的**作用域**：后果落在哪儿。
@@ -90,21 +95,15 @@ export function canRememberSession(name) {
  *   browser = 描边高亮 / 开个标签页 —— 后果在浏览器窗口内，随时可撤销
  *
  * 为什么放进纯函数而不是写在卡片里：.vue 里的分支一条都测不到（T-26），
- * 而这个判定决定「用户一眼看到的是哪种卡」。未知 kind 按 local 处理 ——
- * 危险面不清楚时按重的那一档显示，与 validateTools 的保守方向一致。
+ * 而这个判定决定「用户一眼看到的是哪种卡」。未知 kind 理论上进不到这里
+ * （validateTools 装配期已拦），回落 local 只是不信任运行期输入的最后一道
+ * 防线 —— 危险面不清楚时按重的那一档显示。
  *
  * @param {string} kind buildConfirmation 产出的 kind
  * @returns {'local'|'browser'}
  */
 export function confirmScope(kind) {
-  switch (kind) {
-    case 'selector':
-    case 'url':
-      return 'browser';
-    default:
-      // code / canvas / generic 与任何将来新增的未知 kind
-      return 'local';
-  }
+  return CONFIRM_KINDS[kind] || 'local';
 }
 
 /**
@@ -138,7 +137,9 @@ export function buildConfirmation(req, options = {}) {
     kind: 'generic',
     action: '',
     targetTitle,
-    canRemember: canRememberSession(name),
+    // T-226：资格长在工具定义上（rememberable），不再查本文件的名单。
+    // 工具的 confirmDetail 依然不得覆盖这一位（下方归属钉死）。
+    canRemember: Boolean(tool && tool.rememberable === true),
     lines: 0,
     blockId: '',
     nodeId: '',
@@ -191,31 +192,32 @@ export function normalizeAnswer(answer) {
 /**
  * 这次调用要不要跳过确认卡。
  *
- * 只有 `test_js` 且本会话授权仍在时为 true。workflow 写操作无论授权状态如何
- * 都必须逐次问（docs/adr/0002：会话授权不扩大到 workflow 写操作）。
+ * 只有声明了 `rememberable` 的写类工具（现值 test_js）且本会话授权仍在时
+ * 为 true。workflow 写操作无论授权状态如何都必须逐次问
+ * （docs/adr/0002：会话授权不扩大到 workflow 写操作）。
  *
- * @param {string} name
+ * @param {boolean} rememberable 该工具声明了会话授权资格（req.tool.rememberable）
  * @param {boolean} sessionAuth 本会话授权是否有效
  * @returns {boolean}
  */
-export function shouldSkipConfirmation(name, sessionAuth) {
-  return Boolean(sessionAuth) && canRememberSession(name);
+export function shouldSkipConfirmation(rememberable, sessionAuth) {
+  return Boolean(sessionAuth) && rememberable === true;
 }
 
 /**
  * 下一次的会话授权状态。
  *
- * 授权只增不减：`test_js` 勾选并批准即置真；别的工具的答案（批准或拒绝）
+ * 授权只增不减：可记授权的工具勾选并批准即置真；别的工具的答案（批准或拒绝）
  * 不撤销它 —— 撤销的入口是 abort / 切会话 / 面板卸载，见 agentHost。
  *
  * @param {boolean} current
- * @param {string} name
+ * @param {boolean} rememberable 该工具声明了会话授权资格
  * @param {*} answer
  * @returns {boolean}
  */
-export function nextSessionAuth(current, name, answer) {
+export function nextSessionAuth(current, rememberable, answer) {
   if (current) return true;
-  if (!canRememberSession(name)) return false;
+  if (rememberable !== true) return false;
 
   const normalized = normalizeAnswer(answer);
 
@@ -244,6 +246,9 @@ export function createSessionAuth(deps = {}) {
   const buildPayload = deps.buildPayload || ((req) => req);
   let authorized = false;
   let pending = null;
+  // 当前挂起这次确认的授权资格（从 req.tool.rememberable 算出）。
+  // 不读 pending 的形状 —— buildPayload 可能透传也可能重整，闭包自记最稳。
+  let pendingRememberable = false;
 
   return {
     get pending() {
@@ -254,16 +259,20 @@ export function createSessionAuth(deps = {}) {
     },
 
     /**
-     * 发起一次确认。已授权的 test_js 直接放行（B5：只有它能记住会话授权），
-     * 其余挂起并返回 `{ skip: false }`，载荷从 pending 取。
+     * 发起一次确认。已授权的可记授权工具直接放行（B5：资格长在工具定义上，
+     * 经 req.tool.rememberable 传入 —— T-226），其余挂起并返回
+     * `{ skip: false }`，载荷从 pending 取。
      *
-     * @param {{name: string, args: Object}} req
+     * @param {{name: string, args: Object, tool?: Object}} req
      * @returns {{skip: boolean}}
      */
     ask(req) {
-      if (shouldSkipConfirmation(req && req.name, authorized)) {
+      const rememberable = req && req.tool && req.tool.rememberable === true;
+
+      if (shouldSkipConfirmation(rememberable, authorized)) {
         return { skip: true };
       }
+      pendingRememberable = rememberable;
       pending = buildPayload(req);
       return { skip: false };
     },
@@ -278,8 +287,11 @@ export function createSessionAuth(deps = {}) {
     answer(answer) {
       if (!pending) return null;
       const normalized = normalizeAnswer(answer);
-      authorized = nextSessionAuth(authorized, pending.name, normalized);
+      // 授权资格是 ask 时记下的（工具定义的 rememberable）：挂起的这次确认
+      // 是哪个工具的，答案就按它的资格记。
+      authorized = nextSessionAuth(authorized, pendingRememberable, normalized);
       pending = null;
+      pendingRememberable = false;
       return { approved: normalized.approved };
     },
 

@@ -134,7 +134,6 @@ describe('createAgentRuntime', () => {
   });
 
   test('T-164：unpinTab 清的是 pin，不是目标页 —— 解除固定后仍解析得出一页', () => {
-    const src = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
     const rt = createAgentRuntime(deps());
 
     rt.pickTab({ id: 7, url: 'https://a.com/x', title: 'A' });
@@ -156,17 +155,9 @@ describe('createAgentRuntime', () => {
       '本来就是自动态时返回 false —— 宿主据此跳过一次不会改变结果的多余 tabs 查询'
     );
 
-    // 「清空整份 pins」只能靠源码钉：runtime 不对外暴露 pins（getter 挂在
-    // toolCtx 上），而**只摘当前一个**正是要防的写法 —— pins 里还可能躺着
-    // open_url 追加的页，留一个的话下一轮 resolveTarget 仍会命中它，
-    // 用户看到的是「按了 X 没反应」。
-    const at = src.indexOf('unpinTab()');
-    assert.ok(at > 0, 'index.js 里要有 unpinTab');
-    assert.match(
-      src.slice(at, at + 400),
-      /pins = \[\]/,
-      'unpinTab 必须清空整份 pins，而不是只摘当前这一个'
-    );
+    // 「清空整份 pins」的行为断言在 targetPage.test.js（T-224 起 unpin 的
+    // 实现收在账本里，账本有直接行为测试 —— 原先只能靠源码正则钉的这段
+    // 守卫随之退役）。
   });
 
   test('T-66：坏地址必须在 apiKey 检查之后、buildModel 之前拦住', async () => {
@@ -706,7 +697,7 @@ describe('lookupBlockSchema —— 块目录查询（T-32）', () => {
     );
 
     assert.match(
-      broken,
+      broken.payload,
       /没接上线/,
       '空目录要说人话，不能渲染成「一个都没有」'
     );
@@ -717,7 +708,7 @@ describe('lookupBlockSchema —— 块目录查询（T-32）', () => {
       { getBlockSchema: async () => null }
     );
 
-    assert.match(legacyNull, /一个都没有/);
+    assert.match(legacyNull.payload, /一个都没有/);
   });
 
   test('工具走真实现端到端：javascript-code 返回字段清单', async () => {
@@ -728,8 +719,8 @@ describe('lookupBlockSchema —— 块目录查询（T-32）', () => {
       { getBlockSchema: lookupBlockSchema }
     );
 
-    assert.match(out, /## JavaScript code/);
-    assert.match(out, /code/, '字段清单里必须出现 code');
+    assert.match(out.payload, /## JavaScript code/);
+    assert.match(out.payload, /code/, '字段清单里必须出现 code');
   });
 });
 

@@ -17,7 +17,17 @@
 
 import { TOOL_STATUS, wrapObservation } from '../events';
 import { raceTimeout } from '../agentEvalInPage';
+import { toolError } from './define';
 import { validateTools } from './index';
+
+/** 信封 status 的合法值（T-226）：不在此列的一律按失败处理，不再当成功。 */
+const ENVELOPE_STATUSES = [
+  TOOL_STATUS.OK,
+  TOOL_STATUS.ERROR,
+  TOOL_STATUS.REJECTED,
+];
+
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 /**
  * 工具返回值 → pi 的 AgentToolResult。
@@ -42,11 +52,8 @@ import { validateTools } from './index';
 export function toToolResult(raw, opts = {}) {
   const wrapTag = opts.tag || 'untrusted_tool_result';
 
-  const isEnvelope =
-    raw &&
-    typeof raw === 'object' &&
-    !Array.isArray(raw) &&
-    Object.prototype.hasOwnProperty.call(raw, 'payload');
+  const isObject = raw && typeof raw === 'object' && !Array.isArray(raw);
+  const isEnvelope = isObject && hasOwn(raw, 'payload');
 
   let body;
   let details = {};
@@ -54,7 +61,15 @@ export function toToolResult(raw, opts = {}) {
   // 信封可带 maxChars 覆盖观察值预算（read_skill 用，其余工具走 8K 默认）
   let observationMaxChars;
 
-  if (!isEnvelope) {
+  if (isObject && !isEnvelope && hasOwn(raw, 'error')) {
+    // T-226 错形信封：{error: 'x'} 不是契约形状（想写的多半是 toolError）。
+    // 改造前它走裸值路径 JSON 化 + isError:false —— 失败被降级成
+    // 「成功的废话」，模型会拿错误文本当数据用。现在按失败处理并点名病灶。
+    failed = true;
+    body =
+      `工具未成功执行：${String(raw.error)} ` +
+      '（观察值形状错误：只有 error 键的信封不是契约，工具应用 toolError() 返回）';
+  } else if (!isEnvelope) {
     // 裸值：字符串直接给，别的 JSON 化。
     // ⚠️ 空字符串也要产出**一个**内容块：pi 把空 content 兜成
     // `"(no tool output)"`，那会把「工具确实返回了空」变成「工具没说话」。
@@ -63,15 +78,38 @@ export function toToolResult(raw, opts = {}) {
     else body = JSON.stringify(raw ?? null, null, 2);
   } else {
     const { payload, status, maxChars, ...meta } = raw;
-    failed = status === TOOL_STATUS.ERROR || status === TOOL_STATUS.REJECTED;
+    // T-226 硬化：status 缺省（{payload, maxChars} 的合法省略）与 'ok' 是
+    // 成功；error/rejected 是失败；**其余任何值都不再当成功** —— 原先
+    // `{status:'failure'}` 会静默变成成功观察值。
+    if (status === undefined || status === TOOL_STATUS.OK) {
+      failed = false;
+    } else if (
+      status === TOOL_STATUS.ERROR ||
+      status === TOOL_STATUS.REJECTED
+    ) {
+      failed = true;
+    } else {
+      failed = true;
+      details.status = status;
+    }
     // meta 上提到 details：观察值文本可能被陈旧快照剔除换成占位符，
     // runtime 判断页面变没变只能读结构化字段，不能读文本。
     // maxChars 单独拎出来 —— 它是观察值预算的覆盖（如 read_skill 的 32K），
     // 混进 details 会变成一个没人读的暗字段。
-    details = meta;
-    if (failed) body = `工具未成功执行：${payload ?? '未知原因'}`;
-    else if (typeof payload === 'string') body = payload;
-    else body = JSON.stringify(payload ?? null, null, 2);
+    details = { ...details, ...meta };
+    if (failed && details.status !== undefined) {
+      body = `工具未成功执行（status「${status}」不是合法值，只认 ${ENVELOPE_STATUSES.join(
+        '/'
+      )}）：${payload ?? '未知原因'}`;
+      // 原状态已进正文与 details，details 里不再重复一份
+      delete details.status;
+    } else if (failed) {
+      body = `工具未成功执行：${payload ?? '未知原因'}`;
+    } else if (typeof payload === 'string') {
+      body = payload;
+    } else {
+      body = JSON.stringify(payload ?? null, null, 2);
+    }
 
     observationMaxChars = maxChars;
   }
@@ -187,20 +225,16 @@ export function toAgentTools(tools, deps = {}) {
             // 超时返回 error 观察值（不是 reject），loop 照常收尾并把这条写
             // 进历史——与通道层超时（index.js toBackground / readPageFromTab）
             // 的语义对齐：拿不到结果 ≠ 通道坏了。
-            {
-              status: TOOL_STATUS.ERROR,
-              payload: `工具执行超过 ${toolTimeoutMs}ms 未返回。停止对当前会话的下一步推断，改用 read_block / read_page 等只读工具看一眼状态再继续。`,
-            }
+            toolError(
+              `工具执行超过 ${toolTimeoutMs}ms 未返回。停止对当前会话的下一步推断，改用 read_block / read_page 等只读工具看一眼状态再继续。`
+            )
           ),
           { tag }
         );
       } catch (err) {
         // 工具抛错不终止循环（技术方案 §4.1「错误即观察值」）。
         // 这里返回 isError 而不重抛 —— 重抛会让 pi 把整个 run 打断。
-        return toToolResult(
-          { status: TOOL_STATUS.ERROR, payload: err.message },
-          { tag }
-        );
+        return toToolResult(toolError(err.message), { tag });
       }
     },
   }));

@@ -23,6 +23,7 @@ import {
 } from './canvas';
 import { listTabsTool, focusTabTool, openUrlTool } from './tabs';
 import { TOOL_CLASSES, defineTool } from './define';
+import { CONFIRM_KINDS } from '../confirm';
 
 /**
  * 所有允许的工具分类。新增分类必须同时想清楚「需不需要用户确认」。
@@ -31,6 +32,8 @@ import { TOOL_CLASSES, defineTool } from './define';
  * 反过来 import `defineTool` 会与本文件成环。
  */
 export { TOOL_CLASSES, defineTool } from './define';
+// T-226：装配层（src/agent/index.js 的跨会话锁守卫）也产信封，走同一出口。
+export { toolOk, toolError } from './define';
 
 /** highlightSelector 只是纯函数，这里补上工具外壳。 */
 export const highlightSelectorTool = defineTool({
@@ -170,6 +173,41 @@ export function validateTools(tools) {
           ' 是 write 类但缺少 confirmDetail(args)。' +
           '确认卡要展示用户到底在放行什么，这段事实必须由工具自带。'
       );
+    }
+
+    // T-226：read 工具不许声明 rememberable（defineTool 也查，这里是
+    // 装配期的第二道闸 —— 手写的工具定义对象不经 defineTool 也能被拦）。
+    if (tool.rememberable === true && tool.class !== 'write') {
+      throw new Error(
+        '工具 ' +
+          tool.name +
+          ' 是 ' +
+          tool.class +
+          ' 类却声明了 rememberable。会话授权只对要过确认门的 write 工具有意义。'
+      );
+    }
+
+    // T-226：write 工具的 confirmDetail 必须报一个**登记过的 kind**。
+    // 卡片的标题/提示按 kind 分支（视图层），scope 按登记表定 —— kind 拼错
+    // 的旧表现是静默降级成 generic 卡，现在装配期就红。
+    if (tool.class === 'write') {
+      let kind;
+      try {
+        kind = tool.confirmDetail({}).kind;
+      } catch {
+        kind = undefined;
+      }
+      if (!kind || !(kind in CONFIRM_KINDS)) {
+        throw new Error(
+          '工具 ' +
+            tool.name +
+            ' 的 confirmDetail 返回了未登记的 kind：' +
+            String(kind) +
+            '。合法值：' +
+            Object.keys(CONFIRM_KINDS).join(' / ') +
+            '。拼错的 kind 会让确认卡静默降级成 generic。'
+        );
+      }
     }
   });
 

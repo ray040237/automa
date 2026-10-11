@@ -319,10 +319,10 @@ test('get_variables 渲染出变量与全局变量', async () => {
     }),
   };
   const out = await getVariables.execute({}, ctx);
-  assert.ok(out.includes('- kw = "selenium"'));
-  assert.ok(out.includes('- n = 3'));
-  assert.ok(out.includes('- site = "e.com"'));
-  assert.ok(out.includes('当前工作流 id: wf-1'));
+  assert.ok(out.payload.includes('- kw = "selenium"'));
+  assert.ok(out.payload.includes('- n = 3'));
+  assert.ok(out.payload.includes('- site = "e.com"'));
+  assert.ok(out.payload.includes('当前工作流 id: wf-1'));
 });
 
 test('T-50：未绑定工作流时说的是「没有工作流可读」，不是「变量为空」', async () => {
@@ -333,9 +333,15 @@ test('T-50：未绑定工作流时说的是「没有工作流可读」，不是�
     { getVariables: async () => ({ bound: false }) }
   );
 
-  assert.ok(out.includes('未绑定工作流'), out);
-  assert.ok(!out.includes('（空）'), '未绑定绝不能渲染成「（空）」：' + out);
-  assert.ok(!out.includes('工作流变量:'), '未绑定时不列变量段：' + out);
+  assert.ok(out.payload.includes('未绑定工作流'), out.payload);
+  assert.ok(
+    !out.payload.includes('（空）'),
+    '未绑定绝不能渲染成「（空）」：' + out.payload
+  );
+  assert.ok(
+    !out.payload.includes('工作流变量:'),
+    '未绑定时不列变量段：' + out.payload
+  );
 });
 
 test('T-50：getVariables 返回 undefined 也不炸，且按未绑定处理', async () => {
@@ -343,7 +349,7 @@ test('T-50：getVariables 返回 undefined 也不炸，且按未绑定处理', a
     {},
     { getVariables: async () => undefined }
   );
-  assert.ok(out.includes('未绑定工作流'), out);
+  assert.ok(out.payload.includes('未绑定工作流'), out.payload);
 });
 test('T-113：每行变量都带类型标注（string/number/array/null/…）', async () => {
   // description 承诺「含值与类型」，实现曾经只打印值。Automa 模板里字符串要引号、
@@ -365,21 +371,24 @@ test('T-113：每行变量都带类型标注（string/number/array/null/…）',
     }
   );
 
-  assert.ok(out.includes('- username = "alice"（string）'), out);
-  assert.ok(out.includes('- retries = 3（number）'), out);
+  assert.ok(
+    out.payload.includes('- username = "alice"（string）'),
+    out.payload
+  );
+  assert.ok(out.payload.includes('- retries = 3（number）'), out.payload);
   // typeof 对数组/null 都只说 object，标注必须把它们分开
-  assert.ok(out.includes('- tags = ["a"]（array）'), out);
-  assert.ok(out.includes('- nothing = null（null）'), out);
-  assert.ok(out.includes('- site = "e.com"（string）'), out);
+  assert.ok(out.payload.includes('- tags = ["a"]（array）'), out.payload);
+  assert.ok(out.payload.includes('- nothing = null（null）'), out.payload);
+  assert.ok(out.payload.includes('- site = "e.com"（string）'), out.payload);
 });
 test('get_variables 空值不炸，且明确标出是空的', async () => {
   const out = await getVariables.execute(
     {},
     { getVariables: async () => ({}) }
   );
-  assert.ok(out.includes('工作流变量:'));
-  assert.ok(out.includes('（空）'));
-  assert.ok(out.includes('全局变量:'));
+  assert.ok(out.payload.includes('工作流变量:'));
+  assert.ok(out.payload.includes('（空）'));
+  assert.ok(out.payload.includes('全局变量:'));
 });
 
 test('get_block_schema 命中时要给出字段清单 —— 只给名字模型没法填 data', async () => {
@@ -396,11 +405,11 @@ test('get_block_schema 命中时要给出字段清单 —— 只给名字模型�
 
   const out = await getBlockSchema.execute({ name: 'JavaScript' }, ctx);
 
-  assert.match(out, /JavaScript/, '要有块名');
-  assert.match(out, /javascript-code/, '要给出块 id，add_block 靠它');
-  assert.match(out, /code/, '必须列出字段，否则模型只能瞎猜 data');
-  assert.match(out, /timeout/);
-  assert.match(out, /variable/, '可用的数据引用也要给');
+  assert.match(out.payload, /JavaScript/, '要有块名');
+  assert.match(out.payload, /javascript-code/, '要给出块 id，add_block 靠它');
+  assert.match(out.payload, /code/, '必须列出字段，否则模型只能瞎猜 data');
+  assert.match(out.payload, /timeout/);
+  assert.match(out.payload, /variable/, '可用的数据引用也要给');
 });
 
 test('get_block_schema 的清单模式同时给 id 和块名', async () => {
@@ -411,8 +420,8 @@ test('get_block_schema 的清单模式同时给 id 和块名', async () => {
 
   const out = await getBlockSchema.execute({ name: '查不到的块' }, ctx);
 
-  assert.match(out, /javascript-code/);
-  assert.match(out, /JavaScript/);
+  assert.match(out.payload, /javascript-code/);
+  assert.match(out.payload, /JavaScript/);
 });
 
 test('get_block_schema 猜错块名时列出全部可用块名，不做模糊匹配', async () => {
@@ -427,11 +436,11 @@ test('get_block_schema 猜错块名时列出全部可用块名，不做模糊匹
   };
   const out = await getBlockSchema.execute({ name: 'serch-query' }, ctx);
 
-  assert.match(out, /没有名为 serch-query 的块/);
+  assert.match(out.payload, /没有名为 serch-query 的块/);
   // id 是 add_block 真正要用的，必须列出来
-  assert.match(out, /search-query/);
-  assert.match(out, /javascript-code/);
-  assert.match(out, /Search Query/, '块名也要给');
+  assert.match(out.payload, /search-query/);
+  assert.match(out.payload, /javascript-code/);
+  assert.match(out.payload, /Search Query/, '块名也要给');
 });
 
 test('get_block_schema 缺参数时给出可操作的提示', async () => {
@@ -439,7 +448,7 @@ test('get_block_schema 缺参数时给出可操作的提示', async () => {
     {},
     { getBlockSchema: async () => null }
   );
-  assert.equal(out, '请提供块名。');
+  assert.equal(out.payload, '请提供块名。');
 });
 
 test('required 字段在 wire 上保留', () => {
@@ -478,4 +487,44 @@ test('query_elements 不被当成写操作：它只查询，不改页面', () =>
 
   assert.equal(t.class, 'read');
   assert.equal(requiresConfirmation(t.name, TOOLS), false);
+});
+
+/* ---------------- T-226：元数据回巢的两道装配期闸 ---------------- */
+
+test('T-226：write 工具的 confirmDetail 报未登记 kind，装配期红（不再静默 generic 卡）', () => {
+  const typo = ok({
+    class: 'write',
+    confirmDetail: () => ({ kind: 'codee', detail: 'x' }),
+  });
+
+  assert.throws(
+    () => validateTools([typo]),
+    /未登记的 kind：codee/,
+    'kind 拼错的旧表现是确认卡静默降级成 generic —— 现在必须炸出来'
+  );
+});
+
+test('T-226：read 工具声明 rememberable 装配期红（会话授权只对写类工具有意义）', () => {
+  const greedy = ok({ class: 'read', rememberable: true });
+
+  assert.throws(
+    () => validateTools([greedy]),
+    /rememberable/,
+    'read 工具不过确认门，无从授权 —— 声明了就是装配期缺陷'
+  );
+  // defineTool 在定义期也拦同一件事（写法漂移第一道闸）
+  assert.throws(
+    () =>
+      defineTool({
+        name: 'x',
+        class: 'read',
+        group: 'page',
+        description: 'd',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => {},
+        ctx: [],
+        rememberable: true,
+      }),
+    /rememberable/
+  );
 });

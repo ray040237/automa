@@ -29,6 +29,36 @@
 
 ### bug（先审，多数可快速定夺）
 
+## T-225 — `read_page` 把「没有目标页」的裸字符串提示当成功观察值发给模型（isError 为假）
+
+登记日期：2026-10-11
+来源：2026-10-11 会话工具 envelope 架构评审（候选 2 的探索 agent 事实清单发现，调用链与两侧源码位置明确，本人未逐行复核执行时序）
+现象：`browserAdapter.js:137` 在没有目标页时返回**裸字符串** `'没有确定目标页。请先让用户选一个标签页。'`；`page.js` 的 `read_page` execute 把 `ctx.readPage` 的返回值原样包成 `{payload: res}`（`page.js:153` 一带）——按 adapter 的信封判定这是成功观察值，`isError: false`。模型收到的是「读页成功」+ 正文一句缺目标页的提示。同类：`get_block_schema` 的「块目录为空」分支（`page.js:326-329`）也是语义错误、成功字符串形态。
+证据：**源码核对** —— `browserAdapter.js:137`（裸字符串返回）、`page.js:140/153`（`{payload: res}` 包装）、`adapter.js:42-97`（裸字符串直通 → isError:false）；`{error:'x'}` 错形信封走裸值路径变成功观察值的事实同源（`adapter.js:45-49` 只认 own `payload` 键，无测试钉住该路径）。
+影响：语义失真但不完全静默——正文有提示文字，模型多数时候能自纠；坏处是确认门判定、错误统计、UI 工具卡（按 isError 分流）都把这次读页当成功。修它要动 browserAdapter 的返回契约（`{ok:false,error}` 化），牵连 targetPage.js 的指纹 probe 链路（probe 依赖 `{fingerprint}` 形状），不宜在 envelope 收口票里顺带。
+建议：单独小票——`readPageFromTab` 缺目标页改返回 `{ok:false, error}` 人话形状（与通道超时兜底同族），`read_page`/`find_text`/probe 三处消费点同步适配，测试钉「缺目标页 ⇒ isError 观察值」。
+状态：待审核
+
+## T-222 — 上下文水位环把「全session累计计费输入」当「当前上下文占用」用，多轮会话水位虚高
+
+登记日期：2026-10-11
+来源：2026-10-11 会话按 improve-codebase-architecture 流程架构评审 `src/agent/`，探索 agent 报告后由本人复核源码坐实；触发点 `src/agent/usage.js:43-52`
+现象：会话下拉的上下文水位环（`AgentContextRing.vue`）调用 `contextPercent(usage, contextWindow)`，分子取 `usage.input`。但 `usage.input` 在链路上是**跨轮累加的计费输入总量**：`loop.js:578-588` 的 `harvestUsage` 把每条 assistant 消息的 `usage.input`（那是**单次请求的 prompt 尺寸**）逐条累加，`index.js:666` 的 `accumulateUsage(usageBefore, result.usage)` 再把上一轮的累计值加上——多轮会话里它是单调递增的总和，不是「当前上下文有多大」。
+证据：**源码复核** —— `usage.js:50` `const used = Number(usage.input)`；`loop.js:578-588` 逐条累加并注释「多请求轮的 usage 是累加值」；`index.js:527` `usageBefore = rec.usage`（跨轮恢复累计值）+ `index.js:666` 累加。而 `compaction.js:153-208` 已有一段实测依据的完整论述说明为什么裸 `usage.input` 不是当前上下文尺寸（pi 的 input 不含 cacheRead/cacheWrite；跨请求求和是各次 prompt 尺寸之和），并为此实现了 `measuredContextTokens`——但 UI 没用它。
+影响：多轮会话水位环单调虚高（10 轮后可能显示 300%+ 的假水位），缓存命中多的会话又偏低；80/95 两档告警阈值在错误分子上触发。纯 UI 误报，不影响模型侧压缩判断（压缩用 `measuredContextTokens`，是对的）。
+建议：loop 已算出正确的 `measuredContextTokens`（`runCompaction` 内），把它带在 DONE 事件上（如 `doneEv.contextTokens`），UI 消费它而不是从计费总量反推语义。若产品本意就是「花量仪表」而非「水位」，则改 UI 文案与注释，别叫水位。
+状态：待审核
+
+## T-223 — `hasInterruptedTail` 以「最后一条 DONE」为扫描锚点，但 DONE 永不入史，锚点是死的
+
+登记日期：2026-10-11
+来源：2026-10-11 会话架构评审 `src/agent/`，探索 agent 报告后由本人复核源码坐实；触发点 `src/agent/sessions.js:118-135`
+现象：`hasInterruptedTail(events)` 从「事件历史里最后一条 `agent:done`」之后开始扫描中断尾巴。但 DONE 自 T-72 起是「只发外、不入史」的例外事件（`loop.js:590-598` `emitAndRecord` 注释明写「doneEv 是例外（见 send 末尾：只发外）」，`loop.js:1163` 只 `currentEmit(doneEv)` 不 `history.push`），而持久化记录来自 `agent.getHistory()`（`index.js:665`）——所以**存储里的事件历史永远不含 DONE**，锚点扫描永远找不到，`start` 恒为 0，tail 恒为全部历史。
+证据：**源码复核** —— `loop.js:593`（emitAndRecord 注释）与 `loop.js:1163`（doneEv 只发外）；`index.js:665` `pruneEphemeralEvents(agent.getHistory())`；`sessions.js:124-131` 反向扫描 `AGENT_EVENTS.DONE`。历史存量不受影响（该机制上线时 DONE 就已不入史，不存在含 DONE 的旧记录形态）。
+影响：当前无实际故障——真正的判定靠悬空 call/result 配对 + 幂等提示，两条都还在工作；但锚点是死代码级的契约漂移：它让人误以为「DONE 在历史里」是事实（与 CONTEXT.md「agent 事件是唯一的事件历史」直接冲突），且重开后的会话无法区分「轮完成」与「轮中止」。后续任何按「最后一条 DONE」分段的新逻辑都会踩同一个空锚点。
+建议：二选一——① 让 DONE 入史（emitAndRecord 不再豁免），「history 是唯一账本」名实相符，UI 侧如重复渲染再在 fold 层滤；② 删掉 `hasInterruptedTail` 的 DONE 锚点扫描，注释写明「DONE 不入史，分段只能靠 call/result 配对」。倾向 ②（改动最小、不碰入史契约）。
+状态：待审核
+
 ## T-216 — `backlog.md`「待审核」区滞留 9 条已清条目，与本文件头「只放未完成的条目」自相矛盾
 
 登记日期：2026-10-10

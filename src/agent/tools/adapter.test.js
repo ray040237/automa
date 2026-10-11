@@ -465,3 +465,39 @@ test('T-123：工具自己 reject 时走 catch，不走超时兜底', async () =
     '必须是工具自身的错误，不是超时：' + r.content[0].text
   );
 });
+
+/* ---------------- T-226 错形信封硬化 ----------------
+ *
+ * 两条「失败变成功」的静默通路，改造前都被当成功观察值发给模型：
+ *   - {error: 'x'}：没有 own payload 键 → 裸值路径 → JSON 化 + isError:false
+ *   - {status:'failure'}：有 payload 有 status，但 status 不是合法值 → 当成功
+ * 工具作者手滑写出这两种形状时（构造器之前是纯手抄），失败必须仍是失败。
+ */
+
+test('T-226 错形信封 {error:x} 按错误观察值处理，不再伪装成成功', () => {
+  const r = wrap({ error: '数据库打不开' });
+
+  assert.equal(
+    r.isError,
+    true,
+    '{error} 键不是契约信封 —— 它想说的就是失败，不能走裸值成功路径'
+  );
+  assert.match(r.content[0].text, /工具未成功执行/);
+  assert.match(r.content[0].text, /数据库打不开/);
+});
+
+test('T-226 非法 status 值按错误处理，且带原值让作者能查', () => {
+  const r = wrap({ status: 'failure', payload: '写了一半' });
+
+  assert.equal(r.isError, true, 'status 不是 ok/error/rejected 就不许当成功');
+  assert.match(r.content[0].text, /工具未成功执行/);
+  assert.match(r.content[0].text, /failure/);
+  assert.match(r.content[0].text, /写了一半/);
+});
+
+test('T-226 无 status 键的 ok 信封（{payload, maxChars} 形状）仍是成功 —— skill 的合法形状不误伤', () => {
+  const r = wrap({ payload: '技能正文', maxChars: 32768 });
+
+  assert.equal(r.isError, false);
+  assert.match(r.content[0].text, /技能正文/);
+});

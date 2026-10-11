@@ -14,7 +14,7 @@
  */
 
 import { joinLines, safeJson } from '../confirm';
-import { defineTool } from './define';
+import { defineTool, toolOk, toolError } from './define';
 
 /**
  * 在画布上加一个块。
@@ -66,28 +66,26 @@ export async function addBlock(ctx, params) {
   const { blockId } = params;
 
   if (!blockId) {
-    return {
-      status: 'error',
-      payload: missingParamError(
+    return toolError(
+      missingParamError(
         'blockId',
         params,
         '本工具是 add_block，用 blockId 指定要加哪种块；update_block 才用 nodeId。'
-      ),
-    };
+      )
+    );
   }
 
   const def = blocks && blocks[blockId];
 
   if (!def) {
-    return {
-      status: 'error',
-      payload: `没有名为 ${blockId} 的块。可用的块 id：${listBlockIds(
-        blocks
-      ).join('、')}`,
-    };
+    return toolError(
+      `没有名为 ${blockId} 的块。可用的块 id：${listBlockIds(blocks).join(
+        '、'
+      )}`
+    );
   }
 
-  if (!editor) return { status: 'error', payload: '画布还没准备好。' };
+  if (!editor) return toolError('画布还没准备好。');
 
   const pos = nextFreePosition(editor);
   const node = {
@@ -107,15 +105,14 @@ export async function addBlock(ctx, params) {
   editor.addNodes([node]);
   if (onCanvasChanged) onCanvasChanged();
 
-  return {
-    status: 'ok',
-    payload: [
+  return toolOk(
+    [
       `已添加块 ${blockId}（节点 id ${node.id}），位置 (${Math.round(
         node.position.x
       )}, ${Math.round(node.position.y)})。`,
       '画布已改但**没有保存**，请用户自己检查后再保存。',
-    ].join('\n'),
-  };
+    ].join('\n')
+  );
 }
 
 /**
@@ -131,16 +128,15 @@ export async function updateBlock(ctx, params) {
   const { editor, onCanvasChanged } = ctx;
   const { nodeId } = params;
 
-  if (!editor) return { status: 'error', payload: '画布还没准备好。' };
+  if (!editor) return toolError('画布还没准备好。');
   if (!nodeId) {
-    return {
-      status: 'error',
-      payload: missingParamError(
+    return toolError(
+      missingParamError(
         'nodeId',
         params,
         '本工具是 update_block，用 nodeId 指定要改哪个已存在的节点；add_block 才用 blockId。'
-      ),
-    };
+      )
+    );
   }
 
   const node = editor.getNodes.value.find((n) => n.id === nodeId);
@@ -148,12 +144,11 @@ export async function updateBlock(ctx, params) {
   if (!node) {
     const ids = editor.getNodes.value.map((n) => n.id);
 
-    return {
-      status: 'error',
-      payload: `画布上没有 id 为 ${nodeId} 的节点。现有节点：${
+    return toolError(
+      `画布上没有 id 为 ${nodeId} 的节点。现有节点：${
         ids.join('、') || '(空画布)'
-      }`,
-    };
+      }`
+    );
   }
 
   const patch = params.data || {};
@@ -169,13 +164,11 @@ export async function updateBlock(ctx, params) {
     )
     .map((k) => `${k} 现在 ${node.data[k].length} 字符`);
 
-  return {
-    status: 'ok',
-    payload:
-      `已更新节点 ${nodeId}（${node.label}）：改了 ${Object.keys(patch).join(
-        '、'
-      )}。没有保存。` + (sizes.length ? `\n（${sizes.join('；')}）` : ''),
-  };
+  return toolOk(
+    `已更新节点 ${nodeId}（${node.label}）：改了 ${Object.keys(patch).join(
+      '、'
+    )}。没有保存。` + (sizes.length ? `\n（${sizes.join('；')}）` : '')
+  );
 }
 
 /** 清单里短字段值的直出上限：超过就只报长度，不报内容。 */
@@ -262,14 +255,13 @@ export function renderNode(n) {
 export async function listCanvas(ctx) {
   const { editor } = ctx;
 
-  if (!editor) return { status: 'error', payload: '画布还没准备好。' };
+  if (!editor) return toolError('画布还没准备好。');
 
   const nodes = editor.getNodes.value;
 
-  return {
-    status: 'ok',
-    payload: nodes.length ? nodes.map(renderNode).join('\n') : '(画布是空的)',
-  };
+  return toolOk(
+    nodes.length ? nodes.map(renderNode).join('\n') : '(画布是空的)'
+  );
 }
 
 /** read_block 单次取字符的下限。低于它没意义：字段往往更短，直接给全值就行。 */
@@ -342,19 +334,18 @@ export function normalizeReadBlockRange(args) {
 export async function readBlock(ctx, params) {
   const { editor } = ctx;
 
-  if (!editor) return { status: 'error', payload: '画布还没准备好。' };
+  if (!editor) return toolError('画布还没准备好。');
 
   const { nodeId, field } = params;
 
   if (!nodeId) {
-    return {
-      status: 'error',
-      payload: missingParamError(
+    return toolError(
+      missingParamError(
         'nodeId',
         params,
         'read_block 用 nodeId 指定读哪个节点，先用 list_canvas 查 id。'
-      ),
-    };
+      )
+    );
   }
 
   const node = editor.getNodes.value.find((n) => n.id === nodeId);
@@ -362,39 +353,36 @@ export async function readBlock(ctx, params) {
   if (!node) {
     const ids = editor.getNodes.value.map((n) => n.id);
 
-    return {
-      status: 'error',
-      payload: `画布上没有 id 为 ${nodeId} 的节点。现有节点：${
+    return toolError(
+      `画布上没有 id 为 ${nodeId} 的节点。现有节点：${
         ids.join('、') || '(空画布)'
-      }`,
-    };
+      }`
+    );
   }
 
   const data = node.data || {};
 
   // 不指定字段：给这个节点的字段清单（与 list_canvas 同一套渲染，口径一致）
-  if (!field) return { status: 'ok', payload: renderNode(node) };
+  if (!field) return toolOk(renderNode(node));
 
   if (!Object.prototype.hasOwnProperty.call(data, field)) {
-    return {
-      status: 'error',
-      payload: `节点 ${nodeId}（${node.label}）没有字段 ${field}。它有的字段：${
+    return toolError(
+      `节点 ${nodeId}（${node.label}）没有字段 ${field}。它有的字段：${
         Object.keys(data).join('、') || '(无字段)'
-      }`,
-    };
+      }`
+    );
   }
 
   const range = normalizeReadBlockRange(params);
-  if (range.error) return { status: 'error', payload: range.error };
+  if (range.error) return toolError(range.error);
 
   const raw = String(data[field] ?? '');
   const { offset, limit } = range;
 
   if (offset >= raw.length && raw.length > 0)
-    return {
-      status: 'error',
-      payload: `offset ${offset} 超出字段长度：${field} 只有 ${raw.length} 字符。`,
-    };
+    return toolError(
+      `offset ${offset} 超出字段长度：${field} 只有 ${raw.length} 字符。`
+    );
 
   const chunk = raw.slice(offset, offset + limit);
   const end = offset + chunk.length;
@@ -410,7 +398,7 @@ export async function readBlock(ctx, params) {
       ? `\n[未读完：还有 ${rest} 字符，用 read_block(nodeId="${nodeId}", field="${field}", offset=${end}) 继续。]`
       : '';
 
-  return { status: 'ok', payload: `${head}\n\n${chunk}${tail}` };
+  return toolOk(`${head}\n\n${chunk}${tail}`);
 }
 
 /**

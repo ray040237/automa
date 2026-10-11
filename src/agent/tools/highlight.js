@@ -16,46 +16,45 @@
  * @param {number} [params.durationMs]
  * @returns {Promise<Object>}
  */
+
+import { toolOk, toolError, noTargetTabError, callChannel } from './define';
+
 export async function highlightSelector(ctx, params) {
   const { targetTab, sendMessage } = ctx;
 
   if (!targetTab || !targetTab.id) {
-    return { status: 'error', payload: '没有确定目标页。' };
+    return noTargetTabError();
   }
 
   if (!params.selector || !params.selector.trim()) {
-    return { status: 'error', payload: 'selector 不能为空。' };
+    return toolError('selector 不能为空。');
   }
 
-  try {
-    const res = await sendMessage({
+  const out = await callChannel(
+    sendMessage,
+    {
       type: 'agent:highlight',
       tabId: targetTab.id,
       selector: params.selector,
       limit: params.limit || 10,
       durationMs: params.durationMs || 4000,
       ...(params.frame ? { frame: params.frame } : {}),
-    });
+    },
+    { fallback: '高亮失败。', errorPrefix: '高亮失败：' }
+  );
 
-    if (!res || !res.ok) {
-      const why = (res && res.error) || '高亮失败。';
+  if (!out.ok) return toolError(out.error);
 
-      return { status: 'error', payload: why };
-    }
+  const { res } = out;
 
-    if (res.highlighted === 0) {
-      const msg =
-        '没有高亮任何元素：' + params.selector + ' 在当前页面上匹配不到。';
+  if (res.highlighted === 0) {
+    const msg =
+      '没有高亮任何元素：' + params.selector + ' 在当前页面上匹配不到。';
 
-      return { status: 'ok', payload: msg };
-    }
-
-    const head = `已在页面上标出 ${res.highlighted} 个（该选择器共命中 ${res.count} 个）。`;
-
-    return { status: 'ok', payload: head };
-  } catch (err) {
-    const why = (err && err.message) || String(err);
-
-    return { status: 'error', payload: '高亮失败：' + why };
+    return toolOk(msg);
   }
+
+  const head = `已在页面上标出 ${res.highlighted} 个（该选择器共命中 ${res.count} 个）。`;
+
+  return toolOk(head);
 }

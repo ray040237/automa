@@ -14,7 +14,7 @@
  */
 
 import { originOf } from '../tab';
-import { defineTool } from './define';
+import { defineTool, toolOk, toolError, errText } from './define';
 
 /**
  * 列出可注入的标签页，按窗口分组、最近访问在前。
@@ -28,14 +28,11 @@ export async function listTabs(ctx) {
   try {
     groups = await ctx.listTabs();
   } catch (err) {
-    return {
-      status: 'error',
-      payload: '读取标签页失败：' + ((err && err.message) || err),
-    };
+    return toolError('读取标签页失败：' + errText(err));
   }
 
   if (!groups || groups.length === 0) {
-    return { status: 'ok', payload: '当前没有任何可作为目标页的标签页。' };
+    return toolOk('当前没有任何可作为目标页的标签页。');
   }
 
   const lines = [];
@@ -48,10 +45,7 @@ export async function listTabs(ctx) {
     });
   });
 
-  return {
-    status: 'ok',
-    payload: '可操作的标签页（focus_tab 用 tabId）：\n' + lines.join('\n'),
-  };
+  return toolOk('可操作的标签页（focus_tab 用 tabId）：\n' + lines.join('\n'));
 }
 
 /**
@@ -73,18 +67,13 @@ export async function focusTab(ctx, params) {
   const tabId = params && params.tabId;
 
   if (typeof tabId !== 'number') {
-    return {
-      status: 'error',
-      payload: 'tabId 必须是数字。先用 list_tabs 查。',
-    };
+    return toolError('tabId 必须是数字。先用 list_tabs 查。');
   }
 
   if (!Array.isArray(ctx.pins)) {
-    return {
-      status: 'error',
-      payload:
-        'ctx.pins 契约错误：必须是数组（index.js 的 JS getter 经 adapter spread 后的形状）。',
-    };
+    return toolError(
+      'ctx.pins 契约错误：必须是数组（index.js 的 JS getter 经 adapter spread 后的形状）。'
+    );
   }
   const { pins } = ctx;
 
@@ -94,29 +83,21 @@ export async function focusTab(ctx, params) {
     if (!wasPinned) {
       const t = await ctx.getTab(tabId);
       if (!t)
-        return {
-          status: 'error',
-          payload: 'tabId ' + tabId + ' 不存在（页面可能已关闭）。',
-        };
+        return toolError('tabId ' + tabId + ' 不存在（页面可能已关闭）。');
       await ctx.addPin({ tabId, origin: originOf(t.url), title: t.title });
     }
 
     const tab = await ctx.focusTab(tabId);
-    return {
-      status: 'ok',
-      payload:
-        '已把操作焦点切到 [' +
+    return toolOk(
+      '已把操作焦点切到 [' +
         (tab.title || tabId) +
         '] ' +
         tab.url +
         (wasPinned ? '。' : '（已自动加入本会话 pin）') +
-        '下一个工具调用起生效。',
-    };
+        '下一个工具调用起生效。'
+    );
   } catch (err) {
-    return {
-      status: 'error',
-      payload: '切换失败：' + ((err && err.message) || err),
-    };
+    return toolError('切换失败：' + errText(err));
   }
 }
 
@@ -132,50 +113,42 @@ export async function openUrl(ctx, params) {
   const raw = params && params.url;
 
   if (!raw || !raw.trim()) {
-    return { status: 'error', payload: 'url 不能为空。' };
+    return toolError('url 不能为空。');
   }
 
   let url;
   try {
     url = new URL(String(raw).trim()).href;
   } catch {
-    return { status: 'error', payload: 'url 不是合法的绝对地址：' + raw };
+    return toolError('url 不是合法的绝对地址：' + raw);
   }
 
   if (!/^https?:/.test(url)) {
-    return {
-      status: 'error',
-      payload: '只允许 http/https 地址，拒绝 ' + url.slice(0, 60),
-    };
+    return toolError('只允许 http/https 地址，拒绝 ' + url.slice(0, 60));
   }
 
   let tab;
   try {
     tab = await ctx.createTab(url);
   } catch (err) {
-    return {
-      status: 'error',
-      payload: '打开失败：' + ((err && err.message) || err),
-    };
+    return toolError('打开失败：' + errText(err));
   }
 
   if (!tab || typeof tab.id !== 'number' || tab.id < 0) {
-    return { status: 'error', payload: '浏览器没有返回有效标签页。' };
+    return toolError('浏览器没有返回有效标签页。');
   }
 
   const pin = { tabId: tab.id, origin: originOf(url), title: tab.title || url };
   await ctx.addPin(pin);
   await ctx.focusTab(tab.id);
 
-  return {
-    status: 'ok',
-    payload:
-      '已打开 ' +
+  return toolOk(
+    '已打开 ' +
       url +
       '（tabId ' +
       tab.id +
-      '），已加入会话 pin 并切换焦点。下一个工具调用起生效。',
-  };
+      '），已加入会话 pin 并切换焦点。下一个工具调用起生效。'
+  );
 }
 
 export const listTabsTool = defineTool({

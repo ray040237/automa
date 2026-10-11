@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 
 import {
   buildConfirmation,
-  canRememberSession,
   countLines,
   createSessionAuth,
   nextSessionAuth,
@@ -190,48 +189,53 @@ test('countLines：空串 0 行，单行 1 行，CRLF 不多算', () => {
 
 /* ---------------- 会话级授权（B5） ---------------- */
 
-test('canRememberSession：只有 test_js 能给会话授权', () => {
-  assert.equal(canRememberSession('test_js'), true);
-  assert.equal(canRememberSession('add_block'), false);
-  assert.equal(canRememberSession('update_block'), false);
-  assert.equal(canRememberSession('open_url'), false);
-  assert.equal(canRememberSession('highlight_selector'), false);
+test('T-226 会话授权资格长在工具定义上：只有 test_js 声明 rememberable', () => {
+  // 走真实注册表 —— 名单已删，资格就是 tool.rememberable 这一个布尔
+  for (const t of TOOLS) {
+    const want = t.name === 'test_js';
+    assert.equal(
+      t.rememberable === true,
+      want,
+      t.name + ' 的 rememberable 应为 ' + want
+    );
+  }
 });
 
-test('shouldSkipConfirmation：workflow 写操作永不跳过确认', () => {
-  assert.equal(shouldSkipConfirmation('test_js', true), true);
-  assert.equal(shouldSkipConfirmation('test_js', false), false);
+test('shouldSkipConfirmation：没声明资格的工具永不跳过确认', () => {
+  assert.equal(shouldSkipConfirmation(true, true), true);
+  assert.equal(shouldSkipConfirmation(true, false), false);
   assert.equal(
-    shouldSkipConfirmation('add_block', true),
+    shouldSkipConfirmation(false, true),
     false,
-    '授权在手也不能免掉画布写操作的确认（docs/adr/0002）'
+    '授权在手也不能免掉没资格工具的确认（docs/adr/0002）'
   );
+  assert.equal(shouldSkipConfirmation(undefined, true), false);
 });
 
-test('nextSessionAuth：只有「批准 + 勾选 + test_js」才置真', () => {
+test('nextSessionAuth：只有「批准 + 勾选 + 有资格」才置真', () => {
   assert.equal(
-    nextSessionAuth(false, 'test_js', { approved: true, remember: true }),
+    nextSessionAuth(false, true, { approved: true, remember: true }),
     true
   );
   assert.equal(
-    nextSessionAuth(false, 'test_js', { approved: true, remember: false }),
+    nextSessionAuth(false, true, { approved: true, remember: false }),
     false
   );
   assert.equal(
-    nextSessionAuth(false, 'test_js', { approved: false, remember: true }),
+    nextSessionAuth(false, true, { approved: false, remember: true }),
     false,
     '拒绝了就不能留下授权'
   );
   assert.equal(
-    nextSessionAuth(false, 'add_block', { approved: true, remember: true }),
+    nextSessionAuth(false, false, { approved: true, remember: true }),
     false
   );
 });
 
 test('nextSessionAuth：已授权不因别的工具的答案被撤', () => {
-  assert.equal(nextSessionAuth(true, 'add_block', false), true);
+  assert.equal(nextSessionAuth(true, false, false), true);
   assert.equal(
-    nextSessionAuth(true, 'add_block', { approved: false, remember: false }),
+    nextSessionAuth(true, false, { approved: false, remember: false }),
     true
   );
 });
@@ -306,8 +310,12 @@ test('T-02 接线守卫：AgentPanel 卸载前必须拒掉挂起的确认门', (
 test('createSessionAuth：已授权的 test_js 直接放行，其余挂起', () => {
   const auth = createSessionAuth();
 
-  // 未授权：挂起
-  const first = auth.ask({ name: 'test_js', args: { code: '1+1' } });
+  // 未授权：挂起（req 带 tool —— 生产链路 loop 的闸就是这么送的，T-226）
+  const first = auth.ask({
+    name: 'test_js',
+    args: { code: '1+1' },
+    tool: toolByName('test_js'),
+  });
   assert.equal(first.skip, false);
   assert.equal(auth.pending.name, 'test_js');
 
@@ -316,18 +324,26 @@ test('createSessionAuth：已授权的 test_js 直接放行，其余挂起', () 
   assert.equal(auth.authorized, true);
 
   // 已授权：skip，不再挂起
-  const again = auth.ask({ name: 'test_js', args: { code: '2+2' } });
+  const again = auth.ask({
+    name: 'test_js',
+    args: { code: '2+2' },
+    tool: toolByName('test_js'),
+  });
   assert.equal(again.skip, true);
   assert.equal(auth.pending, null);
 
-  // 别的写工具永远逐次问（ADR 0002）
-  const wf = auth.ask({ name: 'add_block', args: {} });
+  // 别的写工具永远逐次问（ADR 0002）—— add_block 没声明 rememberable
+  const wf = auth.ask({
+    name: 'add_block',
+    args: {},
+    tool: toolByName('add_block'),
+  });
   assert.equal(wf.skip, false);
 });
 
 test('createSessionAuth：invalidate 之后授权不能被复活', () => {
   const auth = createSessionAuth();
-  auth.ask({ name: 'test_js' });
+  auth.ask({ name: 'test_js', tool: toolByName('test_js') });
   auth.answer({ approved: true, remember: true });
   assert.equal(auth.authorized, true);
 

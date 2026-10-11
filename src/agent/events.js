@@ -5,7 +5,7 @@
  * 两边互不认识。
  */
 
-import { wrapUntrusted } from './untrusted';
+import { UNTRUSTED_WRAPPER_TAGS, wrapUntrusted } from './untrusted';
 
 /** 事件名 */
 export const AGENT_EVENTS = {
@@ -146,10 +146,14 @@ export function wrapObservation(outcome) {
     return wrapUntrusted('untrusted_tool_result', String(outcome ?? ''));
   }
 
-  const tag =
-    outcome.wrap === 'untrusted_page_content'
-      ? 'untrusted_page_content'
-      : 'untrusted_tool_result';
+  // T-226：wrap 判定的单点。登记表内的标签原样被信（想给某类内容专属标签，
+  // 只需在 UNTRUSTED_WRAPPER_TAGS 登记并让 adapter 选它），未登记的值一律
+  // 回落 tool_result —— 不信任调用方自造的「信任标签」，与 T-65 删暗门同一条
+  // 直觉。原先这里只认 'untrusted_page_content' 一个具体字符串，新登记的标签
+  // 到不了模型侧。
+  const tag = UNTRUSTED_WRAPPER_TAGS.includes(outcome.wrap)
+    ? outcome.wrap
+    : 'untrusted_tool_result';
 
   let body;
   if (

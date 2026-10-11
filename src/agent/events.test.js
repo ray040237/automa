@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import {
   truncateObservation,
   toolCallsOf,
+  wrapObservation,
   MAX_OBSERVATION_CHARS,
 } from './events';
 
@@ -96,4 +97,59 @@ test('name 为 null/undefined 不算有效调用（不能造出 name:undefined �
   // 模型看到一条没有名字的工具调用，只能原地打转。
   assert.deepEqual(toolCallsOf({ name: null }), []);
   assert.deepEqual(toolCallsOf({ name: undefined }), []);
+});
+
+/* ---------------- wrapObservation（T-226 首批直测） ----------------
+ *
+ * 在此之前 wrapObservation 的行为只被 adapter.test.js / skills.test.js
+ * 间接擦到，它自己的标签判定逻辑零覆盖 ——「wrap 收敛到单点」之前先把
+ * 现有语义钉住。标签产出的形状见 untrusted.js：`<tag>\n...\n</tag>`。
+ */
+
+test('wrapObservation：page 类 wrap 用页面标签', () => {
+  const out = wrapObservation({
+    payload: '正文',
+    wrap: 'untrusted_page_content',
+  });
+
+  assert.ok(out.startsWith('<untrusted_page_content>'), out.slice(0, 60));
+  assert.ok(out.endsWith('</untrusted_page_content>'));
+  assert.ok(out.includes('正文'));
+});
+
+test('wrapObservation：不带 wrap 回落 tool_result 标签（loop 拒绝重映射的路径）', () => {
+  const out = wrapObservation({ payload: '结果' });
+
+  assert.ok(out.startsWith('<untrusted_tool_result>'), out.slice(0, 60));
+});
+
+test('wrapObservation：登记表内的其他标签也可信（不再只认 page_content 一个字符串）', () => {
+  const out = wrapObservation({
+    payload: '技能正文',
+    wrap: 'untrusted_skill_index',
+  });
+
+  assert.ok(
+    out.startsWith('<untrusted_skill_index>'),
+    '已登记标签必须原样被信，不许被二次改判：' + out.slice(0, 60)
+  );
+});
+
+test('wrapObservation：未登记的 wrap 值回落 tool_result（不信任调用方的信任标签）', () => {
+  const out = wrapObservation({
+    payload: 'x',
+    wrap: 'untrusted_totally_made_up',
+  });
+
+  assert.ok(out.startsWith('<untrusted_tool_result>'), out.slice(0, 60));
+});
+
+test('wrapObservation：error 状态走「工具未成功执行」分支', () => {
+  const out = wrapObservation({
+    status: 'error',
+    message: '磁盘满了',
+    wrap: 'untrusted_tool_result',
+  });
+
+  assert.match(out, /工具未成功执行：磁盘满了/);
 });
