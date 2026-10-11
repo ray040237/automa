@@ -56,6 +56,21 @@ const SCOPED_STUBS = new Set([
 ]);
 
 /**
+ * T-227：agentHost 薄壳（useAgentHost）的 Vue 依赖在 node 下解不出具名导出
+ * （vue-toastification 是 CJS 互操作）。工厂测试只需要**整个文件能被 import**
+ * —— 薄壳的这些函数在测试里永远不会被调用（测试只走 createAgentHost）。
+ * 按 parent 精确限定，只对 agentHost.js 放行替身，其他测试不受影响。
+ */
+const VUE_SHELL_STUBS = new Set([
+  'vue-i18n',
+  'vue-router',
+  'vue-toastification',
+]);
+const VUE_SHELL_PARENTS = new Set([
+  path.resolve(SRC, 'composable/agentHost.js'),
+]);
+
+/**
  * 放行名单要连 `helper.js` 一起算 —— 它不是 api.js 本身，但住在 api.js 的
  * 依赖链上（`api.js` → `./helper`），而 helper.js 顶层同样 import 了
  * BrowserAPIService。只认 api.js 的话，真实 BrowserAPIService 会从 helper.js
@@ -99,6 +114,12 @@ function isApiJsImporter(parentURL) {
 }
 
 function resolveAlias(base) {
+  // 目录形式的别名（'@/agent' → src/agent/index.js，T-228）：webpack 按目录
+  // main 字段解析，Node 这里手工补 index.js。此前没有测试链路 import 过
+  // 目录形式的 @/ 别名，agentHost 薄壳补生产缺省（import '@/agent'）首次踩到。
+  const asIndex = path.join(base, 'index.js');
+  if (existsSync(asIndex)) return asIndex;
+
   for (const suffix of ['', '.js', '/index.js']) {
     const full = base + suffix;
 
@@ -123,6 +144,20 @@ export async function resolve(specifier, context, nextResolve) {
       url: pathToFileURL(path.join(STUB, path.basename(specifier) + '.js')).href,
       shortCircuit: true,
     };
+  }
+
+  // T-227：agentHost 薄壳的 Vue 依赖替身（见 VUE_SHELL_STUBS 注释）
+  if (VUE_SHELL_STUBS.has(specifier)) {
+    const parent = context.parentURL
+      ? path.resolve(fileURLToPath(context.parentURL))
+      : null;
+
+    if (parent !== null && VUE_SHELL_PARENTS.has(parent)) {
+      return {
+        url: pathToFileURL(path.join(STUB, `vue-shell-${specifier}.js`)).href,
+        shortCircuit: true,
+      };
+    }
   }
 
   // T-192：scoped 桩，仅对 src/utils/api.js 这条链生效（见 SCOPED_STUBS 注释）。

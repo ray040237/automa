@@ -699,7 +699,6 @@ const agentHost = useAgentHost({
       ? ['page', 'context', 'tab', 'canvas']
       : ['page', 'context', 'tab'],
   getWorkflowId: () => workflowId,
-  sessionWorkflowId: workflowId,
   // T-50：变量数据源（技术设计 §7.3 的三处来源，这里按编辑器实际形状组装）。
   // 返回值按用户 2026-10-06 的决定**原样给值** —— 为功能牺牲隐私，
   // 用户知情同意；工作流变量里放了 API key 的人要自己承担。

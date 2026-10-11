@@ -59,6 +59,16 @@
 建议：二选一——① 让 DONE 入史（emitAndRecord 不再豁免），「history 是唯一账本」名实相符，UI 侧如重复渲染再在 fold 层滤；② 删掉 `hasInterruptedTail` 的 DONE 锚点扫描，注释写明「DONE 不入史，分段只能靠 call/result 配对」。倾向 ②（改动最小、不碰入史契约）。
 状态：待审核
 
+## T-229 — hygiene.test.js 的不可见字符守卫依赖工作区换行符，CRLF 工作区（fresh checkout）必假失败
+
+登记日期：2026-10-11
+来源：2026-10-11 会话拆 commit 时在 git worktree（autocrlf=true fresh checkout）里独立验证中间 commit，hygiene.test.js 假失败；主工作区（LF）从未复现，故此前所有测试轮都测不出
+现象：`src/agent/hygiene.test.js:64-79` 的不可见字符守卫靠 `line.replace(/^\s*\*.*$/, '')` 剥块注释行再扫代码行，但 JS 的 `.` 不匹配 `\r`——工作区文件是 CRLF 时（Windows fresh clone / worktree checkout，autocrlf=true 的默认行为），块注释行剥不掉，注释正文里的 ‹ › ＜ ＞ 〈 〉 示例字符（untrusted.js:11/12/14）直接暴露成违规，测试假失败。
+证据：**实测对比** —— 主树（LF）与 worktree（CRLF）同内容：主树 offenders=0、worktree=3；node 单行复现 `' * x ‹foo\r'.replace(/^\s*\*.*$/,'')` 不剥离、去 `\r` 即剥离；`file` 确认两树行尾差异。worktree 用 `-c core.autocrlf=false` 重检出 LF 后 839/838/0 全绿。
+影响：Windows 上 fresh clone + 默认 autocrlf 的环境跑 `npm test` 必红，红因与代码质量无关；一切「换机器/CI/fresh checkout」场景都会撞。本项目测试至今只在 LF 工作区跑过，所以一直没暴露。
+建议：三选一——① hygiene.test.js 读入后先 `src.replace(/\r\n/g, '\n')` 归一再扫（最小改动）；② 仓库加 `.gitattributes` 强制 `*.js text eol=lf`（治本，fresh checkout 不再产生 CRLF，但触碰全仓行尾需评估波及）；③ 接受现状，文档记「测试只在 LF 工作区跑」。倾向 ①。
+状态：待审核
+
 ## T-216 — `backlog.md`「待审核」区滞留 9 条已清条目，与本文件头「只放未完成的条目」自相矛盾
 
 登记日期：2026-10-10

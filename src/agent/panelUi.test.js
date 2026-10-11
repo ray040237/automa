@@ -662,10 +662,10 @@ test('T-07 守卫：工具卡渲染的是剥过标签的观察值，不是原始
   );
 });
 
-test('T-08 守卫：目标页条要显示失效态，且监听必须成对摘掉', () => {
-  // 三件不能省的东西：① chip 渲染 state/pinned 并有失效分支；
-  // ② 宿主注册了 tabs.onRemoved/onUpdated；③ 卸载时 removeListener ——
-  // 监听挂在 browser 上不是组件上，漏摘就是泄漏（面板反复开关后重复处理）。
+test('T-08 守卫：目标页条要显示失效态', () => {
+  // chip 渲染 state/pinned 并有失效分支（视图层，组件测试够不着所以钉源码）。
+  // 监听成对摘除 + 健康态判定已随 T-227 行为化：agentHost.test.js 的
+  // dispose 对称测试与「固定目标页被关」分发测试接棒，这里不再抓宿主源码。
   const picker = stripComments(
     read('src/components/newtab/workflow/agent/AgentTabPicker.vue')
   );
@@ -674,23 +674,6 @@ test('T-08 守卫：目标页条要显示失效态，且监听必须成对摘掉
   assert.match(picker, /staleDrift/, 'chip 没有「目标页已跳转」的文案分支');
   assert.match(picker, /pickTab\.pinned/, 'chip 没有「固定 / 自动」的来源徽标');
   assert.match(picker, /favIconUrl/, 'chip 没有站点图标');
-
-  const host = stripComments(
-    readFileSync(join(ROOT, 'src/composable/agentHost.js'), 'utf8')
-  );
-  for (const ev of ['onRemoved', 'onUpdated']) {
-    assert.match(
-      host,
-      new RegExp(`tabs\\.${ev}\\.addListener`),
-      `宿主没有注册 tabs.${ev}`
-    );
-    assert.match(
-      host,
-      new RegExp(`tabs\\.${ev}\\.removeListener`),
-      `宿主卸载时没有摘掉 tabs.${ev}（挂在 browser 上，漏摘就是泄漏）`
-    );
-  }
-  assert.match(host, /targetHealth/, '宿主没有用 targetHealth 判失效');
 });
 
 test('T-04 守卫：错误独立成类，重试与复制详情都要有，且每个 errorKind 都有文案', () => {
@@ -741,7 +724,7 @@ test('T-04 守卫：错误独立成类，重试与复制详情都要有，且每
   );
 });
 
-test('T-11 守卫：busy 时禁用态要给理由，中止要有回执', () => {
+test('T-11 守卫：busy 时禁用态要给理由', () => {
   // ① 三个禁用控件都必须在 busy 时把 title 换成「为什么点不动」
   const panel = stripComments(
     read('src/components/newtab/workflow/agent/AgentPanel.vue')
@@ -772,20 +755,8 @@ test('T-11 守卫：busy 时禁用态要给理由，中止要有回执', () => {
     );
   }
 
-  // ② 中止回执：宿主必须看 DONE.aborted 并插一条 system-notice
-  const host = stripComments(
-    readFileSync(join(ROOT, 'src/composable/agentHost.js'), 'utf8')
-  );
-  assert.match(
-    host,
-    /AGENT_EVENTS\.DONE\s*&&\s*ev\.aborted/,
-    '宿主没有读 DONE.aborted —— 中止后没有任何回执'
-  );
-  assert.match(
-    host,
-    /kind:\s*AGENT_EVENTS\.SYSTEM_NOTICE/,
-    '中止回执必须走 system-notice 通道（与入队提示同一条）'
-  );
+  // ② 中止回执已随 T-227 行为化：agentHost.test.js 的
+  // 「DONE(aborted) 补一条中止回执」接棒，这里不再抓宿主源码。
 });
 
 test('T-52 守卫：工具卡的参数三段链路不许断（事件带 args → 合并保留 → 渲染）', () => {
@@ -865,33 +836,9 @@ test('守卫：import 清单必须全部注册进 icons 表（半截接线不许
   );
 });
 
-test('T-67：send 必须在碰 runtime 之前判空，且给出可读提示', () => {
-  const hostSrc = read('src/composable/agentHost.js');
-
-  const start = hostSrc.indexOf('async function send(userText)');
-  assert.ok(start > 0, 'agentHost 里的 send 找不到了');
-  const body = hostSrc.slice(
-    start,
-    hostSrc.indexOf('\n  async function init(', start)
-  );
-
-  const guardAt = body.indexOf('if (!agent.runtime)');
-  const firstUse = body.indexOf('agent.runtime.');
-
-  assert.ok(guardAt > 0, 'send 开头必须判 !agent.runtime');
-  assert.ok(
-    guardAt < firstUse,
-    [
-      '判空必须排在第一次用 agent.runtime 之前，否则 busy 插话分支仍然是裸调：',
-      'guard@' + guardAt + ' firstUse@' + firstUse,
-    ].join('\n')
-  );
-  // 提示语要走 i18n，且说的是「还在初始化」而不是内部形状
-  assert.ok(
-    body.includes("t('workflow.agent.initializing')"),
-    'runtime 未就绪要说清是初始化中，不能把 TypeError 文案漏给用户'
-  );
-});
+// T-67（send 判空顺序）与 T-66（specific 文案三档）已随 T-227 行为化：
+// agentHost.test.js 的「runtime 未就绪时给一句人话」「配置错误：specific 文案优先」
+// 直接驱动真工厂断言行为，源码正则守卫退役。
 
 test('T-68：窗口分组一律显示「窗口 N」，不许特判 id === 1 当主窗口', () => {
   const listSrc = read('src/components/newtab/workflow/agent/AgentTabList.vue');
@@ -927,21 +874,6 @@ test('T-68：mainWindow 这把 locale 键不能留成孤儿', () => {
   }
   assert.ok(!listSrc.includes('mainWindow'), '组件侧也不该再提这个词');
 });
-test('T-66：specific 配置错误用自带文案，其余配置错误仍走 i18n', () => {
-  // 错在这里用户看到的是「请先配置 API Key」，而他明明填过密钥、
-  // 填的是 ftp:// —— 两句话都指不到真因。
-  const hostSrc = read('src/composable/agentHost.js');
-
-  assert.ok(
-    hostSrc.includes('useErrMessage'),
-    'agentHost 必须区分「有具体文案的配置错误」与「回落到 i18n 的配置错误」'
-  );
-  assert.ok(
-    hostSrc.includes('err.specific && err.message'),
-    '具体文案只在 specific 标记下生效，apiKey 空的老路径不能被改掉'
-  );
-});
-
 // —— T-12：输入框 autoresize + 插话入队的常驻反馈 ——
 
 test('T-12：面板输入框开 autoresize，且有 max-h 兜底（320px 侧栏不能被撑破）', () => {
@@ -1018,21 +950,9 @@ test('T-12：插话入队要有常驻反馈，且计数来自运行时真实队�
     indexSrc.includes('pendingInstructionCount() {'),
     '运行时要有 pendingInstructionCount 这个只读入口'
   );
-  // 送达方向也要有：队列在每步开工处被排空，面板收不到「排空了」事件，
-  // 所以必须在事件到达时重新读长度，否则计数只会涨不会落。
-  //
-  // **必须是位置断言**：只查「文件里出现过 syncPendingInterjections」会被函数
-  // 定义本身满足，删掉调用照样绿（变异 4 实测）。所以切到 onEvent 回调体里查。
-  const onEventAt = hostSrc.indexOf('onEvent: (ev) => {');
-  assert.ok(onEventAt > 0, 'send 里找不到 onEvent 回调');
-  const onEventBody = hostSrc.slice(
-    onEventAt,
-    hostSrc.indexOf('\n      };', onEventAt)
-  );
-  assert.ok(
-    /syncPendingInterjections\(\)/.test(onEventBody),
-    'onEvent 里要调 syncPendingInterjections，否则送达后计数不会落（只有函数定义不算）'
-  );
+  // 送达方向（onEvent 里重读长度）已随 T-227 行为化：agentHost.test.js 的
+  // 「计数随事件同步」直接断言 host.pendingInterjections 等于运行时真实值，
+  // 原先的 onEvent 位置断言退役。
 });
 
 test('T-12：queuedPending 键不能只在一边有（zh/en 都要）', () => {
@@ -2271,69 +2191,10 @@ test('T-182：助手入口的图标不许再与画布上的自动布局撞车', 
   );
 });
 
-test('T-195~T-198 守卫：目标页三件套只能经 syncTarget 写入，且六条入口都覆盖', () => {
-  // 本仓无组件测试基建（见文件头），agentHost.js 又不在 test glob 内 ——
-  // 这里用源码守卫钉住「唯一写入点」这条不变量：chip 的 targetTab /
-  // targetPinned / targetState 只能由 syncTarget 一次性写全，任何一处
-  // 直接 `agent.targetXxx =` 的写法都会让 chip 与 runtime 再次各说各话。
-  const src = read('src/composable/agentHost.js');
-  // 只剥块注释，保留行注释不影响下面针对 `=` 赋值的断言（赋值不会被写进注释）。
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, '');
-
-  // ① syncTarget 必须存在，且三个字段都写。
-  assert.match(
-    code,
-    /function syncTarget\(/,
-    'agentHost 必须有唯一的 syncTarget 写入点'
-  );
-  const body = code.slice(code.indexOf('function syncTarget('));
-  const bodyEnd = body.indexOf('\n  }');
-  const syncBody = body.slice(0, bodyEnd);
-  for (const field of [
-    'agent.targetTab',
-    'agent.targetPinned',
-    'agent.targetState',
-  ]) {
-    assert.ok(
-      syncBody.includes(field),
-      `syncTarget 必须写全三件套，缺 ${field}`
-    );
-  }
-
-  // ② 除 syncTarget 自身外，不得再有别的地方直接写这三个字段（读不算）。
-  const directWrites = [
-    ...code.matchAll(/agent\.(targetTab|targetPinned|targetState)\s*=[^=]/g),
-  ].filter((m) => {
-    // 允许 syncTarget 体内那三处 —— 用「是否落在 syncTarget 函数体内」判定。
-    const at = m.index;
-    const fnStart = code.indexOf('function syncTarget(');
-    const fnEnd = code.indexOf('\n  }', fnStart);
-    return !(at > fnStart && at < fnEnd);
-  });
-  assert.deepEqual(
-    directWrites.map((m) => m[0].trim()),
-    [],
-    '目标页三件套只允许 syncTarget 写；其它入口一律改调它（T-195~T-198）'
-  );
-
-  // ③ 六条入口都不能漏：新建会话 / 解除固定必须回到自动跟随（会回写 runtime）；
-  //    打开会话必须读回 pinned 与 state。
-  assert.match(
-    code,
-    /await resetTargetToAuto\(\);/,
-    'newSession/unpin 必须经 resetTargetToAuto'
-  );
-  assert.match(
-    code,
-    /runtime\.setTargetTab\(next\)/,
-    'resetTargetToAuto 必须把新目标页回写 runtime（T-198：chip 与模型操作同一页）'
-  );
-  assert.match(
-    code,
-    /targetPinned,\s*targetState,\s*usage\s*\}\s*=\s*\n?\s*await agent\.runtime\.openSession/,
-    'openAgentSession 必须从 runtime 读回 targetPinned / targetState（T-196/T-197）'
-  );
-});
+// T-195~T-198 的「三件套只能经 syncTarget 写入 + 六条入口」守卫已随 T-227 行为化：
+// agentHost.test.js 直接驱动真工厂断言（固定页被关只标状态不换页 / 自动态导航
+// 重解析并回写 runtime / newSession 回自动态），源码正则守卫退役。
+// T-196/T-197 的 openSession 契约守卫仍在下方。
 
 test('T-196/T-197 守卫：runtime.openSession 必须回 pinned 与 state 两个字段', () => {
   const src = read('src/agent/index.js').replace(/\/\*[\s\S]*?\*\//g, '');

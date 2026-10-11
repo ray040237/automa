@@ -116,12 +116,19 @@ agent 的挂载点,共两个,共用 `src/composable/agentHost.js` 的接线与 `
 两者差别只在 `enabledGroups` 与有没有 `canvas` 那四个句柄。
 Chrome 下不再有「独立助手页」(`/workflows/agent` 路由未注册);Firefox 不支持
 `sidePanel`,保留主面板标签页形态(路由 `agent` 仅在 `IS_FIREFOX` 时注册),见 ADR 0005。
-侧栏是独立 HTML 入口,不吃 newtab/popup 的启动链,**必须自己加载语言包**
-(`loadLocaleMessages(locale, 'newtab')` + `setI18nLanguage(locale)`,先 `store.loadSettings()`
-拿用户选的 locale)—— 漏掉这一步的表现是所有 `t('...')` 把键名当文案直显。
-**且 `loadLocaleMessages` 传的 location 是 `'newtab'`**:面板文案(`workflow.agent.*`)在
-`locales/<locale>/newtab.json`。
-_Avoid_: 新增宿主入口时只接线不加载语言包(键名直显);想当然传 `'sidepanel'` 当 location(没有这个语言包文件)。
+**接线分两层(T-227)**:`createAgentHost(deps, ui)` 纯工厂持全部接线逻辑,browser 与
+`@/agent` 桶八项 IO 全走注入、UI 能力(t/toast/dialog/routerPush)是回调——node --test
+直跑(`agentHost.test.js`);`useAgentHost(deps)` 是薄壳,取 Vue 上下文、挂 dispose,
+**并在这层补九项生产 IO 缺省**(T-228):工厂只认注入、测试传全套 fake,生产三宿主
+谁都不传——缺省漏补的表现是宿主 setup 里 `deps.browser` 为 undefined 当场 TypeError
+而全部测试照绿。宿主传入的项覆盖缺省(`...deps` 在缺省之后)。
+「全局无画布宿主」的缺省 profile 收在 `usePageAgentHost({layout, onOpenSettings?})`,
+独立 HTML 入口的启动链(loadSettings→语言包→setI18nLanguage→theme.init)收在
+`useHostBootstrap()`(hostBootstrap.js);确认门失效点走 `dismissPendingConfirm()` 单一出口。
+侧栏是独立 HTML 入口,**必须自己加载语言包**——漏掉这一步的表现是所有 `t('...')` 把键名
+当文案直显。**且 `loadLocaleMessages` 传的 location 是 `'newtab'`**:面板文案
+(`workflow.agent.*`)在 `locales/<locale>/newtab.json`。
+_Avoid_: 新增宿主入口时只接线不加载语言包(键名直显);想当然传 `'sidepanel'` 当 location(没有这个语言包文件);在工厂里直 import browser 或 `@/agent` 桶;删掉薄壳的生产 IO 缺省或把 `...deps` 挪到缺省之前(T-228:前者让三宿主 setup 即崩、测试看不见,后者让宿主声明被缺省顶掉);给确认门失效点另写判空 + resolve(false)。
 
 **工具 class**:
 `read`(免确认)/ `write`(过确认门)。缺失或未知一律按需确认处理;模块加载期 `validateTools` 强制显式声明。

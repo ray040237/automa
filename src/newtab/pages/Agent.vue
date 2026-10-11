@@ -8,7 +8,7 @@
 <script setup>
 import { onMounted } from 'vue';
 import AgentPanel from '@/components/newtab/workflow/agent/AgentPanel.vue';
-import { useAgentHost } from '@/composable/agentHost';
+import { usePageAgentHost } from '@/composable/agentHost';
 
 /**
  * 独立助手页（主面板标签页，路由 /workflows/agent）。
@@ -16,22 +16,16 @@ import { useAgentHost } from '@/composable/agentHost';
  * 与画布无关：没有 vue-flow editor，canvas 组工具（add_block/update_block/
  * list_canvas）通过 enabledGroups 不注册；会话不绑定工作流（全局）。
  * 要「打开某个工作流来编辑」走的是编辑器侧栏那个宿主，接线同样在 useAgentHost。
+ *
+ * T-227：无画布宿主的 4 行缺省 profile 收进了 usePageAgentHost ——
+ * 这个文件只剩宽形态声明与 init 时机。语言包/theme 由 newtab 的启动链负责，
+ * 不需要 useHostBootstrap（那是独立 HTML 入口才要背的咒语）。
  */
-const agent = useAgentHost({
+const agent = usePageAgentHost({
   // T-169：宿主形态。独立助手页是宽宿主 —— 左侧 240px 常驻历史列表，
   // 右侧对话区，不做视图切换（侧栏那种「把消息区整块换成历史」在宽屏上
   // 是浪费：右边会空掉一大块）。
   layout: 'wide',
-  // 没有画布：canvas 组工具不注册，提示词的事实表同步裁剪
-  enabledGroups: ['page', 'context', 'tab'],
-  // 助手页会话是全局的，不绑定工作流
-  getWorkflowId: () => null,
-  // T-50：这一页没有工作流可读，**必须显式说 bound:false**。
-  // 曾经靠 runtime 的空兜底返回 `{}`，工具渲染成「（空）」—— 那等于告诉
-  // 模型「这个工作流没有变量」，而事实是「这里根本没有工作流」，两者结论不同。
-  getVariables: async () => ({ bound: false }),
-  // 没有工作流就没有工作流上下文段（prompt 里那一段直接不出现）
-  getWorkflowContext: () => null,
 });
 
 onMounted(() => {

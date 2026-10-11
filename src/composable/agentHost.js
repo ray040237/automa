@@ -1,19 +1,33 @@
 /**
  * 助手宿主共用接线。
  *
- * 两个宿主（主面板的独立助手页 / 工作流编辑器侧栏）面对的是同一个 runtime 契约
- * （src/agent/index.js 的 createAgentRuntime）和同一块面板（AgentPanel.vue，
- * 收单个 :host 对象 —— T-90）。实测依赖差分：独立页传 enabledGroups +
- * getWorkflowId(=> null)；编辑器侧多传 sessionWorkflowId、canvas 四句柄，
- * 且 enabledGroups 以 getter 传（T-135，响应式权限不被冻结）。宿主本身除了
- * 接线没有别的逻辑，所以接线放这里，避免两份各自漂移。
+ * 三个宿主（浏览器侧栏 / Firefox 主面板助手页 / 工作流编辑器侧栏）面对的是
+ * 同一个 runtime 契约（src/agent/index.js 的 createAgentRuntime）和同一块
+ * 面板（AgentPanel.vue，收单个 :host 对象 —— T-90）。
+ *
+ * **两层结构（T-227）**：
+ *   - `createAgentHost(deps, ui)` —— 纯接线工厂。IO（browser 与 @/agent 桶的
+ *     八项）全部参数注入，UI 侧能力（t / toast / dialog / routerPush）作为
+ *     回调传入；工厂自身不 import browser 与 @/agent 桶，node --test 传全套
+ *     fake 直接覆盖它（agentHost.test.js）。守卫顺序、监听对称、会话切换、
+ *     确认门失效点全在这层。
+ *   - `useAgentHost(deps)` —— 薄壳，**生产装配点**。在组件 setup 里取 Vue
+ *     上下文（useI18n/useToast/useRouter/useDialog）、补生产 IO 缺省、递给
+ *     工厂并挂 dispose。缺省必须有人补（T-228）：工厂只认注入，测试传 fake，
+ *     而三个生产宿主谁都不传 —— 没有这层兜底，deps.browser 是 undefined，
+ *     setup 里当场抛「Cannot read properties of undefined (reading 'tabs')」。
+ *     宿主传入的项覆盖缺省（保持注入测试口）。
+ *     Vue 本身不是 seam 的主题，不做替身、不建组件测试基建。
+ *   - `usePageAgentHost({ layout, onOpenSettings? })` —— 「全局会话、无画布、
+ *     面向当前网页」宿主的唯一 profile（原先两个入口逐字复制的那 4 行）。
  *
  * 三个陷阱，改这里之前先读：
  *
  * 1. agent 必须是 reactive 而不是 shallowReactive —— events 是靠 push 增长的，
  *    浅响应下数组内新增不会触发渲染，transcript 会「发了消息但屏幕不动」。
  * 2. 卸载前必须把挂着的确认门放行（否）：loop 那侧一直在 await 这个 promise，
- *    宿主没了它永远不会结束（CONTEXT.md「确认门」条）。见文件末尾。
+ *    宿主没了它永远不会结束（CONTEXT.md「确认门」条）。走 `dismissPendingConfirm`
+ *    单一出口（T-227），三个失效点共用。
  * 3. 会话级授权（test_js 的「本会话允许试跑代码」）只有三个失效点：abort、
  *    切会话/新建（planSwitch）、面板卸载。状态机在 `confirm.js` 的
  *    `createSessionAuth`（T-90，纯函数、有测试），本文件只做副作用执行；
@@ -44,19 +58,38 @@ import { capabilityGroups } from '@/agent/examples';
 import { getSkillIndexFrom } from '@/agent/skills';
 
 /**
+ * 纯接线工厂（T-227）：全部宿主接线逻辑，IO 与 UI 能力都走参数。
+ *
  * @param {Object} deps
  * @param {Array<string>|(() => Array<string>)} deps.enabledGroups 该宿主开放的工具组；
  *   传函数时 runtime 每次 send 求值（T-135：响应式权限不被冻结）
- * @param {() => (string|null)} deps.getWorkflowId 会话归属的工作流 id；独立页恒为 null
- * @param {string=} deps.sessionWorkflowId 会话列表按哪个工作流过滤；不传就是全局列表
+ * @param {() => (string|null)} deps.getWorkflowId 会话归属的工作流 id；独立页恒为 null。
+ *   会话**写入**（turnRecord 的 workflowId）与**列表过滤**（listIndex）都用它 ——
+ *   一个事实来源，填岔了「存到 A 列表在 B 找」的静默错乱在结构上不可能（T-224）。
  * @param {Object=} deps.canvas 画布句柄，给了并且工具组里有 canvas，助手才能改画布
  * @param {Object} deps.canvas.blocks getBlocks() 的结果
  * @param {() => Object} deps.canvas.getEditor vue-flow 实例（ref，$ 晚于 runtime 就绪）
  * @param {() => string} deps.canvas.newId 节点 id 生成器
  * @param {() => void} deps.canvas.onCanvasChanged 只准标脏，绝不准落盘
- * @returns {Object} 面板直接绑在这个对象上
+ * @param {Object} deps.browser webextension-polyfill（注入，node --test 传 fake）
+ * @param {Object} deps.configIO
+ * @param {Object} deps.sessionStore
+ * @param {Function} deps.listTabs
+ * @param {Function} deps.resolveTarget
+ * @param {Function} deps.loadConfig
+ * @param {Function} deps.loadConfigDoc
+ * @param {Function} deps.saveConfig
+ * @param {Function} deps.createAgentRuntime
+ * @param {Object} ui Vue 侧能力的回调形态（薄壳负责从 setup 里取）
+ * @param {(key: string, params?: Object) => string} ui.t
+ * @param {{success: Function, error: Function}} ui.toast
+ * @param {{confirm: Function}} ui.dialog
+ * @param {(loc: Object) => Promise} ui.routerPush
+ * @returns {Object} 面板直接绑在这个对象上；自带 dispose()（卸载钩子，T-227）
  */
-export function useAgentHost(deps) {
+export function createAgentHost(deps, ui) {
+  const { t, toast, dialog, routerPush } = ui;
+
   // T-84：装配期必填校验。漏传 enabledGroups 会被 runtime 按「未过滤」处理
   // （canvas 组泄露给无画布宿主，T-45 同款事故）；漏传 getWorkflowId 会让
   // 会话归属静默落成全局列表，按工作流过滤的宿主永远看不到自己的历史。
@@ -82,7 +115,7 @@ export function useAgentHost(deps) {
   if (typeof deps.getVariables !== 'function') {
     throw new Error(
       'useAgentHost: deps.getVariables 必填（() => Promise<{bound, variables, globals}>）' +
-        '——缺了 get_variables 永远返回「（空）」，模型会据此编出不存在���变量名。' +
+        '——缺了 get_variables 永远返回「（空）」，模型会据此编出不存在的变量名。' +
         '没有工作流可读时传 async () => ({ bound: false })。'
     );
   }
@@ -95,11 +128,6 @@ export function useAgentHost(deps) {
       'useAgentHost: deps.getWorkflowContext 若传必须是函数（() => 摘要字符串 | null）'
     );
   }
-
-  const { t } = useI18n();
-  const toast = useToast();
-  const router = useRouter();
-  const dialog = useDialog();
 
   const agent = reactive({
     events: [],
@@ -247,9 +275,22 @@ export function useAgentHost(deps) {
     if (agent.pendingConfirm) agent.pendingConfirm.resolve(answer);
   }
 
-  /** 刷新会话列表。有 deps.sessionWorkflowId 时只列该工作流的会话。 */
+  /**
+   * 确认门的「必须放行（否）」单一出口（T-227）。
+   *
+   * CONTEXT.md「确认门」条：卡片变得不可达就必须 resolve(false)，三个失效点
+   * ——切会话（guardAgentSwitch）、宿主卸载（dispose）、面板自身被卸载
+   * （AgentPanel.vue 的 onBeforeUnmount，三处 v-if 真卸载）——原先各手抄一份
+   * 判空 + resolve(false)，靠注释「写成同一形状」维持。现在都走这里；
+   * 内部经 answerConfirm（判空安全），重复发也无害。
+   */
+  function dismissPendingConfirm() {
+    answerConfirm(false);
+  }
+
+  /** 刷新会话列表：按 deps.getWorkflowId() 过滤（与写入侧同一个事实来源，T-224）。 */
   async function refreshAgentSessions() {
-    agent.sessions = await sessionStore.listIndex(deps.sessionWorkflowId);
+    agent.sessions = await deps.sessionStore.listIndex(deps.getWorkflowId());
   }
 
   /**
@@ -265,8 +306,8 @@ export function useAgentHost(deps) {
 
     // 判的是 reactive 上的 pendingConfirm，不是 plan.rejectPending —— 后者判的
     // 是状态机内部的 pending，两个字段目前同生同灭但没有代码保证（T-191）。
-    // 与 :544 的卸载路径、AgentPanel.vue 的面板卸载路径写成同一形状。
-    if (agent.pendingConfirm) agent.pendingConfirm.resolve(false);
+    // 放行走 dismissPendingConfirm 单一出口（T-227），与两个卸载路径同一形状。
+    dismissPendingConfirm();
     sessionAuth.invalidate();
     return true;
   }
@@ -287,13 +328,13 @@ export function useAgentHost(deps) {
   async function resetTargetToAuto() {
     let windowId;
     try {
-      const currentWindow = await browser.windows.getCurrent();
+      const currentWindow = await deps.browser.windows.getCurrent();
       windowId = currentWindow ? currentWindow.id : undefined;
     } catch (err) {
       windowId = undefined;
     }
 
-    const next = await resolveTarget({ windowId });
+    const next = await deps.resolveTarget({ windowId });
     if (agent.runtime) agent.runtime.setTargetTab(next);
     syncTarget(next, { pinned: false, state: next ? 'ok' : 'none' });
 
@@ -361,9 +402,9 @@ export function useAgentHost(deps) {
     markTargetHealth(tab || null);
   };
 
-  browser.tabs.onRemoved.addListener(onTabRemoved);
-  browser.tabs.onUpdated.addListener(onTabUpdated);
-  browser.tabs.onActivated.addListener(onTabActivated);
+  deps.browser.tabs.onRemoved.addListener(onTabRemoved);
+  deps.browser.tabs.onUpdated.addListener(onTabUpdated);
+  deps.browser.tabs.onActivated.addListener(onTabActivated);
 
   async function openAgentSession(id) {
     // id 为空是下拉里的占位项，不是一次切换 —— 交给它会把 runtime 的
@@ -485,8 +526,8 @@ export function useAgentHost(deps) {
     if (agent.busy) return;
     if (!providerId || !modelId) return;
 
-    const doc = await loadConfigDoc(configIO);
-    const result = await saveConfig(configIO, {
+    const doc = await deps.loadConfigDoc(deps.configIO);
+    const result = await deps.saveConfig(deps.configIO, {
       ...doc,
       activeProviderId: providerId,
       activeModelId: modelId,
@@ -500,7 +541,7 @@ export function useAgentHost(deps) {
     // 面板上那两处（模型芯片、上下文窗口）都要跟着变。
     // resolveActiveConfig 会顺带把新模型的 contextWindow 解出来 —— 所以
     // config 整体重读一次，不必自己拼。
-    agent.config = await loadConfig(configIO);
+    agent.config = await deps.loadConfig(deps.configIO);
   }
 
   /**
@@ -524,7 +565,7 @@ export function useAgentHost(deps) {
       return;
     }
 
-    router.push({ path: '/agent' });
+    routerPush({ path: '/agent' });
   }
 
   /**
@@ -668,12 +709,12 @@ export function useAgentHost(deps) {
     if (inited) return;
     inited = true;
 
-    agent.config = await loadConfig(configIO);
+    agent.config = await deps.loadConfig(deps.configIO);
     // T-201/T-213：模型选择器的候选列表。**只取 provider id/label + 模型 id**
     // —— loadConfigDoc 已经把明文密钥清空，但这里再显式挑一次字段，
     // 让"密钥不进这一格"成为形状上的必然，而不是依赖上游那一次的清洗。
     try {
-      const doc = await loadConfigDoc(configIO);
+      const doc = await deps.loadConfigDoc(deps.configIO);
       agent.modelCatalog = (doc.providers || [])
         .filter((p) => p.id)
         .map((p) => ({
@@ -703,19 +744,19 @@ export function useAgentHost(deps) {
     // markRaw：runtime 是满是闭包/getter 的对象，塞进 reactive 会被深层代理
     // —— 方法碰巧不被包装才没炸（T-90）。零成本保险。
     agent.runtime = markRaw(
-      createAgentRuntime({
-        getConfig: () => loadConfig(configIO),
+      deps.createAgentRuntime({
+        getConfig: () => deps.loadConfig(deps.configIO),
         // 自定义指令（T-81a）：每轮 send 由 runtime 现读，改完下一轮生效。
         // 读取失败的降级在 runtime 侧（warn + 空串），这里不重复包。
-        getInstructions: () => getActiveInstructionsFrom(configIO),
+        getInstructions: () => getActiveInstructionsFrom(deps.configIO),
         // 技能索引（T-81b）：同一模式。read_skill 工具的查找走 runtime 缺省实现
         // （也读 configIO），这里不用传。
-        getSkillIndex: () => getSkillIndexFrom(configIO),
+        getSkillIndex: () => getSkillIndexFrom(deps.configIO),
         targetTab: agent.targetTab,
         enabledGroups: deps.enabledGroups,
         // T-50：变量数据源由宿主注入（runtime 不再兜底成空）。
         getVariables: deps.getVariables,
-        sessionStore,
+        sessionStore: deps.sessionStore,
         getWorkflowId: deps.getWorkflowId,
         ...(deps.canvas || {}),
         // LLM 标题异步生成完成后刷新面板上的会话列表
@@ -732,18 +773,24 @@ export function useAgentHost(deps) {
     if (latest) await openAgentSession(latest.id);
   }
 
-  onBeforeUnmount(() => {
-    // 宿主没了但 loop 还在 await 确认门 → 那个工具调用永远悬着，这一轮的会话也再
-    // 不会保存。必须显式放行（否），让 loop 拿 error 观察值收尾。
-    // 会话级授权随闭包一起消失，不用另置 false（技术方案 §8.2：面板卸载即失效）。
-    if (agent.pendingConfirm) agent.pendingConfirm.resolve(false);
+  /**
+   * 卸载钩子（T-227 起由薄壳交给 onBeforeUnmount）。
+   *
+   * 宿主没了但 loop 还在 await 确认门 → 那个工具调用永远悬着，这一轮的会话
+   * 也再不会保存。必须显式放行（否），让 loop 拿 error 观察值收尾 —— 走
+   * dismissPendingConfirm 单一出口。会话级授权随闭包一起消失，不用另置 false
+   * （技术方案 §8.2：面板卸载即失效）。
+   *
+   * T-08：这三个监听挂在 browser 上，不是组件上 —— 不摘就是泄漏，
+   * 面板反复开关后同一个 tab 的事件会被处理多次。
+   */
+  function dispose() {
+    dismissPendingConfirm();
 
-    // T-08：这三个监听挂在 browser 上，不是组件上 —— 不摘就是泄漏，
-    // 面板反复开关后同一个 tab 的事件会被处理多次。
-    browser.tabs.onRemoved.removeListener(onTabRemoved);
-    browser.tabs.onUpdated.removeListener(onTabUpdated);
-    browser.tabs.onActivated.removeListener(onTabActivated);
-  });
+    deps.browser.tabs.onRemoved.removeListener(onTabRemoved);
+    deps.browser.tabs.onUpdated.removeListener(onTabUpdated);
+    deps.browser.tabs.onActivated.removeListener(onTabActivated);
+  }
 
   return Object.assign(agent, {
     init,
@@ -753,8 +800,10 @@ export function useAgentHost(deps) {
     // T-164：解除固定 —— 回到自动跟随，不是变成无目标
     unpinTab: onUnpinTab,
     answerConfirm,
+    // T-227：确认门失效点的单一出口（guardAgentSwitch / dispose / 面板卸载共用）
+    dismissPendingConfirm,
     // 面板的标签页选择数据源（T-90：从两宿主各自的直连 import 收归 seam）
-    listTabs,
+    listTabs: deps.listTabs,
     noTarget: () => toast.error(t('workflow.agent.noTarget')),
     goToSettings: goToAgentSettings,
     openSession: openAgentSession,
@@ -762,5 +811,71 @@ export function useAgentHost(deps) {
     deleteSession: deleteAgentSession,
     // T-201/T-213：换模型
     setModel: onSetModel,
+    // T-227：薄壳把它挂到 onBeforeUnmount；测试直接调
+    dispose,
+  });
+}
+
+/**
+ * 薄壳（T-227）：setup 里取 Vue 上下文，递给纯工厂并挂卸载钩子。
+ * 接线逻辑一个字都不在这层 —— 那是工厂的事。
+ *
+ * 但**生产 IO 缺省在这层补**（T-228 回归修复）：工厂只认注入、测试传 fake，
+ * 三个生产宿主谁都不传这些 deps —— 这里不兜底，deps.browser 就是 undefined，
+ * 宿主 setup 里当场抛「reading 'tabs'」。展开顺序是缺省在前、...deps 在后，
+ * 宿主显式传入的项照旧覆盖缺省（注入测试口不闭死）。
+ */
+export function useAgentHost(deps) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const router = useRouter();
+  const dialog = useDialog();
+
+  const host = createAgentHost(
+    {
+      browser,
+      configIO,
+      sessionStore,
+      listTabs,
+      resolveTarget,
+      loadConfig,
+      loadConfigDoc,
+      saveConfig,
+      createAgentRuntime,
+      ...deps,
+    },
+    {
+      t,
+      toast,
+      dialog,
+      routerPush: (loc) => router.push(loc),
+    }
+  );
+
+  onBeforeUnmount(host.dispose);
+
+  return host;
+}
+
+/**
+ * 「全局会话、无画布、面向当前网页」宿主的唯一 profile（T-227）。
+ *
+ * 侧栏（App.vue）与 Firefox 主面板助手页（Agent.vue）共用：原先同一份
+ * 4 行缺省值（enabledGroups / getWorkflowId / getVariables / getWorkflowContext）
+ * 在两个入口逐字复制，漏传的静默事故（T-45/T-50）各挡过一次。现在这四句
+ * 只在这里说一次；宿主只声明真正属于自己的两件事 —— 形态与设置页落点。
+ */
+export function usePageAgentHost({ layout, onOpenSettings } = {}) {
+  return useAgentHost({
+    layout,
+    enabledGroups: ['page', 'context', 'tab'],
+    // 侧栏/助手页的会话是全局的，不绑定工作流
+    getWorkflowId: () => null,
+    // T-50：没有工作流可读必须显式说 bound:false —— 与「变量为空」是
+    // 两个不同的结论，混了模型会凭空编变量名。
+    getVariables: async () => ({ bound: false }),
+    // 没有工作流就没有工作流上下文段（prompt 里那一段直接不出现）
+    getWorkflowContext: () => null,
+    ...(onOpenSettings ? { onOpenSettings } : {}),
   });
 }

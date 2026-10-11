@@ -774,11 +774,11 @@ watch(
  * 只在整个页面卸载时才触发，兜不住这种「面板被藏起来」：不在这儿发否，
  * 那一轮永不收尾、不落盘，用户看到的就是「助手卡死了」。
  *
- * 发出去的 false 走宿主的 answerConfirm（内部判空，重复发也安全），
- * loop 拿到「用户拒绝」的 error 观察值照常收尾。
+ * 发出去的 false 走宿主的 dismissPendingConfirm（T-227 的单一出口，
+ * 内部判空，重复发也安全），loop 拿到「用户拒绝」的 error 观察值照常收尾。
  */
 onBeforeUnmount(() => {
-  if (props.host.pendingConfirm) props.host.answerConfirm(false);
+  props.host.dismissPendingConfirm();
   // 面板被藏起来时 armed 的 timer 还在跑 —— 它挂的是 setTimeout 不是组件，
   // 不清的话两秒后会对一个已卸载的组件写 ref（且下一次忙碌的开局是 armed）
   disarmStop();

@@ -20,13 +20,11 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted } from 'vue';
 import AgentPanel from '@/components/newtab/workflow/agent/AgentPanel.vue';
-import { useAgentHost } from '@/composable/agentHost';
-import { useTheme } from '@/composable/theme';
-import { loadLocaleMessages, setI18nLanguage } from '@/lib/vueI18n';
+import { usePageAgentHost } from '@/composable/agentHost';
+import { useHostBootstrap } from '@/composable/hostBootstrap';
 import { sendMessage } from '@/utils/message';
-import { useStore } from '@/stores/main';
 
 /**
  * 浏览器侧边栏宿主（T-199）。
@@ -36,25 +34,13 @@ import { useStore } from '@/stores/main';
  *   编辑器侧栏 = 工作流内、有画布、会话按 workflowId
  *   浏览器侧栏 = 全局、无工作流、会话面向页面交互
  *
- * 接线与旧的 Agent.vue 逐字相同，唯一差别是 `layout: 'narrow'` —— 侧栏宽度
- * 约 320–400px，横向常驻历史栏（wide 的左栏）塞不下，历史不常驻；
- * 会话的浏览 / 切换 / 删除走标题下拉（2026-10-10 起历史视图已撤）。
- * 判别依据见 agentHost.js:119 与 AgentPanel.vue:541。
+ * T-227：无画布宿主的 4 行缺省 profile 收进了 usePageAgentHost，
+ * 启动链收进了 useHostBootstrap —— 这个文件只剩真正属于侧栏自己的三件事：
+ * 窄形态、设置页落点（走 dashboard 通道）、面板等 locale 就绪再挂。
  */
-const agent = useAgentHost({
+const agent = usePageAgentHost({
   // 窄宿主：历史走「整块替换正文区」的视图切换，不做 240px 常驻左栏。
   layout: 'narrow',
-  // T-213：不再声明 shell —— 面板根统一 bg-canvas，暗色由 :root.dark 接管
-  // 没有画布：canvas 组工具不注册，提示词的事实表同步裁剪
-  enabledGroups: ['page', 'context', 'tab'],
-  // 侧栏会话是全局的，不绑定工作流
-  getWorkflowId: () => null,
-  // T-50：这里没有工作流可读，**必须显式说 bound:false**。
-  // 靠 runtime 的空兜底返回 `{}` 会让模型以为「这个工作流没有变量」，
-  // 而事实是「这里根本没有工作流」，两者结论不同。
-  getVariables: async () => ({ bound: false }),
-  // 没有工作流就没有工作流上下文段（prompt 里那一段直接不出现）
-  getWorkflowContext: () => null,
   /**
    * 「去配置 API Key」的落点（T-199 / T-219 / T-220）。
    *
@@ -76,17 +62,9 @@ const agent = useAgentHost({
   },
 });
 
-/**
- * 主题跟随（T-221）。
- *
- * 侧栏是独立 HTML 入口，不吃 newtab 的启动链 —— `newtab/App.vue:125` 调了
- * `theme.init()` 把 `<html>` 的 `dark` 类挂上，侧栏没调，于是设置里选暗色
- * （或系统暗色）也恒亮。主题存 `browser.storage.local.theme`（与
- * `store.settings` 分开），与语言包同款：侧栏已在读 storage，无额外依赖。
- */
-const theme = useTheme();
-
-theme.init();
+// T-227：loadSettings → 语言包 → setI18nLanguage → theme.init 的顺序知识
+// 在 useHostBootstrap 里；<ui-dialog> 是模板关注点，留在上方模板里。
+const { localeLoaded } = useHostBootstrap();
 
 onMounted(() => {
   // agent 初始化失败不该影响侧栏本身：这里不上报，
@@ -95,32 +73,4 @@ onMounted(() => {
     console.warn('[agent] init failed:', err);
   });
 });
-
-/**
- * i18n 加载（修复 `workflow.agent.*` 键名直显）。
- *
- * 侧栏是独立 HTML 入口，不吃 newtab/popup 的启动链，所以必须自己加载语言包，
- * 否则所有 t('...') 都会把键名当文案显示出来。
- *
- * 注意这里加载的是 `'newtab'` 而不是 `'popup'`：`workflow.agent.*` 等面板文案
- * 位于 `locales/<locale>/newtab.json`，与面板被复用的来源保持一致。
- * 顺序照搬 newtab/App.vue:356-364 —— 先 loadSettings() 拿到用户选的 locale，
- * 再 loadLocaleMessages 注入词条，最后 setI18nLanguage 生效。
- */
-const localeLoaded = ref(false);
-
-(async () => {
-  try {
-    const store = useStore();
-    await store.loadSettings();
-
-    const { locale } = store.settings;
-    await loadLocaleMessages(locale, 'newtab');
-    await setI18nLanguage(locale);
-  } catch (err) {
-    console.error('[sidepanel] load locale failed:', err);
-  } finally {
-    localeLoaded.value = true;
-  }
-})();
 </script>

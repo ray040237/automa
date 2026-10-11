@@ -1147,8 +1147,13 @@ test('T-50：两个宿主都必须注入 getVariables，独立页显式说未绑
   );
   assert.match(
     standaloneSrc,
+    /usePageAgentHost\(\{/,
+    '独立助手页走无画布 profile（T-227：4 行缺省值收单点，不再逐字复制）'
+  );
+  assert.match(
+    hostSrc,
     /getVariables:\s*async\s*\(\s*\)\s*=>\s*\(\s*\{\s*bound:\s*false\s*\}\s*\)/,
-    '独立助手页没有工作流，必须显式 bound:false，不能靠空对象蒙混'
+    'profile 显式 bound:false —— 不能靠空对象蒙混（T-227 后事实在 agentHost.js）'
   );
 });
 

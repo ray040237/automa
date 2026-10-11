@@ -27,8 +27,9 @@ test('T-219 守卫：设置落点是 /agent，不许再出现无效路由 /setti
 
   assert.match(
     host,
-    /router\.push\(\{\s*path:\s*'\/agent'\s*\}\)/,
-    'goToAgentSettings 默认落点必须是 /agent（/settings/agent 不是有效路由）'
+    /routerPush\(\{\s*path:\s*'\/agent'\s*\}\)/,
+    'goToAgentSettings 默认落点必须是 /agent（/settings/agent 不是有效路由）；' +
+      'T-227 起路由经 ui.routerPush 回调注入，断言随调用形状更新'
   );
   assert.doesNotMatch(
     host,
@@ -62,14 +63,21 @@ test('T-220 守卫：侧栏开设置页走 open:dashboard 通道，不用裸 tab
   );
 });
 
-test('T-221 守卫：侧栏必须跟随主题（调 useTheme().init()）', () => {
+test('T-221 守卫：侧栏必须跟随主题（启动链调 useTheme().init()）', () => {
   // 侧栏是独立 HTML 入口，不吃 newtab 的启动链；不调 theme.init() 就恒亮色。
+  // T-227 起主题初始化在 useHostBootstrap（启动链收单点）—— 守卫跟着搬：
+  // 侧栏必须用 helper，helper 必须真的调 useTheme().init()。
   const side = stripComments(read('src/sidepanel/App.vue'));
+  const bootstrap = stripComments(read('src/composable/hostBootstrap.js'));
 
-  assert.match(side, /useTheme\(\)/, '侧栏必须用 useTheme()');
   assert.match(
     side,
-    /theme\.init\(\)/,
-    '侧栏必须调 theme.init() 把 <html> 的 dark 类挂上，否则主题恒亮'
+    /useHostBootstrap\(\)/,
+    '侧栏必须走 useHostBootstrap 启动链（语言包/主题的顺序知识收单点）'
+  );
+  assert.match(
+    bootstrap,
+    /useTheme\(\)\.init\(\)/,
+    '启动链必须调 theme.init() 把 <html> 的 dark 类挂上，否则主题恒亮'
   );
 });

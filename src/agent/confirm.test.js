@@ -293,15 +293,12 @@ test('T-02 接线守卫：AgentPanel 卸载前必须拒掉挂起的确认门', (
 
   const block = src.slice(hookAt, hookAt + 300);
   // T-90：面板收 host 对象后，取用与应答都经 props.host.*
+  // T-227：应答入口收敛为 dismissPendingConfirm（单一出口，判空安全），
+  // 原先「先判 pendingConfirm 再 answerConfirm(false)」的手抄形状退役。
   assert.match(
     block,
-    /props\.host\.pendingConfirm/,
-    '钩子必须先判有没有挂起的确认'
-  );
-  assert.match(
-    block,
-    /props\.host\.answerConfirm\(false\)/,
-    '必须发否 —— 宿主的 answerConfirm 会 resolve，loop 才能收尾'
+    /props\.host\.dismissPendingConfirm\(\)/,
+    '必须经单一出口发否 —— 宿主的 dismissPendingConfirm 会 resolve，loop 才能收尾'
   );
 });
 
