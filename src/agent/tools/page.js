@@ -12,11 +12,18 @@ import { defineTool, toolOk, toolError } from './define';
 
 /**
  * @typedef {Object} ToolCtx
- * @property {(params: {detail?: string, maxChars?: number}) => Promise<string|{text: string, fingerprint?: string}>} ctx.readPage
- * @property {(params: {keyword: string, limit?: number}) => Promise<string|{text: string}>} ctx.findText
+ * @property {(params: {detail?: string, maxChars?: number}) => Promise<{text: string, fingerprint?: string}|{ok: false, error: string}|string>} ctx.readPage
+ *   失败形状 {ok:false, error}（browserAdapter T-225）：必须转 toolError，
+ *   不能当成功正文喂给模型
+ * @property {(params: {keyword: string, limit?: number}) => Promise<{text: string}|{ok: false, error: string}|string>} ctx.findText
  * @property {() => Promise<Object>} ctx.getVariables
  * @property {(name: string) => Promise<Object|null>} ctx.getBlockSchema
  */
+
+// 读页通道的失败形状判定（readPageFromTab 的四条失败路径统一走它）。
+// 与 tools/adapter.js 的信封判定无关 —— 这是通道层自己的家族形状（callChannel 同族）。
+const isReadFailure = (res) =>
+  Boolean(res && typeof res === 'object' && res.ok === false);
 
 /** read_page 的档位（单调阶梯：往后一项只比前一项多）。默认档排在最前。 */
 export const READ_PAGE_DETAILS = ['addresses', 'probe', 'content', 'full'];
@@ -143,6 +150,9 @@ export const readPage = defineTool({
       ...(args && args.frame ? { frame: args.frame } : {}),
     });
 
+    // 缺目标页 / 页面超时 / 读不到结构 —— 是失败，不是「带提示的成功」（T-225）
+    if (isReadFailure(res)) return toolError(res.error);
+
     if (res && typeof res === 'object') {
       return toolOk(
         res.text,
@@ -197,6 +207,10 @@ export const findText = defineTool({
         : 5;
 
     const res = await ctx.findText({ keyword, limit });
+
+    // 与 read_page 同一条通道，失败形状也同族（T-225）
+    if (isReadFailure(res)) return toolError(res.error);
+
     return toolOk(res && typeof res === 'object' ? res.text : res);
   },
 });

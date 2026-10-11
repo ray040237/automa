@@ -108,7 +108,7 @@ const toolResult = (id) => ({
   observation: 'x',
 });
 
-test('B7：正常收尾（末尾 DONE / 工具调用有配对结果）不算中断', () => {
+test('B7：正常收尾（调用有配对结果）不算中断；历史里混入 DONE 也不影响判定', () => {
   assert.equal(hasInterruptedTail([]), false);
   assert.equal(
     hasInterruptedTail([userMsg('问'), delta('答'), doneEv()]),
@@ -140,16 +140,24 @@ test('B7：悬空 TOOL_CALL（无配对结果）判为中断', () => {
   );
 });
 
-test('B7：判据只看最后一条 DONE 之后的 tail', () => {
-  // 上一轮虽有过悬空调用，但随后 DONE 收尾 → 末尾是收尾态，不提示
+test('B7：判定只认 call/result 配对，DONE 不参与（T-223：DONE 不入史）', () => {
+  // T-223：DONE 自 T-72 起只发外不入史，存储历史里没有「最后一条 DONE」可作
+  // 锚点；「悬空调用随后 DONE 收尾」这个形态在生产中不存在（真实收尾 =
+  // 调用有配对结果）。这里防御性钉住：即使历史里混入 DONE 事件，判定也
+  // 不把它当收尾信号——悬空调用就是中断。
   assert.equal(
     hasInterruptedTail([userMsg('问'), toolCall('t1'), doneEv()]),
-    false
+    true
   );
   // 已收尾的一轮之后又起了新的一轮、且新轮悬空 → 命中
   assert.equal(
     hasInterruptedTail([userMsg('a'), doneEv(), userMsg('b'), toolCall('t9')]),
     true
+  );
+  // 真实的收尾形态：调用有配对结果 → 不提示
+  assert.equal(
+    hasInterruptedTail([userMsg('a'), toolCall('t2'), toolResult('t2')]),
+    false
   );
 });
 

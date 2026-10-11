@@ -1146,6 +1146,16 @@ export function createAgent(deps) {
         stopped,
         aborted: controller.signal.aborted,
         usage,
+        // T-222：本轮最后一次请求的**实测**上下文占用（input+cacheRead+
+        // cacheWrite + 尾部估算，见 compaction.measuredContextTokens 的完整
+        // 论述）—— 会话水位环的分子。UI 曾拿跨轮累加的计费 input 当水位，
+        // 多轮单调虚高。取不到（端点没回 usage / 全是重放历史）为 null，UI
+        // 据此整段不渲染，绝不回落到计费总量。不含本轮最终 assistant 输出
+        // （要等下一次请求才进 prompt），差量由下一轮开头的实测覆盖。
+        contextTokens: measuredContextTokens({
+          messages: piAgent ? piAgent.state.messages : [],
+          pendingText: '',
+        }),
         // T-60：本轮缺 toolCallId 的次数。恒为数字（含 0），消费方不用判空；
         // 非 0 意味着「这一轮里有工具调用的 id 靠凑巧配对」，值得追查。
         missingToolCallIds,

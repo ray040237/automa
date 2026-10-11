@@ -105,8 +105,14 @@ export function createCheckpointSaver({
 /**
  * 构造单一份会话 save 对象。键集合在这里钉死：
  * id / workflowId / status / createdAt / lastAccessedAt / events / pins /
- * focusedTabId / usage。title 不在这里给——新会话由 sessionStore.save 用
- * titleFromEvents 兜底，已有会话的 title 由 patchTitle 单独改写。
+ * focusedTabId / usage / contextTokens。title 不在这里给——新会话由
+ * sessionStore.save 用 titleFromEvents 兜底，已有会话的 title 由 patchTitle
+ * 单独改写。
+ *
+ * contextTokens（T-222）是**实测**上下文占用（水位环的分子），语义是
+ * 「最近一次测量」，与计费 usage 的累加语义不同：本轮没实测时保留旧值
+ * （null 也照传），由调用方决定，这里不做「缺了就 0」的兜底 —— 0 会被
+ * 读成「完全没占」，和「不知道」是两回事。
  *
  * @param {Object} input
  * @returns {Object}
@@ -119,6 +125,7 @@ export function buildTurnRecord({
   pins,
   focusedTabId,
   usage,
+  contextTokens,
   now,
 } = {}) {
   const ts = typeof now === 'number' ? now : Date.now();
@@ -132,5 +139,6 @@ export function buildTurnRecord({
     pins: pins || [],
     focusedTabId: focusedTabId ?? null,
     usage: usage || { input: 0, output: 0 },
+    contextTokens: contextTokens ?? null,
   };
 }

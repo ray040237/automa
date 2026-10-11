@@ -42,8 +42,10 @@ let runtimeSeq = 0;
  * @param {Object} deps
  * @param {Object} deps.browserApi 只用 `tabs.get`；由装配层注入（index.js
  *   是唯一 import polyfill 的文件）
- * @param {(tab: Object, params: Object) => Promise<Object>} deps.readPage
- *   指纹 probe 用的读页实现（browserAdapter 的 readPageFromTab）
+ * @param {(tab: Object, params: Object) => Promise<{text: string, fingerprint: (string|null)}|{ok: false, error: string}|string>} deps.readPage
+ *   指纹 probe 用的读页实现（browserAdapter 的 readPageFromTab）。
+ *   失败形状 {ok:false, error} 没有 fingerprint —— probe 与 recordRead
+ *   只认 fingerprint，天然跳过（T-225，有测试钉住）。
  * @param {Object=} deps.initialTab 装配时宿主已解析出的目标页快照
  * @returns {Object} 账本：current / setTarget / pickTab / unpin / addPin /
  *   focusTab / getPins / getFocusedTabId / recordRead / preStepNotice /
@@ -188,6 +190,8 @@ export function createTargetPageLedger({
           detail: 'probe',
           frame: 'top',
         });
+        // 失败形状（{ok:false,error}，T-225）没有 fingerprint → fp 为 null，
+        // 比对自然跳过：读不到页 ≠ 页面没变，不许产生假「没变」结论
         const fp = res && typeof res === 'object' ? res.fingerprint : null;
 
         if (fp && fp !== lastRead.fingerprint) {

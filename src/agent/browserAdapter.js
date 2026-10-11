@@ -122,19 +122,25 @@ export const TAB_CHANNEL_TIMEOUT_MS = 15000;
 /**
  * 读目标页 / 页内找文本。通过 content script 通道拿结构化观察值。
  *
- * 失败时回一句人话而不是抛异常：工具异常会被 loop 转成 error 观察值喂回模型，
- * 模型能据此换一种参数重试；把栈抛上去只会让它原地打转。
+ * 失败时回 `{ok:false, error}` 人话而不是抛异常：工具异常会被 loop 转成
+ * error 观察值喂回模型，模型能据此换一种参数重试；把栈抛上去只会让它原地
+ * 打转。失败形状与 toBackground 的通道超时兜底同族（T-225）—— 曾经裸字符串
+ * 返回，被 page.js 包成「成功观察值」，isError 恒为假：确认门、错误统计、
+ * 工具卡全把失败读页当成功。
  *
  * @param {Object} tab
  * @param {{detail?: string, maxChars?: number, op?: string, keyword?: string, limit?: number}|string} params
  *   传字符串时按 detail 处理（兼容旧调用点）
- * @returns {Promise<string|{text: string, fingerprint: (string|null)}>}
+ * @returns {Promise<{text: string, fingerprint: (string|null)}|{ok: false, error: string}|string>}
+ *   成功 = {text, fingerprint}（content 侧只回裸字符串时原样透传）；
+ *   失败 = {ok:false, error}。
  */
 export async function readPageFromTab(tab, params) {
   const options =
     typeof params === 'string' ? { detail: params } : params || {};
 
-  if (!tab) return '没有确定目标页。请先让用户选一个标签页。';
+  if (!tab)
+    return { ok: false, error: '没有确定目标页。请先让用户选一个标签页。' };
 
   const timeoutMs = options.timeoutMs || TAB_CHANNEL_TIMEOUT_MS;
   const detail = options.detail || 'addresses';
@@ -209,12 +215,14 @@ async function readOneFrame(tab, options, frameId, timeoutMs) {
     // 必须给模型一句能行动的话（换页/让用户刷新），否则它会原地反复重试。
     if (res && res.__timeout) {
       agentLog.warn('page.timeout', { tabId: tab.id, timeoutMs });
-      return (
-        '页面无响应（' +
-        Math.round(timeoutMs / 1000) +
-        's 无应答）：页面可能被之前注入的代码占死了。请停止对本页的读页和执行操作，' +
-        '让用户手动刷新或关闭该页，或用 focus_tab 换一个标签页。'
-      );
+      return {
+        ok: false,
+        error:
+          '页面无响应（' +
+          Math.round(timeoutMs / 1000) +
+          's 无应答）：页面可能被之前注入的代码占死了。请停止对本页的读页和执行操作，' +
+          '让用户手动刷新或关闭该页，或用 focus_tab 换一个标签页。',
+      };
     }
 
     // content 侧读页返回 {text, fingerprint}；指纹必须原样带回来 ——
@@ -234,20 +242,24 @@ async function readOneFrame(tab, options, frameId, timeoutMs) {
       return res;
     }
 
-    return (
-      '这个页面读不到结构。常见原因：页面尚未加载完；这是一个扩展内置页' +
-      '（chrome:// 与扩展自己的页面都没有注入 content script）；或站点未授予扩展权限。'
-    );
+    return {
+      ok: false,
+      error:
+        '这个页面读不到结构。常见原因：页面尚未加载完；这是一个扩展内置页' +
+        '（chrome:// 与扩展自己的页面都没有注入 content script）；或站点未授予扩展权限。',
+    };
   } catch (err) {
     agentLog.warn('page.read.fail', {
       tabId: tab.id,
       message: err && err.message ? err.message : String(err),
     });
-    return (
-      '读取目标页失败：' +
-      (err && err.message ? err.message : String(err)) +
-      '多半是该标签页没有注入 content script（扩展页、chrome:// 内置页、或还没加载完）。'
-    );
+    return {
+      ok: false,
+      error:
+        '读取目标页失败：' +
+        (err && err.message ? err.message : String(err)) +
+        '多半是该标签页没有注入 content script（扩展页、chrome:// 内置页、或还没加载完）。',
+    };
   }
 }
 
@@ -259,9 +271,16 @@ function probeSummary(text) {
   return { url, title, interactive: n != null ? n : '?' };
 }
 
+// 失败形状（{ok:false,error}）判定：readOneFrame 的四条失败路径统一走它
+function readFailed(res) {
+  return Boolean(res && typeof res === 'object' && res.ok === false);
+}
+
 // 合并多 frame 的读页结果：
+//  - 顶层失败：整个读按失败处理，失败形状原样上抛（没有顶层正文可合并）
 //  - probe：顶层 text 为主体，</page> 前追加每个 frame 的一句话摘要（## frames）
 //  - addresses/content/full：顶层 text 为主体，</page> 前顺序拼每个 iframe 的正文段
+//  - iframe 失败不静默丢：显式标「读取失败 + 原因」进合并文本
 // 指纹一律取顶层 frameId=0 的。
 function mergeFrameReads(results, detail) {
   const top = results.find((r) => r.fid === 0) || results[0];
@@ -273,6 +292,9 @@ function mergeFrameReads(results, detail) {
     return top ? top.res : '';
   }
 
+  // 顶层读不到（超时/没结构/通道炸），iframe 再健康也合不出一页 —— 原样上抛
+  if (readFailed(topRes)) return topRes;
+
   const topText =
     topRes && typeof topRes.text === 'string'
       ? topRes.text
@@ -282,13 +304,19 @@ function mergeFrameReads(results, detail) {
   if (detail === 'probe') {
     const lines = ['## frames（top + iframe）'];
     for (const r of results) {
+      const label = r.fid === 0 ? 'top' : 'iframe[frameId=' + r.fid + ']';
+      if (readFailed(r.res)) {
+        lines.push('  - ' + label + ': 读取失败：' + r.res.error);
+        continue;
+      }
       const t =
         r.res && typeof r.res === 'object' && typeof r.res.text === 'string'
           ? r.res.text
           : '';
       const s = probeSummary(t);
       lines.push(
-        (r.fid === 0 ? '  - top' : '  - iframe[frameId=' + r.fid + ']') +
+        '  - ' +
+          label +
           ': ' +
           (s.url || '(无 url)') +
           ' title="' +
@@ -311,6 +339,12 @@ function mergeFrameReads(results, detail) {
 
   for (const r of results) {
     if (r.fid === 0) continue;
+    if (readFailed(r.res)) {
+      parts.push(
+        '\n## iframe（frameId=' + r.fid + '）读取失败：' + r.res.error + '\n'
+      );
+      continue;
+    }
     const t =
       r.res && typeof r.res === 'object' && typeof r.res.text === 'string'
         ? r.res.text

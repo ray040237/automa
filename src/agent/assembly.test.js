@@ -260,6 +260,7 @@ describe('会话切换与删除', () => {
       createdAt: 1,
       lastAccessedAt: 1,
       events: [user('A')],
+      contextTokens: 12345,
     });
     await store.save({
       id: 's-b',
@@ -282,6 +283,8 @@ describe('会话切换与删除', () => {
       a.events.map((e) => e.text),
       ['A']
     );
+    // T-222：实测上下文占用随记录走 —— 重开会话水位环才有分子
+    assert.equal(a.contextTokens, 12345);
 
     const b = await rt.openSession('s-b');
     assert.equal(rt.getSessionId(), 's-b');
@@ -744,8 +747,9 @@ describe('readPageFromTab —— tabs 通道超时兜底（T-33）', () => {
         { detail: 'summary', timeoutMs: 20 }
       );
 
-      assert.match(out, /页面无响应/);
-      assert.match(out, /刷新|换一个标签页/, '必须给模型一句能行动的话');
+      assert.equal(out.ok, false, '失败形状（T-225）：不能被包成成功观察值');
+      assert.match(out.error, /页面无响应/);
+      assert.match(out.error, /刷新|换一个标签页/, '必须给模型一句能行动的话');
     } finally {
       stub.default.tabs.sendMessage = original;
     }
@@ -856,6 +860,86 @@ describe('readPageFromTab —— frame 支持（T-115）', () => {
       assert.deepEqual(called, [0]);
       assert.equal(out.fingerprint, 'fp');
     } finally {
+      stub.state.sendMessageByFrame = null;
+    }
+  });
+});
+
+describe('readPageFromTab —— 失败形状与帧合并（T-225）', () => {
+  test('多 frame 下顶层超时：整个读按失败上抛，不拿 [object Object] 当正文', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    stub.state.frames = [{ frameId: 0 }, { frameId: 3 }];
+    stub.state.sendMessageByFrame = async (tabId, msg, frameId) => {
+      if (frameId === 0) return new Promise(() => {}); // 顶层被占死
+      return { text: '<page>iframe 正文</page>', fingerprint: 'fp-iframe' };
+    };
+
+    try {
+      const out = await readPageFromTab({ id: 7 }, { timeoutMs: 20 });
+
+      assert.equal(out.ok, false, '顶层读不到，iframe 再健康也合不成一页');
+      assert.match(out.error, /页面无响应/);
+      assert.ok(!('text' in out), '失败形状不夹带半截正文');
+    } finally {
+      stub.state.frames = null;
+      stub.state.sendMessageByFrame = null;
+    }
+  });
+
+  test('多 frame 下 iframe 失败：不静默丢，显式标注进合并文本，指纹仍取顶层', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    stub.state.frames = [{ frameId: 0 }, { frameId: 3 }];
+    stub.state.sendMessageByFrame = async (tabId, msg, frameId) => {
+      if (frameId === 0)
+        return {
+          text: '<page url="https://a.com" title="t" detail="addresses">top 正文</page>',
+          fingerprint: 'fp-top',
+        };
+      return new Promise(() => {}); // iframe 被占死
+    };
+
+    try {
+      const out = await readPageFromTab(
+        { id: 7 },
+        { detail: 'addresses', timeoutMs: 20 }
+      );
+
+      assert.equal(out.fingerprint, 'fp-top', '顶层健康 → 成功形状，指纹照取');
+      assert.match(out.text, /top 正文/, '顶层正文不受影响');
+      assert.match(out.text, /iframe（frameId=3）读取失败/, '失败段显式标注');
+      assert.match(out.text, /页面无响应/, '失败原因要带进合并文本');
+    } finally {
+      stub.state.frames = null;
+      stub.state.sendMessageByFrame = null;
+    }
+  });
+
+  test('probe 摘要里失败 frame 标「读取失败」，不再呈现 (无 url) 假象', async () => {
+    const stub = await import('./__stubs__/webextension-polyfill');
+    stub.state.frames = [{ frameId: 0 }, { frameId: 5 }];
+    stub.state.sendMessageByFrame = async (tabId, msg, frameId) => {
+      if (frameId === 0)
+        return {
+          text: '<page url="https://a.com" title="t" detail="probe" fingerprint="fp0">## 概览</page>',
+          fingerprint: 'fp0',
+        };
+      return new Promise(() => {}); // iframe 被占死
+    };
+
+    try {
+      const out = await readPageFromTab(
+        { id: 7 },
+        { detail: 'probe', timeoutMs: 20 }
+      );
+
+      assert.match(
+        out.text,
+        /iframe\[frameId=5\]: 读取失败：页面无响应/,
+        'probe 摘要必须能看出这个 frame 没读到'
+      );
+      assert.equal(out.fingerprint, 'fp0');
+    } finally {
+      stub.state.frames = null;
       stub.state.sendMessageByFrame = null;
     }
   });

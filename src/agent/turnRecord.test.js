@@ -123,6 +123,7 @@ test('buildTurnRecord：键集合单一定义，缺省值正确', () => {
     pins: [{ tabId: 1 }],
     focusedTabId: 1,
     usage: { input: 3, output: 4 },
+    contextTokens: 4200,
     now: 2000,
   });
   assert.deepEqual(rec, {
@@ -135,6 +136,7 @@ test('buildTurnRecord：键集合单一定义，缺省值正确', () => {
     pins: [{ tabId: 1 }],
     focusedTabId: 1,
     usage: { input: 3, output: 4 },
+    contextTokens: 4200,
   });
   assert.ok(!('title' in rec), 'title 不在收尾构造里——走 patchTitle');
 
@@ -143,4 +145,7 @@ test('buildTurnRecord：键集合单一定义，缺省值正确', () => {
   assert.equal(minimal.lastAccessedAt, 3000);
   assert.equal(minimal.focusedTabId, null);
   assert.deepEqual(minimal.usage, { input: 0, output: 0 });
+  // T-222：水位分子缺省是 null（= 无实测，UI 整段不渲染），绝不是 0——
+  // 0 会被读成「完全没占」，与 usage 的「按 0 累加」是两种语义。
+  assert.equal(minimal.contextTokens, null);
 });

@@ -1333,6 +1333,36 @@ test('usage 累计到 done 事件', async () => {
   assert.deepEqual(doneEv.usage, { input: 100, output: 10 });
 });
 
+test('T-222：done 带实测上下文占用（input+cacheRead+cacheWrite），水位环的分子', async () => {
+  // 三项相加才还原 prompt_tokens（compaction.js 的完整论述）：只读 input
+  // 会在缓存命中时把水位低估一大截 —— 长会话恰恰是最容易命中的场景。
+  const h = makeAgent([
+    piStream('a', {
+      usage: {
+        input: 100,
+        output: 10,
+        cacheRead: 500,
+        cacheWrite: 20,
+        totalTokens: 630,
+      },
+    }),
+  ]);
+  const doneEv = await send(h);
+
+  assert.equal(
+    doneEv.contextTokens,
+    620,
+    '实测 = 100+500+20；收尾时尾部无追加消息、pendingText 为空，不加估算'
+  );
+});
+
+test('T-222：端点没回 usage 时 contextTokens 为 null（UI 整段不渲染，不是假水位）', async () => {
+  const h = makeAgent([piStream('a', { usage: undefined })]);
+  const doneEv = await send(h);
+
+  assert.equal(doneEv.contextTokens, null);
+});
+
 test('abort 走 DONE(aborted) 而不是 error（§5.4 回归）', async () => {
   const events = [];
   // 模拟真实中止路径：流先说半句话，挂住等 abort，然后像被 cancel 的 reader 一样抛

@@ -262,6 +262,50 @@ describe('preStepNotice（T-224 起的第一个直测）', () => {
     assert.equal(readPage.calls.length, 2);
   });
 
+  test('T-225：probe 拿到失败形状（{ok:false,error}）不提示不炸，比对跳过', async () => {
+    const readPage = fakeReadPage(async () => ({
+      ok: false,
+      error: '页面无响应（15s 无应答）：页面可能被占死了。',
+    }));
+    const led = ledgerOf({
+      initialTab: tab(16, 'https://a.com/x'),
+      tabs: [tab(16, 'https://a.com/x')],
+      readPage,
+    });
+
+    led.recordRead({ text: '<page>', fingerprint: 'fp-1' });
+    led.prepareTurn();
+
+    assert.equal(
+      await led.preStepNotice(),
+      null,
+      '读不到页 ≠ 页面没变：没有指纹可比，不许产生假「没变」结论'
+    );
+    assert.equal(
+      readPage.calls.length,
+      1,
+      'probe 确实发生了（不是被静默跳过）'
+    );
+  });
+
+  test('T-225：recordRead 收到失败形状不记基线，下一轮不再触发 probe', () => {
+    const readPage = fakeReadPage('fp-any');
+    const led = ledgerOf({
+      initialTab: tab(17, 'https://a.com/x'),
+      tabs: [tab(17, 'https://a.com/x')],
+      readPage,
+    });
+
+    led.recordRead({ ok: false, error: '没有确定目标页。' });
+    led.prepareTurn();
+
+    assert.equal(
+      readPage.calls.length,
+      0,
+      '基线没记上 → prepareTurn 不开 probe'
+    );
+  });
+
   test('模型从没读过页 → prepareTurn 不开 probe（省一次 content 往返）', async () => {
     const readPage = fakeReadPage('fp-any');
     const led = ledgerOf({

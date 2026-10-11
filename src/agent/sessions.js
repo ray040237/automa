@@ -18,7 +18,7 @@ export const SESSION_INDEX_KEY = 'agent_session_index';
 
 export const sessionStorageKey = (id) => `agent_session_${id}`;
 
-/** 存储里最多保留多少个用户轮次（wire 层另有 token 预算，这里是存储体积上限） */
+/** 存储里最多保留多少个用户轮次（模型侧另有上下文压缩，阈值见 compaction.js；这里是存储体积上限） */
 export const MAX_SESSION_TURNS = 20;
 
 /**
@@ -54,7 +54,7 @@ export function titleFromEvents(events) {
  * 按用户轮次裁剪历史，保留最近 maxTurns 轮。
  *
  * 必须按整轮切（从某条 user-message 事件起）——从中间切会把一轮的
- * tool-result 和它的 tool-call 拆开，wire 配对净化也救不回语义。
+ * tool-result 和它的 tool-call 拆开，pi 侧的悬空调用净化（ADR 0004）也救不回语义。
  *
  * T-76：切口永不越过最后一条 agent:compaction——摘要是模型唯一的历史记忆，
  * 被存储修剪裁掉等于白压。它之前的老事件照常修剪（那是 UI 层的损失，模型侧
@@ -103,13 +103,17 @@ export const INTERRUPTED_TURN_NOTICE =
  * 本判据只认最确定的一种形态：**悬空的工具调用**（有 TOOL_CALL、其后没有配对的
  * TOOL_RESULT）。模型要了工具、结果没回来，这一轮显然没收尾。
  *
- * 判据范围只看**最后一条 DONE 之后**的 tail：
- *  - 末尾是 DONE → 收尾了（含用户主动 abort，loop 也照发 DONE(aborted)），返回 false。
- *  - tail 里已有本函数要补的提示（text 等于 INTERRUPTED_TURN_NOTICE）→ 已补过，
+ * 判据扫**全量历史**。曾经按「最后一条 DONE 之后」分段——但 DONE 自 T-72 起是
+ * 「只发外、不入史」的例外事件（loop.js emitAndRecord 的显式注释），持久化历史里
+ * **永远没有 DONE**，锚点扫描恒空、start 恒为 0，分段形同虚设（T-223）。收尾与否
+ * 只能靠 call/result 配对与幂等提示判定：
+ *  - 已收尾的一轮，调用都有配对结果 → 没有悬空调用，返回 false（用户主动 abort
+ *    也一样：DONE 虽照发但不入史，本判定不依赖它）；
+ *  - 历史里已有本函数要补的提示（text 等于 INTERRUPTED_TURN_NOTICE）→ 已补过，
  *    返回 false，保证反复重开不重复补发（幂等靠调用方把提示落盘实现）。
  *
  * 近似性（刻意接受）：停在「TOOL_RESULT 之后、下一次模型回复之前」的轮次不命中 ——
- * 那时 tail 里没有悬空调用。本判据只覆盖 backlog B7 明写的那一种形态，不扩大范围。
+ * 那时历史里没有悬空调用。本判据只覆盖 backlog B7 明写的那一种形态，不扩大范围。
  *
  * @param {Array<Object>} events 会话事件历史
  * @returns {boolean}
@@ -117,18 +121,9 @@ export const INTERRUPTED_TURN_NOTICE =
 export function hasInterruptedTail(events) {
   const list = Array.isArray(events) ? events : [];
 
-  let start = 0;
-  for (let i = list.length - 1; i >= 0; i -= 1) {
-    if (list[i] && list[i].kind === AGENT_EVENTS.DONE) {
-      start = i + 1;
-      break;
-    }
-  }
-  const tail = list.slice(start);
-
   // 已补过提示 → 幂等跳过
   if (
-    tail.some(
+    list.some(
       (ev) =>
         ev &&
         ev.kind === AGENT_EVENTS.SYSTEM_NOTICE &&
@@ -138,10 +133,10 @@ export function hasInterruptedTail(events) {
     return false;
   }
 
-  // tail 里存在「其后没有配对 TOOL_RESULT 的 TOOL_CALL」即命中。
+  // 历史里存在「其后没有配对 TOOL_RESULT 的 TOOL_CALL」即命中。
   // toolCallsOf 兼容新旧两种 TOOL_CALL 形状（T-125）。
   const pending = new Set();
-  for (const ev of tail) {
+  for (const ev of list) {
     if (!ev) continue;
     if (ev.kind === AGENT_EVENTS.TOOL_CALL) {
       for (const c of toolCallsOf(ev)) {

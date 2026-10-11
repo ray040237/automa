@@ -222,11 +222,12 @@ describe('toBackground：工具 → background 的唯一通道', () => {
 });
 
 describe('readPageFromTab：读页失败要给人话，不抛栈', () => {
-  test('没有目标页时返回一句可行动的说明', async () => {
+  test('没有目标页时返回 {ok:false, error} 失败形状（T-225）', async () => {
     const out = await index.readPageFromTab(null, {});
 
-    assert.equal(typeof out, 'string');
-    assert.match(out, /没有确定目标页/);
+    assert.equal(out.ok, false, '失败必须走失败形状，不能被包成成功观察值');
+    assert.match(out.error, /没有确定目标页/);
+    assert.match(out.error, /选一个标签页/, '要给模型一句能行动的话');
   });
 
   test('页面不应答时给「换页」的动作，而不是让模型原地重试', async () => {
@@ -234,9 +235,9 @@ describe('readPageFromTab：读页失败要给人话，不抛栈', () => {
 
     const out = await index.readPageFromTab({ id: 7 }, { timeoutMs: 5 });
 
-    assert.equal(typeof out, 'string');
-    assert.match(out, /页面无响应/);
-    assert.match(out, /focus_tab/);
+    assert.equal(out.ok, false);
+    assert.match(out.error, /页面无响应/);
+    assert.match(out.error, /focus_tab/);
   });
 
   test('content 侧返回 {text, fingerprint} 时指纹必须原样带回', async () => {
@@ -257,8 +258,8 @@ describe('readPageFromTab：读页失败要给人话，不抛栈', () => {
 
     const out = await index.readPageFromTab({ id: 7 }, { timeoutMs: 50 });
 
-    assert.equal(typeof out, 'string');
-    assert.match(out, /读取目标页失败/);
+    assert.equal(out.ok, false);
+    assert.match(out.error, /读取目标页失败/);
   });
 
   test('默认超时常量是 15s', () => {

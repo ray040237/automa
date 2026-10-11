@@ -8,6 +8,7 @@ import {
   requiresConfirmation,
 } from './index';
 import { defineTool } from './define';
+import { toToolResult } from './adapter';
 import {
   readPage,
   findText,
@@ -308,6 +309,39 @@ test('find_text：keyword 空时报错，正常时返回 content 侧文本', asy
     { keyword: '运费', limit: 20 },
     'limit 要夹到上限 20'
   );
+});
+
+test('T-225：read_page 拿到通道失败形状时转 toolError，全链 isError', async () => {
+  const res = await readPage.execute(
+    {},
+    {
+      readPage: async () => ({
+        ok: false,
+        error: '没有确定目标页。请先让用户选一个标签页。',
+      }),
+    }
+  );
+
+  assert.equal(res.status, 'error', '缺目标页是失败，不是带提示的成功');
+  assert.match(res.payload, /没有确定目标页/);
+
+  // 全链钉死：信封 → pi 观察值的 isError 必须为真（登记票的验收原话）
+  const obs = toToolResult(res, { tag: 'untrusted_page_content' });
+  assert.equal(obs.isError, true);
+  assert.match(obs.content[0].text, /没有确定目标页/);
+});
+
+test('T-225：find_text 走同一条通道，失败形状同样落 isError', async () => {
+  const res = await findText.execute(
+    { keyword: '价格' },
+    { findText: async () => ({ ok: false, error: '页面无响应（15s 无应答）' }) }
+  );
+
+  assert.equal(res.status, 'error');
+  assert.match(res.payload, /页面无响应/);
+
+  const obs = toToolResult(res, { tag: 'untrusted_page_content' });
+  assert.equal(obs.isError, true);
 });
 
 test('get_variables 渲染出变量与全局变量', async () => {

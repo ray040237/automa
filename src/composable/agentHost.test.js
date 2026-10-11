@@ -524,6 +524,44 @@ describe('send 接线', () => {
     assert.ok(io.__calls.listIndex > listCalls, 'finally 里刷新会话列表');
   });
 
+  test('T-222：水位分子 openSession 恢复 / send 有实测才更新 / 新建会话清空', async () => {
+    let sendCount = 0;
+    const io = makeIo({
+      sessions: [{ id: 's-new' }],
+      openSessionResult: {
+        events: [],
+        targetTab: null,
+        targetPinned: false,
+        targetState: 'none',
+        contextTokens: 4200,
+      },
+      // 第一轮带实测，第二轮不带（错误轮 / 端点没回 usage 的返回形状）
+      send: async () => {
+        sendCount += 1;
+        return sendCount === 1
+          ? {
+              sessionId: 's1',
+              usage: { input: 1, output: 2 },
+              contextTokens: 8800,
+            }
+          : { sessionId: 's1', usage: { input: 1, output: 2 } };
+      },
+    });
+    const host = makeHost(io);
+    await host.init();
+
+    assert.equal(host.contextTokens, 4200, 'openSession 从会话记录恢复分子');
+
+    await host.send('第一轮');
+    assert.equal(host.contextTokens, 8800, '本轮有实测就更新');
+
+    await host.send('第二轮');
+    assert.equal(host.contextTokens, 8800, '本轮没实测保留旧值，null 不许覆盖');
+
+    await host.newSession();
+    assert.equal(host.contextTokens, null, '新建会话清空');
+  });
+
   test('DONE(aborted) 补一条中止回执（T-11）', async () => {
     const io = makeIo({
       emitOnSend: (args) => {

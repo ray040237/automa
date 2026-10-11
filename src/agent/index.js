@@ -409,6 +409,9 @@ export function createAgentRuntime(deps) {
     let initialHistory = [];
     let createdAt;
     let usageBefore = { input: 0, output: 0 };
+    // T-222：上一轮的实测上下文占用（水位环分子）。与 usage 的累加语义不同：
+    // 本轮没实测（错误轮 / 端点没回 usage）就保留旧值，null ≠ 0 占用。
+    let contextTokensBefore = null;
 
     if (sessionStore && currentSessionId) {
       const rec = await sessionStore.load(currentSessionId);
@@ -417,6 +420,7 @@ export function createAgentRuntime(deps) {
       // 恢复本会话的 pin；首次 send 的捕获在拿到 targetTab 之后做
       ledger.restoreFromRecord(rec && rec.pins, rec && rec.focusedTabId);
       usageBefore = (rec && rec.usage) || usageBefore;
+      contextTokensBefore = (rec && rec.contextTokens) ?? null;
     }
 
     // T-34：检查点落盘要求会话有 id。首轮在这给它（原来第一次 send 成功后才
@@ -504,6 +508,7 @@ export function createAgentRuntime(deps) {
           pins: ledger.getPins(),
           focusedTabId: ledger.getFocusedTabId(),
           usage: usageBefore,
+          contextTokens: contextTokensBefore,
         }),
       save: (rec) =>
         sessionStore ? sessionStore.save(rec) : Promise.resolve(null),
@@ -545,6 +550,12 @@ export function createAgentRuntime(deps) {
       // 形状只在 turnRecord.js 构造一次——转中落盘（T-34）也从它出。
       const events = pruneEphemeralEvents(agent.getHistory());
       const usage = accumulateUsage(usageBefore, result.usage);
+      // T-222：水位分子取本轮实测；本轮没有（错误轮走 errorEv 没有本字段 /
+      // 端点没回 usage）保留上一轮的——计费可以按 0 累加，水位不行。
+      const contextTokens =
+        result && result.contextTokens != null
+          ? result.contextTokens
+          : contextTokensBefore;
 
       if (sessionStore) {
         const isFirstTurn = !createdAt;
@@ -557,6 +568,7 @@ export function createAgentRuntime(deps) {
             pins: ledger.getPins(),
             focusedTabId: ledger.getFocusedTabId(),
             usage,
+            contextTokens,
           })
         );
         agentLog('turn.saved', {
@@ -600,7 +612,7 @@ export function createAgentRuntime(deps) {
         }
       }
 
-      return { ...result, sessionId: currentSessionId, usage };
+      return { ...result, sessionId: currentSessionId, usage, contextTokens };
     } finally {
       checkpoints.cancel();
       activeAgent = null;
@@ -649,6 +661,7 @@ export function createAgentRuntime(deps) {
           targetTab: null,
           targetPinned: false,
           targetState: 'none',
+          contextTokens: null,
         };
       }
 
@@ -697,6 +710,8 @@ export function createAgentRuntime(deps) {
         targetPinned: restored.pinned,
         targetState: restored.state,
         usage: (rec && rec.usage) || null,
+        // T-222：实测上下文占用随记录走，重开会话水位环才有分子
+        contextTokens: (rec && rec.contextTokens) ?? null,
       };
     },
 

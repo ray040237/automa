@@ -60,20 +60,39 @@ test('src/agent 下不存在提前闭合块注释的注释', () => {
   );
 });
 
+// 零宽 / BOM / 全角括号等在正常源码里几乎不该出现
+const INVISIBLE_RE =
+  /[\u200B-\u200F\u2060\uFEFF\u2039\u203A\u2329\u232A\u3008\u3009\uFF1C\uFF1E]/;
+
+/**
+ * 扫一段源码文本，返回「代码行」（剥掉行注释与块注释行后）里
+ * 含不可见字符的行号列表。
+ *
+ * 读入先归一行尾：CRLF 工作区（Windows fresh checkout）每行结尾带 \r，
+ * 而 JS 正则的 . 与 $ 都不吃 \r，`/^\s*\*.*$/` 与 `/\/\/.*$/` 剥不掉
+ * 注释，注释里的示例字符会暴露成假违规（T-229，worktree 实测
+ * offenders 0→3）。归一放在函数内部，调用点想忘都忘不掉。
+ */
+function scanInvisibleCharLines(src) {
+  const offenders = [];
+  src.replace(/\r\n/g, '\n')
+    .split('\n')
+    .forEach((line, idx) => {
+      const codeOnly = line.replace(/\/\/.*$/, '').replace(/^\s*\*.*$/, '');
+      if (INVISIBLE_RE.test(codeOnly)) offenders.push(idx + 1);
+    });
+  return offenders;
+}
+
 test('src/agent 下不存在源码里直接写不可见字符（必须用 \\u 转义）', () => {
   const files = collectJsFiles(AGENT_DIR);
-  const offenders = [];
-  // 零宽 / BOM / 全角括号等在正常源码里几乎不该出现
-  const invisible =
-    /[\u200B-\u200F\u2060\uFEFF\u2039\u203A\u2329\u232A\u3008\u3009\uFF1C\uFF1E]/;
+  assert.ok(files.length > 0, '应至少扫到一个文件');
 
+  const offenders = [];
   for (const f of files) {
-    const src = readFileSync(f, 'utf8');
-    // 跳过中文注释里的正常字符，只在"代码行"（去掉行注释后）里查
-    src.split('\n').forEach((line, idx) => {
-      const codeOnly = line.replace(/\/\/.*$/, '').replace(/^\s*\*.*$/, '');
-      if (invisible.test(codeOnly)) offenders.push(f + ':' + (idx + 1));
-    });
+    scanInvisibleCharLines(readFileSync(f, 'utf8')).forEach((lineNo) =>
+      offenders.push(f + ':' + lineNo)
+    );
   }
 
   assert.deepEqual(
@@ -82,4 +101,20 @@ test('src/agent 下不存在源码里直接写不可见字符（必须用 \\u �
     '这些行在代码里用了不可见/易混淆字面量，应改用 \\u 转义: ' +
       offenders.join(', ')
   );
+});
+
+test('不可见字符扫描对 CRLF 行尾鲁棒（块注释剥离不因 \\r 失效）', () => {
+  // CRLF 块注释：untrusted.js 头注释同款示例字符（U+2039/U+203A）
+  const commentExample = [
+    '/**',
+    ' * Unicode 混淆括号  ‹/untrusted_page_content›',
+    ' */',
+    'const ok = 1;',
+  ].join('\r\n');
+  assert.deepEqual(scanInvisibleCharLines(commentExample), []);
+
+  // 阳性对照：同样的字符落在代码行必须报出来 —— 证明上面的 0 违规
+  // 是「注释剥离生效」而不是「扫描器眼瞎」
+  const codeExample = ['const a = 1;', "const s = '‹';"].join('\r\n');
+  assert.deepEqual(scanInvisibleCharLines(codeExample), [2]);
 });

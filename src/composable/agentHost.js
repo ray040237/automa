@@ -169,6 +169,9 @@ export function createAgentHost(deps, ui) {
     sessions: [],
     sessionId: null,
     usage: null,
+    // T-222：实测上下文占用（水位环的分子）。与 usage（跨轮累计的计费总量）
+    // 是两回事——openSession 从记录恢复、DONE 后更新、新建会话清空。
+    contextTokens: null,
     pendingConfirm: null,
     // T-12：已入队但还没送达模型的插话条数。面板常驻显示它 —— 原来唯一的确认
     // 是事件流里一条「已排队」的 notice，点完插话输入框就空了，用户会怀疑
@@ -411,11 +414,18 @@ export function createAgentHost(deps, ui) {
     // 会话 id 置空但不清 pins/插话队列，落到一个不新不旧的状态。
     if (!id || !guardAgentSwitch() || !agent.runtime) return;
 
-    const { events, targetTab, targetPinned, targetState, usage } =
-      await agent.runtime.openSession(id);
+    const {
+      events,
+      targetTab,
+      targetPinned,
+      targetState,
+      usage,
+      contextTokens,
+    } = await agent.runtime.openSession(id);
     agent.sessionId = id;
     agent.events = events || [];
     agent.usage = usage || null;
+    agent.contextTokens = contextTokens ?? null;
     // T-196 / T-197：runtime 一次性给全三件套（pinned 来源 + 健康状态）。
     if (targetTab) {
       syncTarget(targetTab, { pinned: targetPinned, state: targetState });
@@ -433,6 +443,7 @@ export function createAgentHost(deps, ui) {
     agent.sessionId = null;
     agent.events = [];
     agent.usage = null;
+    agent.contextTokens = null;
     // T-195：runtime.newSession 清空了 pins，面板的目标页三件套必须跟着归零并
     // 回到自动跟随，否则 chip 还会显示旧 session 固定过的页 + 「已固定」徽标。
     await resetTargetToAuto();
@@ -673,6 +684,11 @@ export function createAgentHost(deps, ui) {
       }
       if (result && result.usage) {
         agent.usage = result.usage;
+      }
+      // T-222：本轮有实测才更新——错误轮/端点没回 usage 时保留旧值，
+      // 与落盘侧（index.js）同一规则，null 不能覆盖成「0 占用」。
+      if (result && result.contextTokens != null) {
+        agent.contextTokens = result.contextTokens;
       }
     } catch (err) {
       // 宿主侧兜的错也走同一份形状（T-40）：这里原先是裸写的
