@@ -4101,3 +4101,136 @@ if (process.env.OFFLINE_MODE === '1' && manifestObj.content_security_policy) {
 影响：T-227 落地后的产物三个宿主入口全废（助手完全不可用）；同类模式（「工厂可测化但生产装配点没人补缺省」）对未来任何拆层都是固定陷阱。
 状态：已清（2026-10-11 当轮修复）
 结论：生产缺省收进薄壳一层。① `useAgentHost` 补九项 IO 缺省，`...deps` 展开在缺省之后（宿主传入的项照旧覆盖，注入口不闭死）；工厂保持纯 import-free 不变。② 连带两处测试基建修复：test-resolver.mjs 的 `resolveAlias` 补目录形式别名（`'@/agent'` → `src/agent/index.js`，此前只补文件后缀，薄壳 import 桶后首次踩到）；agentHost.test.js 改 installGlobals + 动态 import（桶链条拉进 shared.js 顶层读构建期全局 `IS_OFFLINE`，静态 import 来不及注入 —— 与 assembly.test.js 同款模式）。③ 补 T-228 源码守卫 2 条钉住类别：薄壳九项缺省一项不能少；`...deps` 必须在缺省之后（顺序反了宿主声明被顶掉）。④ CONTEXT.md「宿主(host)」条目同步：薄壳职责改为「取 Vue 上下文 + 补生产缺省」，_Avoid_ 增补「删缺省 / `...deps` 挪到缺省之前」。**验收**：`npm test` 860 tests / 859 pass / 0 fail（+2 守卫；test-resolver.mjs eslint 维持存量基线 13 未新增，触碰 agent 文件 0 error）；`npm run build` 产物重建。T-227 验收线①「agentHost.js 不再直 import browser 与 @/agent」的字面由本条修订：该约束收窄为**工厂**不直 import —— 全文件禁 import 会把生产装配点逼成无人区，正是本条事故的根。
+
+### T-230 — 助手面板底色是独立配的一套偏蓝灰，与项目底色（zinc #FAFAFA/#18181B）不一致
+
+登记日期：2026-10-11
+来源：2026-10-11 用户原话「agentUI界面的dark/light界面底色和项目的底色有差别，改成统一的底色」。当轮明确修改指令，视同已批准，当轮实施。
+现象：助手面板三层底色 token（T-208 时值取自参考实现 pie 的 index.css）与项目自身的页面底色是两套灰。项目页面底是 `bg-gray-50 dark:bg-gray-900`（`gray` 别名 = zinc，即亮 #FAFAFA / 暗 #18181B），面板 canvas 却是亮 #FAFBFC / 暗 #0B0D10 —— 暗色下面板比整个应用明显更黑，亮色也有细微的偏蓝差。
+证据：**源码核对** —— `src/newtab/App.vue:403`（应用根 `bg-gray-50 dark:bg-gray-900`）+ `tailwind.config.js` 的 `gray: colors.zinc` ⇒ 项目底色 = zinc-50 #FAFAFA / zinc-900 #18181B；`src/assets/css/tailwind.css` 亮 canvas `250 251 252`、暗 canvas `11 13 16`。且同文件 `html.dark` 与 `body` 规则本身就是 `bg-gray-900` / `bg-gray-50 dark:bg-gray-900` —— 浏览器侧栏里 body 先铺 #18181B、面板再盖一层 #0B0D10，同一屏两层灰。
+影响：所有宿主（浏览器侧栏 / dashboard /agent 页）下面板底色与应用其余部分不同调，暗色差异最明显。纯观感，不影响功能。
+建议：四档 token 的值重新锚到项目 zinc 族 —— canvas 精确等于项目页面底色（zinc-50 / zinc-900），field/line 对齐 zinc 刻度，surface 保持「浮起一档」；RGB 三元组格式不变（withOpacityValue 依赖）。加守卫测试钉「canvas == 项目页面底色」，防止再漂。
+结论：四档 token 值重锚 zinc（`src/assets/css/tailwind.css`，RGB 三元组格式不变）：亮 canvas #FAFAFA / surface #FFFFFF / field #F4F4F5（zinc-100）/ line #E4E4E7（zinc-200）；暗 canvas #18181B（zinc-900）/ surface #1F1F23（zinc-900 与 800 之间，浮起一档）/ field #27272A（zinc-800，与项目暗色卡片同值）/ line #333338 —— 暗色「canvas 最深 → surface 次之 → field 最浅 → 线再亮一档」的分层序保持。新增守卫测试（`panelUi.test.js`）钉整条链：① `gray: colors.zinc` 别名未动；② App 根仍是 `@apply bg-gray-50 dark:bg-gray-900`；③ canvas 亮/暗与 `tailwindcss/colors` 包内 zinc-50/900 同值（取包值非手抄，tailwind 升级改色也会红）；④ 产物 `build/newtab.css` 里 `rgb(250 250 250` / `rgb(24 24 27` 在位（build 缺席跳过）。fg-1/2/3 与 danger/warn 不属底色未动，但其注释引用的旧暗 surface hex 与对比度数字同步重算（对新 surface #1F1F23：fg-1 ≈ 13.4 / fg-2 ≈ 5.2 / fg-3 ≈ 2.3，AA 关系不变；旧值 14.6 已先复现校准算法）；AgentDropdown.vue 注释里的 #14171C 同步更新。**验收**：`npm test` 861 tests / 860 pass / 0 fail / 1 skip（既有 provider 429 环境用例）；`npm run build` 后产物 grep 到 `--color-canvas: 250 250 250` 与 `24 24 27`；触碰文件 eslint 0 error。
+状态：已清（2026-10-11 当轮完成）
+
+### T-229 — hygiene.test.js 的不可见字符守卫依赖工作区换行符，CRLF 工作区（fresh checkout）必假失败
+
+登记日期：2026-10-11
+来源：2026-10-11 会话拆 commit 时在 git worktree（autocrlf=true fresh checkout）里独立验证中间 commit，hygiene.test.js 假失败；主工作区（LF）从未复现，故此前所有测试轮都测不出
+现象：`src/agent/hygiene.test.js:64-79` 的不可见字符守卫靠 `line.replace(/^\s*\*.*$/, '')` 剥块注释行再扫代码行，但 JS 的 `.` 不匹配 `\r`——工作区文件是 CRLF 时（Windows fresh clone / worktree checkout，autocrlf=true 的默认行为），块注释行剥不掉，注释正文里的 ‹ › ＜ ＞ 〈 〉 示例字符（untrusted.js:11/12/14）直接暴露成违规，测试假失败。
+证据：**实测对比** —— 主树（LF）与 worktree（CRLF）同内容：主树 offenders=0、worktree=3；node 单行复现 `' * x ‹foo\r'.replace(/^\s*\*.*$/,'')` 不剥离、去 `\r` 即剥离；`file` 确认两树行尾差异。worktree 用 `-c core.autocrlf=false` 重检出 LF 后 839/838/0 全绿。
+影响：Windows 上 fresh clone + 默认 autocrlf 的环境跑 `npm test` 必红，红因与代码质量无关；一切「换机器/CI/fresh checkout」场景都会撞。本项目测试至今只在 LF 工作区跑过，所以一直没暴露。
+建议：三选一——① hygiene.test.js 读入后先 `src.replace(/\r\n/g, '\n')` 归一再扫（最小改动）；② 仓库加 `.gitattributes` 强制 `*.js text eol=lf`（治本，fresh checkout 不再产生 CRLF，但触碰全仓行尾需评估波及）；③ 接受现状，文档记「测试只在 LF 工作区跑」。
+结论：采纳方案①，归一收进函数内部。`src/agent/hygiene.test.js` 抽出纯函数 `scanInvisibleCharLines(src)`（返回违规行号），`src.replace(/\r\n/g, '\n')` 在函数内第一步做——调用点想忘都忘不掉；`INVISIBLE_RE` 提为模块常量；主测试改消费该函数并顺带补 `files.length > 0` 断言防空转。钉子测试一条双断言：CRLF 块注释里的 untrusted.js 同款示例（`‹/untrusted_page_content›`）扫出 0 违规 + 阳性对照（同字符落在代码行）必须报出行号——两断言合钉「0 违规来自剥离生效而非扫描器眼瞎」。**红→绿实测**：归一加入前新用例红（actual `[2]` / expected `[]`，阳性对照通过），归一后单文件 3/3 绿。方案②（全仓 `.gitattributes` 强制 LF）未做——若 CI/fresh checkout 再撞其他测试的行尾问题可另立票评估。**验收**：`npm test` 862 tests / 861 pass / 0 fail / 1 skip（既有 provider 429 环境用例）；`npm run build` 产物重建。纯测试改动，不涉产物内容。
+状态：已清（2026-10-11 完成）
+
+### T-225 — `read_page` 把「没有目标页」的裸字符串提示当成功观察值发给模型（isError 为假）
+
+登记日期：2026-10-11
+来源：2026-10-11 会话工具 envelope 架构评审（候选 2 的探索 agent 事实清单发现，调用链与两侧源码位置明确，本人未逐行复核执行时序）
+现象：`browserAdapter.js:137` 在没有目标页时返回**裸字符串** `'没有确定目标页。请先让用户选一个标签页。'`；`page.js` 的 `read_page` execute 把 `ctx.readPage` 的返回值原样包成 `{payload: res}`（`page.js:153` 一带）——按 adapter 的信封判定这是成功观察值，`isError: false`。模型收到的是「读页成功」+ 正文一句缺目标页的提示。同类：`get_block_schema` 的「块目录为空」分支（`page.js:326-329`）也是语义错误、成功字符串形态。
+证据：**源码核对** —— `browserAdapter.js:137`（裸字符串返回）、`page.js:140/153`（`{payload: res}` 包装）、`adapter.js:42-97`（裸字符串直通 → isError:false）；`{error:'x'}` 错形信封走裸值路径变成功观察值的事实同源（`adapter.js:45-49` 只认 own `payload` 键，无测试钉住该路径）。
+影响：语义失真但不完全静默——正文有提示文字，模型多数时候能自纠；坏处是确认门判定、错误统计、UI 工具卡（按 isError 分流）都把这次读页当成功。修它要动 browserAdapter 的返回契约（`{ok:false,error}` 化），牵连 targetPage.js 的指纹 probe 链路（probe 依赖 `{fingerprint}` 形状），不宜在 envelope 收口票里顺带。
+建议：单独小票——`readPageFromTab` 缺目标页改返回 `{ok:false, error}` 人话形状（与通道超时兜底同族），`read_page`/`find_text`/probe 三处消费点同步适配，测试钉「缺目标页 ⇒ isError 观察值」。
+结论：`readPageFromTab` 的返回契约整体 `{ok:false, error}` 化（T-226 `callChannel`/`toBackground` 同族形状）——**不只缺目标页一条**：`readOneFrame` 的通道超时（T-33 的「页面无响应…」）、「读不到结构」、catch（「读取目标页失败…」）三条失败路径同病（同样被包成成功观察值），随同一契约一次改齐；content 侧裸字符串透传（odd 分支）保持成功语义。`mergeFrameReads` 适配新形状：顶层失败整个读按失败上抛（原先会拼出 `[object Object]` 正文）；iframe 失败不再静默丢，显式标「读取失败 + 原因」进合并文本（probe 摘要与 addresses 段两处）。消费点：`tools/page.js` 抽 `isReadFailure` 判定，`read_page`/`find_text` 失败形状转 `toolError`（缺目标页 ⇒ isError 观察值，登记票验收原话）；指纹 probe 链路零改动——`recordRead` 与 probe 只认 `fingerprint`，失败形状无指纹自然跳过（targetPage.js 注释写明 + 两条测试钉住「失败不产生假『没变』结论」「失败形状不记基线」）。**验收**：触碰面 138/138 绿；`npm test` 869 tests / 868 pass / 0 fail / 1 skip（既有 provider 429 环境用例）；`npm run build` 产物重建并 grep 到新文案；触碰文件 eslint 0 error。`get_block_schema` 的同类分支已在 T-226 归位 error，本票未涉。
+状态：已清（2026-10-11 完成）
+
+### T-222 — 上下文水位环把「全session累计计费输入」当「当前上下文占用」用，多轮会话水位虚高
+
+登记日期：2026-10-11
+来源：2026-10-11 会话按 improve-codebase-architecture 流程架构评审 `src/agent/`，探索 agent 报告后由本人复核源码坐实；触发点 `src/agent/usage.js:43-52`
+现象：会话下拉的上下文水位环（`AgentContextRing.vue`）调用 `contextPercent(usage, contextWindow)`，分子取 `usage.input`。但 `usage.input` 在链路上是**跨轮累加的计费输入总量**：`loop.js:578-588` 的 `harvestUsage` 把每条 assistant 消息的 `usage.input`（那是**单次请求的 prompt 尺寸**）逐条累加，`index.js:666` 的 `accumulateUsage(usageBefore, result.usage)` 再把上一轮的累计值加上——多轮会话里它是单调递增的总和，不是「当前上下文有多大」。
+证据：**源码复核** —— `usage.js:50` `const used = Number(usage.input)`；`loop.js:578-588` 逐条累加并注释「多请求轮的 usage 是累加值」；`index.js:527` `usageBefore = rec.usage`（跨轮恢复累计值）+ `index.js:666` 累加。而 `compaction.js:153-208` 已有一段实测依据的完整论述说明为什么裸 `usage.input` 不是当前上下文尺寸（pi 的 input 不含 cacheRead/cacheWrite；跨请求求和是各次 prompt 尺寸之和），并为此实现了 `measuredContextTokens`——但 UI 没用它。
+影响：多轮会话水位环单调虚高（10 轮后可能显示 300%+ 的假水位），缓存命中多的会话又偏低；80/95 两档告警阈值在错误分子上触发。纯 UI 误报，不影响模型侧压缩判断（压缩用 `measuredContextTokens`，是对的）。
+建议：loop 已算出正确的 `measuredContextTokens`（`runCompaction` 内），把它带在 DONE 事件上（如 `doneEv.contextTokens`），UI 消费它而不是从计费总量反推语义。若产品本意就是「花量仪表」而非「水位」，则改 UI 文案与注释，别叫水位。
+结论：按建议的主方案落地，整条链：**loop** 在 DONE 事件带 `contextTokens = measuredContextTokens({messages, pendingText: ''})`（收尾时尾部无追加、pendingText 空 = 最后一次请求的实测原值；不含本轮最终 assistant 输出，差量由下一轮开头的实测覆盖；端点没回 usage / 全是重放历史时为 null）；**turnRecord** 键集合加 `contextTokens`（缺省 null——「无实测」≠「0 占用」，注释写明与 usage 累加语义的差别）；**index.js** 收尾「本轮有实测才更新、没有保留旧值」（错误轮走 errorEv 没有 DONE，靠这条规则不清掉上一轮的水位），检查点落盘与最终落盘同字段，send 返回与 openSession 返回都带出；**agentHost** `agent.contextTokens` 三处接线（openSession 恢复 / send 有实测才更新 / newSession 清空）；**usage.js `contextPercent` 签名改为直接收数值分子**（曾收 `{input}` 对象——旧签名本身就是把「计费 usage 对象」当水位的错误抽象），null 一律返回 null；**UI** AgentPanel `contextPct` 改喂 `host.contextTokens`，环新增 `context-tokens` prop，usage prop 保留只喂 hint 的计费明细行（in/out 是它本职）。**无实测时的行为**：端点不回 usage（如 ModelScope 实测不回传）的水位环在旧代码下本来就因 input=0 恒低于阈值而不出现，新行为 null → 不渲染，无回归。**验收**：触碰面 246 条绿；`npm test` 873 tests / 872 pass / 0 fail / 1 skip（既有 provider 429 环境用例）；panelRender 两条旧供数（usage.input）测试按「有意迁移」改喂 contextTokens（T-208 注预言的连锁，逐条判断过）；`npm run build` 产物含 contextTokens 24 处；触碰文件 eslint 0 error。
+状态：已清（2026-10-11 完成）
+
+### T-184 — 块库的分类标题是硬编码英文，中文界面里直接显示英文
+
+登记日期：2026-10-09
+来源：2026-10-09 会话评审 agent 助手入口 UI；画设计稿时照实画出来才发现；读 `src/utils/shared.js:1508` 与 `src/components/newtab/workflow/WorkflowBlockList.vue:9`
+现象：工作流编辑器侧栏那块库面板，分类标题显示 `Web interaction` / `Browser` / `General` / `Online services` / `Data` / `Control flow` / `Packages` —— 全是英文，且首字母被 CSS `capitalize` 处理过。同一面板里只有「已固定的块」是中文。
+证据：代码位置如上，**源码核对**。`categories` 的每个 `name` 是英文字面量，没有 locale 键；`WorkflowBlockList.vue:9` 直接 `{{ category.name }}`，整条链路上没有 `t()`。十个语言包里都没有对应键。
+**2026-10-09 用户实拍截图坐实**：块库面板实拍图里分类标题直接显示 `● General`（配一个黄色圆点与右侧 `−`），与同面板上方中文的「已固定的块」同屏混排。视觉观感不再是推断。
+影响：所有中文用户，工作流编辑器最常驻的一块面板里，分类标题全是英文；块的名字本身有中文（走 `workflow.blocks.*.name`），所以出现「英文分组 + 中文条目」混排。与本次入口改造无关，是既有缺陷。
+建议：给 `categories` 补 locale 键（`workflow.blockCategories.<id>`），`WorkflowBlockList` 走 `t()` 并保留英文兜底（`te()` 判存在，缺语言时回英文而不是显示键名）。改动小、无布局影响，可独立开工。
+结论：按建议落地。① `en/newtab.json` + `zh/newtab.json` 补 `workflow.blockCategories.<id>` 七键（网页交互/浏览器/通用/在线服务/数据/控制流/包；其他八语言走 `fallbackLocale: 'en'` 回英文——与主路径汉化「只补 en+zh」的既有分布一致，zh-TW 缺键属 advisory）；② `WorkflowBlockList.vue` 新增可选 `categoryId` prop，模板改渲染 `categoryTitle` computed：有 id 且 `te()` 命中走 `t()`，否则回落 `category.name` 原文——与同组件 `getBlockTitle` 的既有 te 兜底模式同款，绝不显示键名；③ `WorkflowDetailsCard.vue` 给 v-for 实例传 `:category-id="catId"`（「已固定的块」组无分类 id 不传，标题本就走 locale）。`shared.js` 的英文 name 保留为兜底数据。**守卫**：新建 `src/utils/blockCategories.test.js` 三条——每个分类 id 在 en+zh 都有非空键（categories 加新分类忘补 locale 时先红）、zh 不是整段照抄 en、渲染链路源码守卫（组件必须走键 + te 兜底、宿主必须传 category-id）。**坑（T-228 同款再踩）**：`shared.js` 顶层读构建期全局 `IS_OFFLINE`，测试静态 import 直接 `ReferenceError`——改 `installGlobals()` + 动态 import（assembly.test.js 同款模式）。**验收**：`npm test` 876 tests / 875 pass / 0 fail / 1 skip（既有 provider 429 环境用例，+3 守卫）；`npm run check:i18n` 过（en/zh 同步，无新增硬编码）；`npm run build` 产物 newtab.bundle 含 blockCategories、locale 产物含中文标题；触碰文件 eslint 0 error。
+状态：已清（2026-10-11 完成）
+
+### T-203 — 配置好 API Key 之后，面板里再也找不到进设置的路
+
+登记日期：2026-10-10
+来源：2026-10-10 会话做「Automa AgentPanel vs pie-ai-agent SidePanel」UI 对比（`docs/agent-sidepanel-ui-compare.html`）；触发点 `src/components/newtab/workflow/agent/AgentPanel.vue:172`
+现象：面板上唯一的设置入口是那条「未配置 API Key」红横幅，它挂在 `v-if="!configured"` 上。用户一旦填好 Key，横幅消失，面板里就再没有通往设置页的入口 —— 想换模型、改 baseUrl、看连接状态，得先离开助手回到主界面。
+证据：**代码事实** —— `AgentPanel.vue:172-179` 的横幅 `v-if="!configured"`；全面板 grep `goToSettings` 只有这一处调用点（`AgentPanel.vue:610`）。参考实现 sidepanel 的设置入口常驻（会话抽屉右上角 `Settings` IconButton）。
+影响：第一次配置完的用户最常做的第二件事就是「换个模型试试」，而这条路的入口恰好在他配置成功的那一刻消失。目前只能靠主界面绕回去，助手面板成了一个单向入口。
+建议：在 header 常驻一个设置图标按钮（窄宿主 header 已有会话 chip + 新建两个控件，加第三个要重新算 320px 下的横向预算）。或者只在「已配置」时显示一个更轻的入口（避免和红横幅同时出现两个设置入口 —— 那就是 T-177 刚拆掉的那类重复入口）。
+结论：随 T-207 解决（2026-10-10）—— 未配置态改为整页引导页，引导页自身就是设置入口且是该状态的唯一形态，「入口随配置成功而消失」的根因不复存在。本条 2026-10-10 时未按规则整条移出（同批只有状态行指向 T-207），2026-10-12 随 T-216 补建本归档。
+状态：已清（2026-10-10 随 T-207 一起解决；2026-10-12 随 T-216 补归档）
+
+### T-204 — composer 顶部用渐隐替代硬分割线
+
+登记日期：2026-10-10
+来源：2026-10-10 会话 UI 对比；参考实现 `pie-ai-agent/src/sidepanel/components/Chat.tsx:2003`
+现象：composer 是一条实边框卡片（T-166 合并成一框之后），消息滚到输入区边界时是被一条 1px 实线"切断"的，看不出下面还有内容继续溢出。
+证据：本仓 `AgentPanel.vue:248-250`（`rounded-card border border-gray-200`）；参考实现在输入区上方放一条 `pointer-events-none absolute inset-x-0 -top-5 h-5 bg-gradient-to-t from-canvas to-transparent`。
+影响：纯观感问题，不影响可用性。窄面板（320px）里消息被切线截断的观感比宽屏更明显。
+建议：在 composer 上方加一条 20px 高的渐隐层（`from-canvas to-transparent`，`pointer-events-none`）。成本一个绝对定位 div，不参与布局。
+结论：2026-10-10 落地 —— `AgentPanel.vue` composer 上加了 `data-test="composer-fade"` 渐隐层（`pointer-events-none absolute inset-x-0 -top-5 h-5 bg-gradient-to-t from-gray-50 to-transparent dark:from-gray-900`），form 改 `relative` 承载它。守卫钉在 `panelUi.test.js`（`composer-fade` 存在 + form 仍 `px-4`）。本条当时未按规则整条移出，2026-10-12 随 T-216 补建本归档。
+状态：已清（2026-10-10 完成；2026-10-12 随 T-216 补归档）
+
+### T-216 — `backlog.md`「待审核」区滞留 9 条已清条目，与本文件头「只放未完成的条目」自相矛盾
+
+登记日期：2026-10-10
+来源：2026-10-10 本次会话提交前核对 backlog 状态；触发点 `docs/backlog.md:7-9`（文件头「本文件只放未完成的条目……完成时整条移入 `backlog-done.md`」）与 `docs/backlog.md:65-175`（`### 改进` 区内 9 条 `状态：已清`）
+现象：`## 待审核` 下有 9 条状态已是「已清（2026-10-10 完成）」的条目（T-203、T-204、T-205、T-206、T-208、T-209、T-210、T-211、T-212），仍留在待审核区；其中 7 条（T-205/206/208~212）的全文另有一份 `### T-NN` 归档在 `docs/backlog-done.md`，同一条目两处各存一份。同批的 T-199/T-200/T-207/T-213/T-214/T-215 则是按规则整条移出的 —— 同一批里两种处理并存。
+证据：**实测** —— `git show HEAD:docs/backlog.md` 后 grep `状态：已清` 得 **0** 命中（HEAD 无此形态，是本工作区新引入的），工作区 `docs/backlog.md` 得 **9** 命中；`docs/backlog-done.md` 里能 grep 出其中 7 条的完整归档（T-203/T-204 无独立归档条目，其状态行指向 T-207）。AGENTS.md「状态流转」原文：「驳回、已消解、已修复的条目同样及时整条移入 `docs/backlog-done.md`——**『待审核』区不留已裁决的条目**」。
+影响：用户按「待审核」区逐条审票时会看到 9 条其实已完成的条目，可能重复批准已完成的工作，或误判这些改进还没做；统计未完成条目数失真。不涉及代码。
+建议：把 9 条整条搬到 `backlog-done.md`（T-203/T-204 在 done 里没有独立条目，需新建或并进 T-207 那条）；`backlog.md` 只留真正未裁决的 T-189/T-184/T-178/T-186/T-185/T-155/T-201/T-202。**T-201 是「部分落地」**（选择器已可用、多连接弹层组织方式仍待观察），移不移出由用户裁决。
+结论：2026-10-12 执行。7 条已有归档的（T-205/206/208~212）从 backlog.md 删除（done 里各存一份，不重复）；T-203/T-204 在本文件补建独立归档（原状 + 结论行，含补归档说明）。搬移后 backlog.md 待审核区剩：bug 区 T-223/T-189/T-178，改进区 T-186/T-185/T-155，新功能区 T-201/T-202——与建议清单的差异是 T-184 已于 2026-10-11 修复归档、本条自身随之移出。**T-201 按建议原文留给用户裁决**（部分落地：选择器已可用，多连接弹层组织方式待观察），仍在待审核区。backlog.md 页脚「已清」批次叙述补一行 10-10 UI 批次与 10-11~12 清偿。纯文档搬移，不涉代码与测试。
+状态：已清（2026-10-12 完成）
+
+### T-178 — `aria-role` 不是合法属性：整个 tab 栏没有 tablist / tab 语义
+
+登记日期：2026-10-09
+来源：2026-10-09 会话评审 agent 助手入口 UI；读 `src/components/ui/UiTabs.vue:7` 与 `src/components/ui/UiTab.vue:14`
+现象：两个组件写的是 `aria-role="tablist"` / `aria-role="tab"`。WAI-ARIA 里没有 `aria-role` 这个属性——`aria-*` 只承载状态与属性（`aria-label`、`aria-selected` 等），角色一律走 `role`。浏览器把 `aria-role` 当普通未知属性，读屏软件不认。结果：`ui-tabs` 不是 tablist，`ui-tab` 不是 tab；`UiTab.vue:3` 那个写对了的 `:aria-selected` 也就无处附着。键盘上只有 `:tabIndex` 在起作用。
+证据：**产物级实测** —— 对 `build/newtab.bundle.js` 等四个 bundle grep，`aria-role` 原样出现各 2 处，上下文为 `"aria-role":"tab"` 与 `"aria-role":"tablist"`，同一段里没有任何 `role="tablist"` / `role="tab"`。源码位置：`UiTabs.vue:7`、`UiTab.vue:14`。
+影响：全项目每一处 `ui-tabs`（工作流编辑器、包详情、设置页等）都受影响，不止 agent。读屏用户听到的是一排普通按钮，不会播报「第 2 个标签，共 4 个」；方向键也无法按 tablist 语义在标签间移动。
+建议：两处改名 `aria-role` → `role`。改完还需补 `aria-controls` / `role="tabpanel"` 的对应关系才算完整（有 `role="tab"` 却没有 tabpanel 会是另一个 a11y 警告），范围较大，建议单独立项评估。本轮只登记，不动代码。
+结论：2026-10-12 按建议①执行（用户批准，讲清问题+方案后开工）。两处改名 `aria-role` → `role`（`UiTabs.vue` 容器 / `UiTab.vue` 按钮），`:aria-selected` 与 roving `:tabIndex` 原样保留——角色改对后选中态播报才真正生效。同目录组件（UiButton/UiList/UiListItem）本就写 `role`，这两处是同族错拼漏网；`role` 是纯语义属性，无 CSS/JS 依赖，行为零变化。**守卫**：新建 `src/utils/uiTabsA11y.test.js` 三条——两组件角色必须在 `role` 上且 `aria-role` 清零、`:aria-selected`/`:tabIndex` 仍在（旁证）、src/components 全目录扫 `aria-role`（防错拼在别处冒头）。**已知欠账（登记票预言，单独立项）**：① `aria-controls`/`role="tabpanel"` 的标签↔面板关联（要动 21 个使用点）；② Arrow/Home/End 键盘导航——roving tabindex 已在而 Arrow 导航不在，**纯键盘用户当前只能落在选中标签上**（现状即如此，非改名引入；语义宣称 tab 模式后更该补）。产物形态备注：vue-loader 把模板属性编成对象字面量，产物 grep 要查 `role:"tablist"` 形状而非 `"role":"tablist"`。**验收**：`npm test` 879 tests / 878 pass / 0 fail / 1 skip（既有 provider 429 环境用例，+3 守卫）；`npm run build` 后产物 `aria-role` 0 处、`role:"tablist"`/`role:"tab"` 各 1 处；触碰文件 eslint 0 error。
+状态：已清（2026-10-12 完成）
+
+### T-223 — `hasInterruptedTail` 以「最后一条 DONE」为扫描锚点，但 DONE 永不入史，锚点是死的
+
+登记日期：2026-10-11
+来源：2026-10-11 会话架构评审 `src/agent/`，探索 agent 报告后由本人复核源码坐实；触发点 `src/agent/sessions.js:118-135`
+现象：`hasInterruptedTail(events)` 从「事件历史里最后一条 `agent:done`」之后开始扫描中断尾巴。但 DONE 自 T-72 起是「只发外、不入史」的例外事件（`loop.js:590-598` `emitAndRecord` 注释明写「doneEv 是例外（见 send 末尾：只发外）」，`loop.js:1163` 只 `currentEmit(doneEv)` 不 `history.push`），而持久化记录来自 `agent.getHistory()`（`index.js:665`）——所以**存储里的事件历史永远不含 DONE**，锚点扫描永远找不到，`start` 恒为 0，tail 恒为全部历史。
+证据：**源码复核** —— `loop.js:593`（emitAndRecord 注释）与 `loop.js:1163`（doneEv 只发外）；`index.js:665` `pruneEphemeralEvents(agent.getHistory())`；`sessions.js:124-131` 反向扫描 `AGENT_EVENTS.DONE`。历史存量不受影响（该机制上线时 DONE 就已不入史，不存在含 DONE 的旧记录形态）。
+影响：当前无实际故障——真正的判定靠悬空 call/result 配对 + 幂等提示，两条都还在工作；但锚点是死代码级的契约漂移：它让人误以为「DONE 在历史里」是事实（与 CONTEXT.md「agent 事件是唯一的事件历史」直接冲突），且重开后的会话无法区分「轮完成」与「轮中止」。后续任何按「最后一条 DONE」分段的新逻辑都会踩同一个空锚点。
+建议：二选一——① 让 DONE 入史（emitAndRecord 不再豁免），「history 是唯一账本」名实相符，UI 侧如重复渲染再在 fold 层滤；② 删掉 `hasInterruptedTail` 的 DONE 锚点扫描，注释写明「DONE 不入史，分段只能靠 call/result 配对」。倾向 ②（改动最小、不碰入史契约）。
+结论：2026-10-12 按倾向方案②执行（用户睡前打包批准 T-155/T-223/T-189 三道）。删掉锚点扫描（start 恒 0 的死代码），判定扫全量历史——**行为零变化**（锚点本来就永不命中）；JSDoc 重写为真契约：「DONE 不入史，收尾与否只能靠 call/result 配对与幂等提示判定」。**连锁测试迁移**：`sessions.test.js` 的「判据只看最后一条 DONE 之后的 tail」用例喂 DONE 进合成历史、期望锚点生效——那是生产中不存在的形态（DONE 不入史），按新契约重写：「悬空调用 + DONE」判定为中断（防御性钉「DONE 不是收尾信号」）+ 补「配对完整 → false」的真实收尾形态；首个 B7 用例标题同步归真（「末尾 DONE」改「调用有配对结果；混入 DONE 不影响判定」）。**验收**：`npm test` 880/879/0/1 既有 skip；`npm run build` 产物重建；eslint 0 error。
+状态：已清（2026-10-12 完成）
+
+### T-189 — `MAX_SESSION_TURNS` 的注释还写着「wire 层另有 token 预算」，wire 层已随票 08 删除
+
+登记日期：2026-10-09
+来源：2026-10-09 会话 review `docs/agent-architecture.html`（介绍 agent 代码的架构文档）时逐块核对源码，触发点 `src/agent/sessions.js:21`
+现象：常量 `MAX_SESSION_TURNS = 20` 上方那句注释是「存储里最多保留多少个用户轮次（**wire 层**另有 token 预算，这里是存储体积上限）」。`wire.js` 在 ADR 0004 / 票 08 已整份删除，现在承担「token 预算」职责的是 `compaction.js` 的上下文压缩（T-76），语义是「模型侧另有压缩阈值」。
+证据：**源码核对** —— 全文 grep `wire 层|wire层|wire\.js` 在 `src/`（排除测试）得 4 处，其中 `loop.js:564` 与 `provider.js:5/151` 三处都明确写了「迁移前 / 票 08 删掉了」，是合法的**历史说明**；只有 `sessions.js:21` 这一处把已删模块当成现存模块在描述现状。
+影响：注释描述的是「这个上限与谁分工」——它是读代码的人判断「为什么存储只留 20 轮、模型侧会不会也只看到 20 轮」的唯一依据。照现在的写法，会得出「模型侧还有一套 wire 预算」的错误结论，而实际的模型侧机制是压缩（append-only + 投影，历史永不删）。比没有注释更糟。
+建议：一行改动，改成「模型侧另有压缩阈值（T-76 `compaction.js`），这里是存储体积上限」。顺带确认 `cropToTurns` 的注释（`:67` 附近）有没有同类表述。
+结论：2026-10-12 执行。① `sessions.js:21` 改为「模型侧另有上下文压缩，阈值见 compaction.js；这里是存储体积上限」；② **顺带确认发现同类表述一处**：`cropToTurns` JSDoc 的「wire 配对净化也救不回语义」——它逃过了登记票 `wire 层|wire.js` 的 grep 模式（「wire 配对」不匹配），同病改为「pi 侧的悬空调用净化（ADR 0004）」。至此 `src/`（排除测试）grep `wire 层|wire层|wire\.js` 只剩 loop.js/provider.js 三处合法历史说明。纯注释改动，不涉行为；随 T-223 同轮验收（880/879/0/1 + build）。
+状态：已清（2026-10-12 完成）
+
+### T-155 — 下拉缺 a11y 语义与键盘导航
+
+登记日期：2026-10-07
+来源：2026-10-07 会话；读 `AgentDropdown.vue:1-21`
+现象：下拉面板无 `role="menu"`，trigger 无 `aria-expanded` / `aria-haspopup`；打开后会话列表与 tab 列表不支持 ↑↓ 移动选择（对比 `AgentPanel.vue` 的 slash 菜单已实现 ↑↓/回车/Esc）。
+证据：读代码实测（`AgentDropdown.vue` 模板无 aria 属性，script 只有 click-outside 与 Esc 关闭）。
+影响：屏幕阅读器用户无从获知「这是个可展开菜单、当前开没开」（项目已有 T-13 的 a11y 投入，此处是缺口）；纯键盘用户在下拉里只能靠 Tab 逐项走。
+建议：trigger 加 `aria-expanded`、面板加 `role="menu"`（菜单项 `role="menuitem"`）；列表补 ↑↓ 导航 + 回车选中 + Esc 关闭（复用 slash 菜单已有的路由逻辑）。
+结论：2026-10-12 执行（用户睡前打包批准）。**架构决策：四实例、条目全走 slot 由消费方渲染，slash 菜单的「索引 + active 高亮」路由搬不进来——改在 AgentDropdown 内用 DOM 焦点回绕实现单点键盘导航**（现查弹层内可聚焦按钮，条目是按钮时 Enter/点击天然生效，消费方零配合）。落地：① trigger aria 经 **scoped slot** 交给消费方绑到真实按钮（挂包装 div 读屏不认；haspopup 值=面板角色）；② 面板 `role` prop（默认 'menu'；AgentPanel 圆环明细是混排内容传 `role=""` 退 disclosure，只留 aria-expanded）；③ 键盘：trigger 上 ↑↓ 关着顺势开+落焦首/末条、开着 ↑↓/Home/End 在条目间移动（首末回绕）、Esc 收起+焦点回 trigger（APG）、Tab 走人即收起、条目点击关闭后焦点掉 body 时送回 trigger（点别处关闭不偷焦点）；④ menuitem：AgentTabList 行按钮、AgentModelPicker 模型条目无条件挂，AgentSessionList 仅 popover 模式挂（view 模式是整块历史视图不是菜单）。守卫：panelUi.test.js 新增一条 12 断言（aria scoped slot 机制/键盘键位/焦点回归/四消费点接线/menuitem 挂法）。**坑×2**：panelUi 的 `agentFile` 是后段 describe 局部帮手够不到（测试内自建）；`#trigger="{ aria }"` 是消费侧写法、定义侧是 `<slot name="trigger">`（第一版正则用错查不到）。**验收**：`npm test` 880 tests / 879 pass / 0 fail / 1 skip（既有 provider 429 环境用例，+1 守卫块）；`npm run build` 产物 aria-haspopup×2 / aria-expanded×17 / menuitem×6；触碰 10 文件 eslint 0 error（3 处 prettier --fix）。**未做（留档）**：面板与 trigger 的 id 级关联（aria-controls）未接——menuitem 语义已够 AT 播报，id 关联属 T-178 欠账的同一族。
+状态：已清（2026-10-12 完成）
