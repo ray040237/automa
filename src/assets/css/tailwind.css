@@ -24,14 +24,20 @@
   --color-accent: 24 24 27;
 
   /* T-208：助手面板的三层底色 + 分隔线（借自参考实现 pie-ai-agent 的
-     --c-canvas/surface/field/line，值取自其 index.css）。三档几乎等亮的灰
+     --c-canvas/surface/field/line）。三档几乎等亮的灰
      代替 1px 边框来分层次：整屏没有一条边框，但面板底 / 浮起的卡 / 凹陷的
      输入区各有各的深浅。RGB 三元组写法与本仓既有 primary/accent 一致
-     （配 withOpacityValue，支持 bg-surface/50 这种带透明度的用法）。 */
-  --color-canvas: 250 251 252; /* #FAFBFC 面板最底 */
+     （配 withOpacityValue，支持 bg-surface/50 这种带透明度的用法）。
+     T-230：值不再照抄 pie —— 面板底色要与项目底色统一。本仓 `gray` 别名 =
+     zinc，项目页面底是 `bg-gray-50 dark:bg-gray-900`（App.vue 根、本文件
+     的 body / html.dark），所以 canvas 精确取 zinc-50 / zinc-900，
+     field/line 对齐 zinc-100/200 刻度，surface 保持纯白（浮起一档，与项目
+     亮色卡片同值）。动项目页面底色时这四档要跟着对齐（panelUi.test.js
+     有守卫钉 canvas == gray-50/gray-900）。 */
+  --color-canvas: 250 250 250; /* #FAFAFA = gray-50(zinc-50) 面板最底 */
   --color-surface: 255 255 255; /* #FFFFFF 浮起的面（顶栏 / composer） */
-  --color-field: 244 246 248; /* #F4F6F8 凹陷的面（输入区） */
-  --color-line: 228 232 236; /* #E4E8EC 分隔线 */
+  --color-field: 244 244 245; /* #F4F4F5 = gray-100(zinc-100) 凹陷的面（输入区） */
+  --color-line: 228 228 231; /* #E4E4E7 = gray-200(zinc-200) 分隔线 */
 
   /* T-213：删掉 T-212 的 --color-shell。
      当初引入它是想「面板根与 chrome 同色、消除白卡浮在深壳上」，但实际观感
@@ -80,19 +86,22 @@
   /* T-208 暗色：**重新配的，不是亮色的反相**（见评估文档第三条）。
      参考实现的暗色 accent 是亮灰蓝 #B8C8D6，而不是把亮色的灰蓝压暗。
      这里同理：三层底各自的明度差被保留（canvas 最深 → surface 次之 →
-     field 最浅），线仍比底亮一档，这样暗色下也靠底色分层而非边框。 */
-  --color-canvas: 11 13 16; /* #0B0D10 */
-  --color-surface: 20 23 28; /* #14171C */
-  --color-field: 26 30 37; /* #1A1E25 */
-  --color-line: 34 39 47; /* #22272F */
+     field 最浅），线仍比底亮一档，这样暗色下也靠底色分层而非边框。
+     T-230：值重新锚到项目 zinc 族 —— canvas = zinc-900（与项目暗色页面底
+     同值），field = zinc-800（与项目暗色卡片 bg-gray-800 同值），surface
+     取 zinc-900 与 zinc-800 之间的 #1F1F23（浮起一档），线再亮一档。 */
+  --color-canvas: 24 24 27; /* #18181B = gray-900(zinc-900) */
+  --color-surface: 31 31 35; /* #1F1F23 浮起的面 */
+  --color-field: 39 39 42; /* #27272A = gray-800(zinc-800) 凹陷的面 */
+  --color-line: 51 51 56; /* #333338 分隔线 */
 
-  /* T-213 暗色：同亮色，删掉 --color-shell。面板根回到 canvas (#0B0D10)，
+  /* T-213 暗色：同亮色，删掉 --color-shell。面板根回到 canvas (#18181B)，
      与侧栏 chrome 之间不再强求同色 —— 靠自身三层底色分层即可。 */
 
   /* T-211 暗色 fg：同样是重配不是反相。fg-1 取参考实现给的 #E5E8EC ——
-     纯反相 #14181D 会得到刺眼的近白，压不住与 #14171C 面之间的强对比。
-     实测 WCAG 对比度（对 surface #14171C）：fg-1 ≈ 14.6（远超 AA）、
-     fg-2 ≈ 5.7（过 AA 4.5）、fg-3 ≈ 2.6（低于 AA）。
+     纯反相 #14181D 会得到刺眼的近白，压不住与暗面之间的强对比。
+     WCAG 对比度（对 surface #1F1F23，T-230 起的值）：fg-1 ≈ 13.4（远超 AA）、
+     fg-2 ≈ 5.2（过 AA 4.5）、fg-3 ≈ 2.3（低于 AA）。
      fg-3 偏低是**刻意的**：它只用于占位符 / 图标 / 极淡元信息这类非正文，
      WCAG 对非必要文字放宽到 3:1，且这个值取自参考实现（保持观感一致）。
      若将来有用户反馈「暗色下提示看不清」，调这里即可，不必动亮色。 */

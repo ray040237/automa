@@ -27,27 +27,33 @@ export const CONTEXT_WARN_AT = 80;
 export const CONTEXT_CRITICAL_AT = 95;
 
 /**
- * 上下文水位百分比（T-09③）。
+ * 上下文水位百分比（T-09③；T-222 起分子改为实测上下文占用）。
+ *
+ * 分子是 `contextTokens` —— loop 在 DONE 事件上带出的实测值
+ * （compaction.measuredContextTokens：最后一次请求的 input+cacheRead+
+ * cacheWrite + 尾部估算）。曾经直接读 usage.input，但那是跨轮累加的
+ * **计费**输入总量：多轮会话水位单调虚高（10 轮能显示 300%+），缓存命中
+ * 时又偏低——「花了多少」与「占了多少」是两个量纲，完整论述见 compaction.js。
+ * 取不到实测（端点没回 usage / 全是重放历史）时上游传 null。
  *
  * 分母是 `config.contextWindow` —— `config.js:38-42` 明说它是**建议值**（BYOK 场景
  * 协议不暴露真实窗口，只能按保守值取）。所以这个百分比是估算，UI 上要写明。
  *
- * 分母拿不到就返回 null，含义是「**整行不渲染**」而不是 0%：0% 会让用户以为
- * 「完全没占」，比不知道更糟。超过 100 **不在这里夹** —— 夹了用户就看不出已经超了，
- * 夹在宽度上由 CSS 的 max-width 处理。
+ * 分子或分母拿不到就返回 null，含义是「**整行不渲染**」而不是 0%：0% 会让用户
+ * 以为「完全没占」，比不知道更糟。超过 100 **不在这里夹** —— 夹了用户就看不出
+ * 已经超了，夹在宽度上由 CSS 的 max-width 处理。
  *
- * @param {{input?: number}|null} usage 本轮/本会话的 usage
+ * @param {number|null} usedTokens 实测上下文占用，null = 无实测
  * @param {number} contextWindow config.contextWindow
  * @returns {number|null} 0 起头的整数百分比，或 null（无法计算）
  */
-export function contextPercent(usage, contextWindow) {
+export function contextPercent(usedTokens, contextWindow) {
   const win = Number(contextWindow);
   if (!Number.isFinite(win) || win <= 0) return null;
-  // 先判 usage 本身，再取 input：`Number(usage && usage.input)` 在 usage 为
-  // null 时算出 Number(null) === 0，会把「没有用量」显示成 0% —— 正好是这个
-  // 函数要避免的那件事（单测 contextPercent(null, cw) === null 抓到的）。
-  if (!usage || typeof usage !== 'object') return null;
-  const used = Number(usage.input);
+  // 先判空再 Number：Number(null) === 0，会把「没有实测」显示成 0% ——
+  // 正好是这个函数要避免的那件事（单测 contextPercent(null, cw) === null 抓到的）。
+  if (usedTokens === null || usedTokens === undefined) return null;
+  const used = Number(usedTokens);
   if (!Number.isFinite(used) || used < 0) return null;
   return Math.round((used / win) * 100);
 }

@@ -72,6 +72,7 @@
       :model-value="true"
       :blocks="items"
       :category="categories[catId]"
+      :category-id="catId"
       :pinned="pinnedBlocks"
       @pin="pinBlock"
     />

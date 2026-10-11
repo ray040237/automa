@@ -90,17 +90,22 @@ test('T-128（盲区回归）：把按钮包进 v-if=false，渲染结果里必�
   );
 });
 
-test('T-128：上下文水位圆环在有 usage 时渲染、分母缺失时整段不渲染', async () => {
+test('T-128：上下文水位圆环在有实测占用时渲染、分母缺失时整段不渲染', async () => {
   // T-153：水位从会话下拉搬到了输入区的圆环（AgentContextRing），渲染断言
   // 跟着搬 —— 否则守卫盯的还是旧位置，搬走之后它就永远绿了。
+  // T-222：水位的分子是实测 contextTokens；usage 只喂 hint 里的计费明细行。
   const withUsage = await renderSfc(RING, {
     // T-163：取 90% 而不是 50% —— 低于 CONTEXT_WARN_AT(80) 时环整段不渲染，
-    // 用 50% 测「有 usage 就该渲染」会红，而且它测的其实已经不是这档的语义了。
-    props: { usage: { input: 115200, output: 800 }, contextWindow: 128000 },
+    // 用 50% 测「有用量就该渲染」会红，而且它测的其实已经不是这档的语义了。
+    props: {
+      usage: { input: 115200, output: 800 },
+      contextTokens: 115200,
+      contextWindow: 128000,
+    },
   });
   assert.ok(
     withUsage.includes('data-test="context-meter"'),
-    '有 usage 且填了 contextWindow 时水位不该消失'
+    '有实测占用且填了 contextWindow 时水位不该消失'
   );
   assert.ok(
     withUsage.includes('workflow.agent.contextShort'),
@@ -112,16 +117,20 @@ test('T-128：上下文水位圆环在有 usage 时渲染、分母缺失时整�
   );
 
   const noUsage = await renderSfc(RING, {
-    props: { usage: null, contextWindow: 128000 },
+    props: { usage: null, contextTokens: null, contextWindow: 128000 },
   });
   assert.equal(
     noUsage.includes('data-test="context-meter"'),
     false,
-    '没有 usage 时水位整段必须不渲染 —— 显示 0% 会让用户以为「完全没占」'
+    '没有实测占用时水位整段必须不渲染 —— 显示 0% 会让用户以为「完全没占」'
   );
 
   const noWindow = await renderSfc(RING, {
-    props: { usage: { input: 6400, output: 10 }, contextWindow: 0 },
+    props: {
+      usage: { input: 6400, output: 10 },
+      contextTokens: 6400,
+      contextWindow: 0,
+    },
   });
   assert.equal(
     noWindow.includes('data-test="context-meter"'),
@@ -137,6 +146,7 @@ test('T-163/T-213：水位阈值显示 —— <80% 整段不渲染 / >=80 出环
     renderSfc(RING, {
       props: {
         usage: { input: Math.round((200000 * pct) / 100), output: 10 },
+        contextTokens: Math.round((200000 * pct) / 100),
         contextWindow: 200000,
       },
     });

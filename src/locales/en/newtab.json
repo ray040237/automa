@@ -454,6 +454,15 @@
     }
   },
   "workflow": {
+    "blockCategories": {
+      "interaction": "Web interaction",
+      "browser": "Browser",
+      "general": "General",
+      "onlineServices": "Online services",
+      "data": "Data",
+      "conditions": "Control flow",
+      "package": "Packages"
+    },
     "events": {
       "title": "Workflow Events",
       "add-action": "Add action",

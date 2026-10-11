@@ -96,12 +96,13 @@
             width="w-72"
             class="min-w-0 flex-1"
           >
-            <template #trigger>
+            <template #trigger="{ aria }">
               <button
                 type="button"
                 class="titlebar group flex min-w-0 w-full items-center gap-1 rounded-chip bg-box-transparent px-2.5 py-2 text-left transition duration-fast ease-panel hover:bg-field"
                 :class="titleOpen ? 'bg-field' : ''"
                 data-test="session-title"
+                v-bind="aria"
               >
                 <span class="min-w-0 flex-1 truncate text-sm">
                   {{ sessionLabel }}
@@ -403,11 +404,14 @@
                 side="top"
                 width="w-72"
                 class="shrink-0"
+                role=""
               >
-                <template #trigger>
+                <template #trigger="{ aria }">
                   <agent-context-ring
                     :usage="host.usage"
+                    :context-tokens="host.contextTokens"
                     :context-window="Number(host.config.contextWindow) || 0"
+                    :trigger-aria="aria"
                   />
                 </template>
 
@@ -578,13 +582,15 @@ const exampleList = computed(() => suggestExamples(props.host.groups));
 /**
  * 元信息行的上下文水位。
  *
- * 判定本身在 `@/agent/usage`（那里有单测钉住分母缺失 / 已用为负 / 超过 100
- * 三种边界），这里只问一句「算不算得出来」—— 算不出来就整行不显示，
- * 而不是显示 0%（`usage.js` 的注释里有完整理由）。
+ * 分子是 `host.contextTokens`（T-222）：loop 在 DONE 带出的**实测**上下文占用，
+ * 随会话记录持久化、openSession 恢复。曾拿 host.usage 当分子——那是跨轮累加的
+ * 计费总量，多轮会话水位虚高。判定本身在 `@/agent/usage`（那里有单测钉住分母
+ * 缺失 / 已用为负 / 超过 100 三种边界），这里只问一句「算不算得出来」——
+ * 算不出来就整行不显示，而不是显示 0%（`usage.js` 的注释里有完整理由）。
  */
 const contextPct = computed(() =>
   calcContextPercent(
-    props.host.usage,
+    props.host.contextTokens,
     Number(props.host.config && props.host.config.contextWindow) || 0
   )
 );

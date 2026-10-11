@@ -6,7 +6,7 @@
     <template #header="{ show }">
       <span :class="category.color" class="h-3 w-3 rounded-full"></span>
       <p class="ml-2 flex-1 capitalize">
-        {{ category.name }}
+        {{ categoryTitle }}
       </p>
       <v-remixicon :name="show ? 'riSubtractLine' : 'riAddLine'" size="20" />
     </template>
@@ -71,13 +71,20 @@
   </ui-expand>
 </template>
 <script setup>
+import { computed } from 'vue';
 import { getBlocks } from '@/utils/getSharedData';
 import { useI18n } from 'vue-i18n';
 
-defineProps({
+const props = defineProps({
   category: {
     type: Object,
     default: () => ({}),
+  },
+  // 分类在 shared.js categories 里的键名；「已固定的块」组没有分类 id，
+  // 不传它——标题本就走 locale（workflow.detailsCard.pinnedBlocks）。
+  categoryId: {
+    type: String,
+    default: '',
   },
   blocks: {
     type: Array,
@@ -92,6 +99,19 @@ defineEmits(['pin']);
 
 const { t, te } = useI18n();
 const blocksDetail = getBlocks();
+
+/**
+ * 分类标题（T-184）：优先走 locale 键 workflow.blockCategories.<id>，
+ * 没有键（语言缺翻译 / 没有 categoryId）回落 category.name 原文——
+ * 与下面 getBlockTitle 同一套 te() 兜底模式：显示英文原文，绝不显示键名。
+ * shared.js 里 categories 的 name 从此只是兜底数据，不再直接渲染。
+ */
+const categoryTitle = computed(() => {
+  const key = props.categoryId
+    ? `workflow.blockCategories.${props.categoryId}`
+    : '';
+  return key && te(key) ? t(key) : props.category.name;
+});
 
 function getBlockTitle({ description, id, name }) {
   const blockPath = `workflow.blocks.${id}`;

@@ -8,7 +8,7 @@
     特调。
   -->
   <agent-dropdown v-model="open" align="left" width="w-72">
-    <template #trigger>
+    <template #trigger="{ aria }">
       <!--
         T-164/T-214：chip =「主体 button + 状态徽标 + 箭头」三个**并排的兄弟**
         （不嵌套 —— 嵌套 button 是无效 HTML）。主体/箭头开列表；徽标在固定态
@@ -49,6 +49,7 @@
               ? t('workflow.agent.pickTab.pinnedHint')
               : t('workflow.agent.pickTab.autoHint')
           "
+          v-bind="aria"
         >
           <img
             v-if="faviconUrl && !faviconBroken"

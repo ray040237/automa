@@ -40,6 +40,7 @@
       :title="hint"
       :aria-label="ariaLabel"
       data-test="context-ring"
+      v-bind="triggerAria"
     >
       <!-- T-213：14px → 16px，与参考实现一致。14px 是"塞在文字旁的小点"，
            16px 才是"一个能读的水位表"。 -->
@@ -111,13 +112,23 @@ import {
 /**
  * 上下文水位圆环（T-153）。
  *
+ * T-222：水位分子是 `contextTokens` —— loop 在 DONE 带出的**实测**上下文占用
+ * （compaction.measuredContextTokens），随会话记录持久化。曾拿 usage.input 当
+ * 分子，但那是跨轮累加的计费总量，多轮会话水位虚高；usage 现在只承担它的本职
+ * —— hint 里的计费明细（in/out）。
+ *
  * 判定一律来自 `@/agent/usage` —— 那里有单测钉着「分母缺失 / 已用为负 / 超过 100」
  * 三种边界，`.vue` 里的分支一条都测不到，所以这里不做任何百分比计算。
  */
 const props = defineProps({
   usage: { type: Object, default: null },
+  // 实测上下文占用（contextTokens），null = 无实测 → 整段不渲染
+  contextTokens: { type: Number, default: null },
   // config.contextWindow：**用户填的建议值**，不是实测窗口
   contextWindow: { type: Number, default: 0 },
+  // T-155：宿主经 AgentDropdown 的 scoped slot 拿到的 aria（aria-expanded 等），
+  // 原样透传给这里的按钮 —— trigger 的语义属性必须落在真实按钮上
+  triggerAria: { type: Object, default: null },
 });
 
 const { t } = useI18n();
@@ -126,7 +137,7 @@ const RADIUS = 6;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 const percent = computed(() =>
-  calcContextPercent(props.usage, props.contextWindow)
+  calcContextPercent(props.contextTokens, props.contextWindow)
 );
 
 /**

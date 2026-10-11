@@ -1305,6 +1305,16 @@ test('T-09 / T-153：模型名与上下文水位要真的从 config 传下去', 
     /:usage="host\.usage"/.test(panelSrc),
     'usage 必须传到圆环上 —— 少了它水位永远算不出来，环等于不存在'
   );
+  // T-222：水位的分子是实测 contextTokens，不是计费 usage —— 组件内部
+  // percent 只认 contextTokens；这条守卫钉住宿主侧的供数，防退回旧分子。
+  assert.ok(
+    /:context-tokens="host\.contextTokens"/.test(panelSrc),
+    '实测上下文占用必须传到圆环上（T-222），少了它水位环拿不到分子'
+  );
+  assert.ok(
+    ringSrc.includes('props.contextTokens'),
+    '环的水位分子必须是 contextTokens —— 退回 usage.input 就是 T-222 的旧病复发'
+  );
   assert.ok(listSrc.includes('data-test="model-name"'), '模型名要有渲染点');
   assert.ok(
     ringSrc.includes('data-test="context-meter"'),
@@ -1314,6 +1324,76 @@ test('T-09 / T-153：模型名与上下文水位要真的从 config 传下去', 
   assert.ok(
     ringSrc.includes("from '@/agent/usage'"),
     '水位/时刻/缩写的判定要来自 @/agent/usage（那里有单测），不能留在组件里'
+  );
+});
+
+test('T-155：下拉 a11y —— aria 上真实按钮、面板有角色、键盘导航在组件内单点实现', () => {
+  // agentFile 是文件后段 describe 内的局部帮手，这里够不到——自建同款
+  const agentFile = (n) => read(`src/components/newtab/workflow/agent/${n}`);
+  const dd = stripComments(agentFile('AgentDropdown.vue'));
+
+  // aria-expanded / aria-haspopup 经 scoped slot 交给消费方绑到 trigger 的
+  // 真实按钮上 —— 挂在包装 div 上读屏软件不认
+  assert.ok(
+    dd.includes("'aria-expanded'"),
+    'trigger aria 里要有 aria-expanded'
+  );
+  assert.ok(dd.includes("'aria-haspopup'"), 'menu 形态要有 aria-haspopup');
+  assert.ok(
+    dd.includes(':aria="triggerAria"'),
+    'trigger slot 必须把 aria 作为 scoped prop 交给消费方（消费侧写法才是 #trigger）'
+  );
+  // 键盘导航（DOM 焦点、首末回绕）与收起行为。
+  // Home/End 是 moves 映射的无引号键，断言按「键名+冒号」查。
+  for (const key of ['ArrowDown', 'ArrowUp', 'Escape', 'Tab']) {
+    assert.ok(dd.includes(`'${key}'`), `键盘导航缺 ${key}`);
+  }
+  for (const key of ['Home:', 'End:']) {
+    assert.ok(dd.includes(key), `键盘导航缺 ${key}`);
+  }
+  assert.ok(
+    dd.includes('focusTrigger()'),
+    'Esc / 条目点击收起后焦点要送回 trigger（APG：菜单关闭焦点回触发器）'
+  );
+
+  // 消费方把 scoped aria 绑到自己的 trigger 按钮上
+  for (const f of [
+    'AgentPanel.vue',
+    'AgentModelPicker.vue',
+    'AgentTabPicker.vue',
+  ]) {
+    const src = agentFile(f);
+    assert.ok(
+      /#trigger="\{ aria \}"/.test(src),
+      `${f} 的 trigger 必须接 scoped aria（T-155）`
+    );
+    assert.ok(
+      /v-bind="aria"/.test(src),
+      `${f} 必须把 aria 绑到 trigger 按钮上`
+    );
+  }
+
+  // 圆环的 trigger 是它内部自己的按钮 —— aria 经 triggerAria prop 透传
+  const ring = agentFile('AgentContextRing.vue');
+  assert.ok(
+    ring.includes('triggerAria') && ring.includes('v-bind="triggerAria"'),
+    '圆环必须把 triggerAria 透传给内部按钮（trigger 不在面板模板里）'
+  );
+
+  // 纯列表型下拉的条目要 menuitem；会话列表 view 模式是整块历史视图，不挂
+  assert.ok(
+    agentFile('AgentTabList.vue').includes('role="menuitem"'),
+    '标签页条目要 role="menuitem"'
+  );
+  assert.ok(
+    agentFile('AgentModelPicker.vue').includes('role="menuitem"'),
+    '模型条目要 role="menuitem"'
+  );
+  assert.ok(
+    /mode === 'popover' \? 'menuitem' : undefined/.test(
+      agentFile('AgentSessionList.vue')
+    ),
+    '会话条目的 menuitem 只在 popover 模式挂（view 模式不是菜单）'
   );
 });
 
@@ -2410,7 +2490,7 @@ test('T-200：整条复制走双通道（text/html 富文本 + text/plain 原文
 test('T-208：三层底色 token 必须在 tailwind.css 里成对定义（亮/暗各一套）', () => {
   const css = stripComments(read('src/assets/css/tailwind.css'));
 
-  // ① 四个变量都要出现。它们是 RGB 三元组（`250 251 252` 这种），
+  // ① 四个变量都要出现。它们是 RGB 三元组（`250 250 250` 这种），
   //    配合 tailwind.config.js 的 withOpacityValue 才能让 bg-canvas/80
   //    这类透明度写法仍然可用 —— 若有人改成 hex，透明度写法会静默失效。
   for (const v of [
@@ -2437,6 +2517,79 @@ test('T-208：三层底色 token 必须在 tailwind.css 里成对定义（亮/�
       decl,
       /:\s*\d{1,3} \d{1,3} \d{1,3};/,
       `${decl} 必须是 "R G B" 三元组（供 withOpacityValue 用），不能是 hex/其它形式`
+    );
+  }
+});
+
+test('T-230：面板 canvas 底色必须与项目页面底色（gray-50 / dark:gray-900）同值', async (t) => {
+  // 「面板底色和项目底色有差别」就是这么漂出来的：T-208 把 canvas 锚在参考
+  // 实现 pie 上（亮 #FAFBFC / 暗 #0B0D10），而项目页面底走
+  // `bg-gray-50 dark:bg-gray-900`（gray 别名 = zinc，#FAFAFA / #18181B）——
+  // 两套灰互不相干，暗色下面板比整个应用明显更黑。这条守卫把整条链钉死：
+  // 别名仍是 zinc → App 根仍是 gray-50/900 → canvas 与 zinc-50/900 同值。
+  // 动其中任何一环，这里必须红，并顺手把 tailwind.css 的四档底色一起对齐
+  // （surface/field/line 是面板内部的分层档，不钉值，允许后续单独调）。
+  const { default: colors } = await import('tailwindcss/colors');
+
+  const triplet = (hex) => {
+    const n = parseInt(hex.slice(1), 16);
+    return `${Math.floor(n / 65536) % 256} ${Math.floor(n / 256) % 256} ${
+      n % 256
+    }`;
+  };
+
+  // ① 取值源头没被动过：gray 仍指向 zinc（项目底色的「灰」就是它）。
+  const configSrc = read('tailwind.config.js');
+  assert.match(
+    configSrc,
+    /gray:\s*colors\.zinc/,
+    'tailwind.config.js 的 gray 别名不再是 colors.zinc —— 项目底色的取值源头' +
+      '变了，tailwind.css 的四档面板底色（canvas/surface/field/line）要跟着重新对齐'
+  );
+
+  // ② 项目底色的锚点还在：App 根布局仍是 bg-gray-50 dark:bg-gray-900。
+  //    若底色定义挪了地方，把这里和 tailwind.css 的 canvas 一起搬到新锚点。
+  const app = stripComments(read('src/newtab/App.vue'));
+  assert.match(
+    app,
+    /@apply bg-gray-50 dark:bg-gray-900/,
+    'App 根布局的 @apply bg-gray-50 dark:bg-gray-900 不在了 —— 项目页面底色' +
+      '换定义了，tailwind.css 的 canvas（亮/暗两处）要与新的页面底色重新对齐'
+  );
+
+  // ③ canvas 与 zinc-50 / zinc-900 同值（亮暗各一处，:root 在前、.dark 在后）。
+  const css = stripComments(read('src/assets/css/tailwind.css'));
+  const canvasValues = [
+    ...css.matchAll(/--color-canvas:\s*(\d+ \d+ \d+)\s*;/g),
+  ].map((m) => m[1]);
+  assert.equal(canvasValues.length, 2, 'canvas 要在 :root 与 .dark 各定义一次');
+  assert.equal(
+    canvasValues[0],
+    triplet(colors.zinc[50]),
+    `亮色 canvas (${canvasValues[0]}) 必须等于 gray-50 (${triplet(
+      colors.zinc[50]
+    )}) —— 面板底色要与项目页面底色统一（T-230）`
+  );
+  assert.equal(
+    canvasValues[1],
+    triplet(colors.zinc[900]),
+    `暗色 canvas (${canvasValues[1]}) 必须等于 gray-900 (${triplet(
+      colors.zinc[900]
+    )}) —— 面板底色要与项目页面底色统一（T-230）`
+  );
+
+  // ④ 产物层：页面底色的 zinc 值要真的编译进 newtab.css。源码对齐 ≠ 产物
+  //    对齐（T-171 家族的教训）；build 缺席时跳过，跑一次 npm run build 再来。
+  const builtCss = join(ROOT, 'build/newtab.css');
+  if (!existsSync(builtCss)) {
+    t.skip('build/newtab.css 不存在，先跑一次 npm run build');
+    return;
+  }
+  const cssOut = readFileSync(builtCss, 'utf8');
+  for (const rgb of ['rgb(250 250 250', 'rgb(24 24 27']) {
+    assert.ok(
+      cssOut.includes(rgb),
+      `构建 CSS 里找不到 ${rgb} —— 页面底色（gray-50/900）在产物里与 zinc 不符`
     );
   }
 });

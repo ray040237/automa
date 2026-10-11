@@ -71,6 +71,7 @@
         >
           <button
             type="button"
+            :role="mode === 'popover' ? 'menuitem' : undefined"
             :disabled="disabled"
             :title="disabled ? t('workflow.agent.session.busyHint') : ''"
             class="hoverable flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-chip px-2 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-60"
@@ -108,6 +109,7 @@
             >
             <button
               type="button"
+              :role="mode === 'popover' ? 'menuitem' : undefined"
               class="absolute inset-0 grid place-items-center rounded-chip text-fg-3 opacity-0 transition duration-fast ease-panel hover:bg-danger/15 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40 group-hover/row:opacity-100"
               :disabled="disabled"
               :title="

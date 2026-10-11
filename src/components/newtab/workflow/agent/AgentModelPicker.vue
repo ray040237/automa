@@ -2,7 +2,7 @@
   <!-- side="top"：芯片在面板最底部，往下展开在矮窗口里会被视口截断。
        align="right"：它在底行偏右，右对齐才不会顶出面板右边。 -->
   <agent-dropdown v-model="open" align="right" side="top" width="w-72">
-    <template #trigger>
+    <template #trigger="{ aria }">
       <!--
         T-201 / T-213：模型芯片。
 
@@ -25,6 +25,7 @@
         :disabled="locked"
         :title="locked ? t('workflow.agent.session.busyHint') : label"
         data-test="model-chip"
+        v-bind="aria"
       >
         <span class="min-w-0 truncate font-mono text-[12px] text-fg-2">
           {{ label }}
@@ -66,6 +67,7 @@
           v-for="m in p.models"
           :key="p.id + '/' + m"
           type="button"
+          role="menuitem"
           class="flex w-full items-center gap-1.5 px-3 py-1.5 text-left transition duration-fast ease-panel hover:bg-field"
           :class="{ 'cursor-default': isCurrent(p.id, m) }"
           :data-test="'model-option-' + m"

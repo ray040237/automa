@@ -454,6 +454,15 @@
     }
   },
   "workflow": {
+    "blockCategories": {
+      "interaction": "网页交互",
+      "browser": "浏览器",
+      "general": "通用",
+      "onlineServices": "在线服务",
+      "data": "数据",
+      "conditions": "控制流",
+      "package": "包"
+    },
     "events": {
       "title": "工作流事件",
       "add-action": "添加操作",
