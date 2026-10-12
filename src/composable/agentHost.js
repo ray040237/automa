@@ -508,16 +508,17 @@ export function createAgentHost(deps, ui) {
    * （T-198），否则 chip 已切到新页、模型还在操作旧 pin 的页。
    * `unpinTab` 返回 false 说明本来就是自动态，这时不用（也不该）重解析：解析结果
    * 不会变，白白多一次 tabs 查询。
+   *
+   * T-247：解除后**不再**弹 toast（原 T-214 §7 的「已回到自动跟随」已删）。它想确认
+   * 的那件事 chip 自己已经说了 —— 徽标当场从「已固定 ✕」实底换成「跟随」灰描边，
+   * 状态写在同一枚位置上，再弹一条比面板还宽的绿色横幅是同一件事说第二遍。
+   * 所以「回到自动跟随」的唯一载体是徽标，别再往回加 toast（panelUi.test.js 有守卫）。
    */
   async function onUnpinTab() {
     if (!agent.runtime) return;
     if (!agent.runtime.unpinTab()) return;
 
     await resetTargetToAuto();
-
-    // T-214：解除后 chip 从实底退成轻底 —— 一句话确认"没有丢目标页"，
-    // 只是回到了自动跟随；也防误触徽标后不知所措（设计稿 §7 拍板项）。
-    toast.success(t('workflow.agent.pickTab.unpinToast'));
   }
 
   /**

@@ -4306,3 +4306,18 @@ align=left  sidebar=320 chip 23..117   panel   23..311   |  超出侧栏左   0p
 注：同一 `w-72` 宽的水位环下拉用 `align="right"` 是对的（它在底行最右），不要一并改。
 结论：2026-10-12 按建议①执行（用户批准）。`AgentModelPicker.vue:13` 的 `align="right"` → `align="left"`，文件头注释一并改真（写清「芯片是底行最左，右对齐会把 288px 弹层往左铺出侧栏 79~171px」的实测量，并注明水位环那处 right 是对的）。**守卫**：`src/agent/panelUi.test.js` 新增「底行弹层的横向对齐跟随触发器位置（T-246）」——模型芯片必须 `align="left"`、水位环必须 `align="right"`，把「长的那一侧朝面板内部」这条不变量钉住；变异验证：把 align 改回 right 后该守卫 `not ok`，`npm test` 883 pass / 1 fail。**验收**：还原后 `npm test` 884 pass / 0 fail / 1 skip；`npx eslint src/agent/panelUi.test.js` 0 error；`npm run build` 重建后 `build/` 91 个文件（构建先清空 `build/` 撞批量删除守卫，按 AGENTS.md 把残缺目录改名 `build.bak.20261012b` 后在空目录重跑成功）。视觉验收待用户装进浏览器实看。
 状态：已清（2026-10-12 完成）
+
+### T-247 — 解除固定目标页后弹「已回到自动跟随」toast，与 chip 徽标说的是同一件事
+
+类型：改进
+登记日期：2026-10-12
+来源：2026-10-12 会话；用户原话「agent UI上有一个交互有点问题，在标签页从固定切换到跟随时会触发一个弹出通知，这个通知是和项目中的通知统一的吗？我觉得有一点大，颜色也有点不符合项目」，随后裁决「这个通知没有什么实际意义，改成跟随已经在标签切换的徽标上显示了，直接把这个通知取消掉」；触发点 `src/composable/agentHost.js` 的 `onUnpinTab()`
+现象：点「已固定 ✕」徽标解除固定时，除了解除 pin 与重解析目标页，还 `toast.success(t('workflow.agent.pickTab.unpinToast'))` 弹一条「已回到自动跟随」。而同一时刻 chip 的徽标已经从「已固定 ✕」实底换成「跟随」灰描边 —— 状态就写在同一枚位置上，toast 是同一件事说第二遍。它是 T-214 §7 为「误触徽标后不知所措」加的兜底。
+证据：
+- 调用点 `src/composable/agentHost.js:520`（原）；`toast` 来自同文件 `useToast()`（`import { useToast } from 'vue-toastification'`），与全项目**同一个实例、同一份全局配置** —— 确认它是项目统一的通知，不存在「助手自己另起一套」。
+- 样式全走 vue-toastification 出厂默认（`node_modules/vue-toastification/dist/index.css` 实读）：`min-width:326px / min-height:64px / padding:22px 24px / 正文 16px`、`border-radius:8px`、`.Vue-Toastification__toast--success{background-color:#4caf50}`；而助手面板内容区只有 320px（`sidebarCss.width` 360 − padding 40），比面板还宽。全项目唯一 toast 定制只有 `src/assets/css/tailwind.css:204` 的 `font-family: inherit`。
+影响：观感层面的冗余 —— 比面板还宽的绿色横幅抢走注意力，而它想确认的信息徽标已经给了。**附带发现**：全项目 30+ 处 `toast.success/error` 共用同一份裸默认样式，与项目 token 脱节；该部分未随本条处置，另立 **T-248**（`docs/backlog.md` 改进区）跟踪。
+建议：（原票给过 ①全局项目化 toast 样式 / ②只改这一处；两者均未采纳 —— 用户把方向从「美化」改成「删除」）
+注：本条原登记标题是「toast 用的是 vue-toastification 裸默认样式」，即把问题定位成「它长什么样」。用户裁决推翻了这一定位：问题不在样式，而在它**不该存在**。所以本条只删不美化，样式欠账转 T-248。
+状态：已清（2026-10-12 完成）
+结论：2026-10-12 按用户裁决执行 —— **删除该 toast，不美化**。`src/composable/agentHost.js` 的 `onUnpinTab()` 去掉 `toast.success(...)`，只留 `await resetTargetToAuto()`（重解析仍必须：chip 不能闪空，且 runtime 要回写，见 T-198）；函数头注释改写，写明「回到自动跟随」的**唯一**载体是 chip 徽标、以及为何不许再加回来。文案键 `workflow.agent.pickTab.unpinToast` 从 `src/locales/en/newtab.json` 与 `src/locales/zh/newtab.json` 一并删除（`check:i18n` 强校验 en/zh 对齐，只删一侧会 fail）。**守卫**：`src/agent/panelUi.test.js` 的 T-164/T-214 用例里，原「`unpinToast` 必须是 string」翻成「必须 `undefined`」，原「host 必须 `match /pickTab\.unpinToast/`」翻成 `doesNotMatch`（host 注释里提这个键名也会红灯 —— 故意的，防止靠一句注释把「不许回来」糊弄过去）。**变异验证**：把 `toast.success(t('workflow.agent.pickTab.unpinToast'))` 加回 `agentHost.js` 后，该守卫 `not ok 47 - T-164/T-214：解除动作只剩「点已固定徽标」一条路，且只在固定态出现`，报错正是「解除固定后不许再 toast —— 「回到自动跟随」由 chip 徽标表达（T-247）」（panelUi.test.js 单跑：pass 74 / fail 1）。**验收**：还原后 `npm test` **884 pass / 0 fail / 1 skip**（885 tests / 56 suites）；`npm run check:i18n` passed（en、zh、zh-TW 同步，无新增硬编码）；`npx eslint src/composable/agentHost.js src/agent/panelUi.test.js` 0 error；`npm run build` EXIT=0，产物 79 个文件，`grep -rl "已回到自动跟随" build/` 无命中、`grep -c unpinToast build/*.bundle.js build/locales/*/*.json` 全 0，且 `offscreen.bundle.js` 仍是 offline 桩（确认是默认 offline 产物，未把调试产物留给用户）。视觉验收待用户装进浏览器实看。

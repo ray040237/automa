@@ -1510,8 +1510,8 @@ test('T-164/T-214：解除动作只剩「点已固定徽标」一条路，且只
     );
     assert.equal(
       typeof agent.pickTab.unpinToast,
-      'string',
-      `${lang} 缺 workflow.agent.pickTab.unpinToast`
+      'undefined',
+      `${lang} 还留着 workflow.agent.pickTab.unpinToast —— 解除固定的 toast 已随 T-247 删除`
     );
     assert.equal(
       typeof agent.pickTab.tabsLabel,
@@ -1525,13 +1525,20 @@ test('T-164/T-214：解除动作只剩「点已固定徽标」一条路，且只
     );
   }
 
-  // T-214 §7：解除后要有一句「已回到自动跟随」的确认（chip 从实底退成轻底，
-  // 一句话防误触后不知所措）
+  // T-247：解除固定后**不再**弹 toast。
+  //
+  // T-214 §7 当初加「已回到自动跟随」是给误触徽标兜底，但徽标当场就从「已固定 ✕」
+  // 换成「跟随」，状态写在同一枚位置上 —— 再弹一条比面板还宽的绿色横幅是同一件事
+  // 说第二遍，而且用的是 vue-toastification 的裸默认样式（尺寸与配色都不在项目 token
+  // 里）。现在解除路径只留 resetTargetToAuto()，文案键一并删掉。
+  //
+  // 注意这条是 doesNotMatch：host 源码里若在注释中提到这个键名也会红灯 —— 是故意的，
+  // 免得靠一句注释把「不许回来」糊弄过去。
   const host = read('src/composable/agentHost.js');
-  assert.match(
+  assert.doesNotMatch(
     host,
     /pickTab\.unpinToast/,
-    '解除固定后要 toast「已回到自动跟随」—— 设计稿 §7 拍板项'
+    '解除固定后不许再 toast —— 「回到自动跟随」由 chip 徽标表达（T-247）'
   );
 });
 

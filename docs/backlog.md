@@ -183,6 +183,21 @@
 注：本次已按 ① 把目录就地改名为 `build.bak.20261012` 恢复正轨，**代码与配置均未改动**；本条只为修文档口径。
 状态：待审核
 
+#### T-248 — 全项目 toast 都用 vue-toastification 裸默认样式，尺寸与配色均未项目化
+
+登记日期：2026-10-12
+来源：2026-10-12 会话；用户原话「（助手面板解除固定的那条通知）我觉得有一点大，颜色也有点不符合项目」。这是原 T-247 的一部分 —— 该条的那一处 toast 已按用户决定**整条删除**（见 `docs/backlog-done.md` T-247），本条是它未覆盖的其余部分。
+现象：全项目的 toast 都走 vue-toastification 的**出厂样式**，从未项目化：① **尺寸** —— 库默认 `min-width: 326px / min-height: 64px / padding: 22px 24px / 正文 16px`，在助手面板（内容区 320px）这类窄宿主里比宿主还宽；② **配色** —— `success=#4caf50` / `error=#ff5252` / `info=#2196f3` / `warning=#ffc107` 全是库 CSS 里硬编码的 Material 色，不在项目 `--color-*` token 里。
+证据：
+- 全局注册无任何 options：`src/newtab/index.js:23` 与 `src/sidepanel/index.js:35` 都是裸 `.use(vueToastification)`；`src/lib/vue-toastification.js` 只 import 默认组件 + `dist/index.css`。
+- 项目唯一的 toast 定制是 `src/assets/css/tailwind.css:204` 的 `.Vue-Toastification__toast { font-family: inherit !important }` —— 只改字体，尺寸与配色全是库默认。
+- 默认样式（`node_modules/vue-toastification/dist/index.css` 实读）：`.Vue-Toastification__toast{min-height:64px;min-width:326px;padding:22px 24px;border-radius:8px}`、`.Vue-Toastification__toast-body{font-size:16px;line-height:24px}`、`.Vue-Toastification__toast--success{background-color:#4caf50}`、`.Vue-Toastification__container{width:600px}`；另有 `<600px` 视口一套 `width:100vw / border-radius:0 / top:0`（浏览器侧栏宿主很可能命中，观感更「大」，变成贴满宽度的直角条）。
+- 调用面：全仓 30+ 处 `toast.success/error`（`SettingsProfile` / `SettingsBackup` / `SettingsAgent*` / `WorkflowShare*` / `UiFileInput` / `StorageVariables` 等），共用同一份样式。
+影响：观感层面全项目一致，但与项目视觉语言（三层底色 canvas/surface/field、accent/primary/danger/warn、圆角 chip/control/card）脱节，窄宿主里尤其突兀。T-247 删掉的只是助手面板那一条，其余 30+ 处原样保留 —— 这条是那批的**共同**欠账，不是某一处。
+建议：① 在 `src/lib/vue-toastification.js` 或 `tailwind.css` 层给 `.Vue-Toastification__*` 做一次项目化（尺寸收一档 + 语义底色改用 `--color-*`），一处生效、全项目统一；代价是要逐一核对各调用点的观感（推荐）。② 只改窄宿主相关的几处，代价是同一套通知出现两种长相。
+注：纯观感统一，无功能缺陷。T-247 的处置（冗余通知该删而不是该美化）对这批同样适用 —— 动手前先过一遍：这 30+ 条里有多少本身也是冗余的？
+状态：待审核
+
 ### 新功能（要讨论场景，审得慢）
 
 ---
@@ -223,7 +238,7 @@
 
 ## 已清 → `docs/backlog-done.md`
 
-已解决条目全部在 **`docs/backlog-done.md`**（计数以该文件实物为准，并行会话同日多轮追加）：2026-10-05 拆出 44 条（T-02、T-05、T-06、T-17~T-25、T-26~T-34、T-35~T-43、T-44、T-45、T-47、T-48、B1、B5）；之后各轮：T-61、T-62 与面板 UI 系列（并行会话），T-70、T-71（架构评审 C1），T-82（C3），T-83（C2），T-89 及随其修复的 T-69（C4），T-75、T-76（pi 功能面调研轮：步数上限决策与上下文压缩，2026-10-06），T-91（`list_canvas` 静默截断 200 字符，2026-10-06），T-97~T-103（设置页多 provider 改造轮：密钥明文镜像、独立菜单、多连接、配置测试、图标名、新建连接入口、说明段落，2026-10-06），T-104（归档被截断后的恢复，2026-10-06），T-105（`backlog.md` 与归档失同步，2026-10-06；同批把待审核区的「T-90」改号为 T-107），T-04（报错渲染，并行会话完成）、T-46、T-54、T-56（已消解/已修复）与 T-77~T-80（驳回）——最后一批为 2026-10-06 待审核区按类型分区重构时清出的已裁决条目。2026-10-07 收尾轮补充：B2、B3、B7、B4（B4 交付 `.agent-test/eval/` 任务集，含 T-140 —— 5 个 live 脚本失效随 B4 一并处置）、B9（pi-agent-core 迁移决策记录归档，ADR 0004 / migration spec / tickets / architecture.html 的引用已改指本文件）、T-126、T-137、T-138、T-139、B6（agent:run-js 惰性 CSP 降级，2026-10-07）。2026-10-07 T-81b review 修复轮：T-141~T-149 共 9 条（备份保真、merge 保 enabled/id、技能索引 untrusted 包裹、zip 导入边界、frontmatter 往返、导入上限、导出路径冲突、下载 revoke 时机、索引警告拆分）。2026-10-10 UI 批次（T-199/200/207/213/214/215 当轮整条移出；滞留的 T-205/206/208~212 于 2026-10-12 随 T-216 补搬、T-203/204 补建归档）。2026-10-11~12 backlog 紧急序逐条清偿：T-229、T-225、T-222、T-184、T-216。
+已解决条目全部在 **`docs/backlog-done.md`**（计数以该文件实物为准，并行会话同日多轮追加）：2026-10-05 拆出 44 条（T-02、T-05、T-06、T-17~T-25、T-26~T-34、T-35~T-43、T-44、T-45、T-47、T-48、B1、B5）；之后各轮：T-61、T-62 与面板 UI 系列（并行会话），T-70、T-71（架构评审 C1），T-82（C3），T-83（C2），T-89 及随其修复的 T-69（C4），T-75、T-76（pi 功能面调研轮：步数上限决策与上下文压缩，2026-10-06），T-91（`list_canvas` 静默截断 200 字符，2026-10-06），T-97~T-103（设置页多 provider 改造轮：密钥明文镜像、独立菜单、多连接、配置测试、图标名、新建连接入口、说明段落，2026-10-06），T-104（归档被截断后的恢复，2026-10-06），T-105（`backlog.md` 与归档失同步，2026-10-06；同批把待审核区的「T-90」改号为 T-107），T-04（报错渲染，并行会话完成）、T-46、T-54、T-56（已消解/已修复）与 T-77~T-80（驳回）——最后一批为 2026-10-06 待审核区按类型分区重构时清出的已裁决条目。2026-10-07 收尾轮补充：B2、B3、B7、B4（B4 交付 `.agent-test/eval/` 任务集，含 T-140 —— 5 个 live 脚本失效随 B4 一并处置）、B9（pi-agent-core 迁移决策记录归档，ADR 0004 / migration spec / tickets / architecture.html 的引用已改指本文件）、T-126、T-137、T-138、T-139、B6（agent:run-js 惰性 CSP 降级，2026-10-07）。2026-10-07 T-81b review 修复轮：T-141~T-149 共 9 条（备份保真、merge 保 enabled/id、技能索引 untrusted 包裹、zip 导入边界、frontmatter 往返、导入上限、导出路径冲突、下载 revoke 时机、索引警告拆分）。2026-10-10 UI 批次（T-199/200/207/213/214/215 当轮整条移出；滞留的 T-205/206/208~212 于 2026-10-12 随 T-216 补搬、T-203/204 补建归档）。2026-10-11~12 backlog 紧急序逐条清偿：T-229、T-225、T-222、T-184、T-216。2026-10-12 当轮：T-246（模型弹层左对齐）、T-247（删掉解除固定的 toast）。
 
 要看「某个坑当初是怎么被实测出来的」，去那个文件；要看「现在该做什么」，留在本文件。
 
