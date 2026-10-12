@@ -215,6 +215,37 @@ test('回归守卫：弹层方向跟随所在位置 —— header 里向下弹�
   );
 });
 
+test('回归守卫：底行弹层的横向对齐跟随触发器位置（T-246）', () => {
+  // 弹层是 absolute + 固定宽度（w-72 = 288px），横向只由 `align` 决定的那一个
+  // 边锚定，另一边随宽度往外长。所以 align 必须让**长的那一侧朝面板内部**：
+  //   底行最左（模型芯片）  → align="left"，往右铺
+  //   底行最右（水位环明细）→ align="right"，往左铺
+  // 反了的话弹层整块落到侧栏外：模型芯片那处实测左溢出 79~171px（320px 侧栏，
+  // 模型名 `deepseek-chat` 时最惨），压在工作流画布上。
+  const model = stripComments(
+    read('src/components/newtab/workflow/agent/AgentModelPicker.vue')
+  );
+  assert.match(
+    model,
+    /<agent-dropdown[^>]*align="left"/s,
+    '模型芯片在底行最左，弹层必须左对齐（align="right" 会让它以芯片右缘为界往左铺出侧栏）'
+  );
+
+  // 水位环在底行最右 —— 那一处 align="right" 是对的，一并钉住防止被"统一"改坏。
+  const panel = stripComments(
+    read('src/components/newtab/workflow/agent/AgentPanel.vue')
+  );
+  const ringAt = panel.indexOf('agent-context-ring');
+  assert.ok(ringAt > 0, '找不到水位环，守卫要重写');
+  const ddStart = panel.lastIndexOf('<agent-dropdown', ringAt);
+  assert.ok(ddStart > 0, '找不到包着水位环的下拉，守卫要重写');
+  assert.match(
+    panel.slice(ddStart, ringAt),
+    /align="right"/,
+    '水位环在底行最右，弹层必须右对齐（align="left" 会让它往右铺出侧栏）'
+  );
+});
+
 test('守卫：删除在会话下拉里，且可点控件都有底色', () => {
   // 用户 2026-10-05 反馈：① 交互控件没有底色，与面板背景融为一体看不出能点；
   // ② 「⋯」溢出菜单纯属多余，删除应该在下拉列表里直接可点。
@@ -2269,6 +2300,24 @@ test('T-182：助手入口的图标不许再与画布上的自动布局撞车', 
     /id: 'agent'[\s\S]*?icon: 'riChat3Line'/,
     '助手 tab 用 riChat3Line（对话框），语义上比魔法棒准'
   );
+
+  // T-186：魔法棒从此专属画布自动布局。设置页与列表页的「AI 助手」入口
+  // 同样用对话气泡 —— 三处 AI 入口统一，「魔法棒 = AI」的旧约定退役。
+  for (const f of [
+    'src/newtab/pages/Settings.vue',
+    'src/newtab/pages/Workflows.vue',
+  ]) {
+    const page = stripAll(read(f));
+    assert.ok(
+      page.includes('riChat3Line'),
+      `${f} 的助手入口要用 riChat3Line（三处 AI 入口统一气泡，T-186）`
+    );
+    assert.doesNotMatch(
+      page,
+      /riMagicLine/,
+      `${f} 里不许再出现 riMagicLine —— 它只属于画布自动布局（T-186）`
+    );
+  }
 });
 
 // T-195~T-198 的「三件套只能经 syncTarget 写入 + 六条入口」守卫已随 T-227 行为化：

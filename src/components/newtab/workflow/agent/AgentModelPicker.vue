@@ -1,7 +1,16 @@
 <template>
-  <!-- side="top"：芯片在面板最底部，往下展开在矮窗口里会被视口截断。
-       align="right"：它在底行偏右，右对齐才不会顶出面板右边。 -->
-  <agent-dropdown v-model="open" align="right" side="top" width="w-72">
+  <!--
+    side="top"：芯片在面板最底部，往下展开在矮窗口里会被视口截断。
+
+    align="left"：芯片是底行**最左**一个元素（AgentPanel 里排在 flex-1 之前），
+    右对齐（`right-0`）会让 288px 的弹层以芯片右缘为右边界往左铺 —— 实测在
+    320px 侧栏里左溢出 79~171px，整块挂在侧栏外压到画布上（模型名越短外挂越
+    多）。左对齐后弹层落在 23..311，完整在侧栏内、右侧留 9px。
+    （2026-10-12 用户反馈「宽度没设置好」，登记 T-246。文件头原先写「它在底行
+    偏右」，是从水位环那个真在右侧的下拉照抄来的 —— 与本条同源的另一处
+    `align="right"` 是对的，不要一并改。）
+  -->
+  <agent-dropdown v-model="open" align="left" side="top" width="w-72">
     <template #trigger="{ aria }">
       <!--
         T-201 / T-213：模型芯片。
