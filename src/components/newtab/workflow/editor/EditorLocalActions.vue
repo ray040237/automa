@@ -310,6 +310,34 @@
       class="mb-4 w-full"
       @keyup.enter="renameWorkflow"
     />
+    <!-- T-185：图标选择器从侧栏卡头搬来 —— 这是全仓唯一能改工作流图标的地方，
+         卡头删除后随重命名弹窗走。预定义图标点选高亮，自定义图标走 URL。 -->
+    <div class="mb-4">
+      <p class="mb-1 text-sm text-gray-600 dark:text-gray-200">
+        {{ t('workflow.sidebar.workflowIcon') }}
+      </p>
+      <div class="grid grid-cols-7 gap-1">
+        <span
+          v-for="icon in workflowIcons"
+          :key="icon"
+          class="hoverable inline-block cursor-pointer rounded-lg p-2 text-center"
+          :class="{ 'bg-box-transparent': renameState.icon === icon }"
+          @click="renameState.icon = icon"
+        >
+          <v-remixicon :name="icon" />
+        </span>
+      </div>
+      <ui-input
+        :model-value="
+          renameState.icon.startsWith('http') ? renameState.icon : ''
+        "
+        type="url"
+        placeholder="http://example.com/img.png"
+        :label="t('workflow.detailsCard.iconUrl')"
+        class="mt-2"
+        @change="setRenameIconUrl"
+      />
+    </div>
     <ui-textarea
       v-model="renameState.description"
       :placeholder="t('common.description')"
@@ -346,7 +374,7 @@ import { useWorkflowStore } from '@/stores/workflow';
 import { fetchApi } from '@/utils/api';
 import convertWorkflowData from '@/utils/convertWorkflowData';
 import { findTriggerBlock, parseJSON } from '@/utils/helper';
-import { tagColors } from '@/utils/shared';
+import { tagColors, workflowIcons } from '@/utils/shared';
 import getTriggerText from '@/utils/triggerText';
 import { convertWorkflow, exportWorkflow } from '@/utils/workflowData';
 import { registerWorkflowTrigger } from '@/utils/workflowTrigger';
@@ -414,6 +442,7 @@ const state = reactive({
 const renameState = reactive({
   name: '',
   description: '',
+  icon: '',
   showModal: false,
 });
 
@@ -639,6 +668,7 @@ function clearRenameModal() {
     id: '',
     name: '',
     description: '',
+    icon: '',
     showModal: false,
   });
 }
@@ -696,12 +726,20 @@ function initRenameWorkflow() {
     showModal: true,
     name: `${props.workflow.name}`,
     description: `${props.workflow.description}`,
+    // T-185：图标编辑的唯一入口随重命名弹窗走（侧栏卡头已删）
+    icon: `${props.workflow.icon}`,
   });
+}
+function setRenameIconUrl(value) {
+  if (!value.startsWith('http')) return;
+
+  renameState.icon = value.slice(0, 1024);
 }
 function renameWorkflow() {
   updateWorkflow({
     name: renameState.name,
     description: renameState.description,
+    icon: renameState.icon,
   });
   clearRenameModal();
 }

@@ -1,53 +1,9 @@
 <template>
-  <div class="mb-2 mt-1 flex items-start px-4">
-    <ui-popover class="mr-2 h-8">
-      <template #trigger>
-        <span
-          :title="t('workflow.sidebar.workflowIcon')"
-          class="inline-block h-full cursor-pointer"
-        >
-          <ui-img
-            v-if="workflow.icon.startsWith('http')"
-            :src="workflow.icon"
-            class="h-8 w-8"
-          />
-          <v-remixicon v-else :name="workflow.icon" size="26" class="mt-1" />
-        </span>
-      </template>
-      <div class="w-56">
-        <p class="mb-2">{{ t('workflow.sidebar.workflowIcon') }}</p>
-        <div class="mb-2 grid grid-cols-5 gap-1">
-          <span
-            v-for="icon in icons"
-            :key="icon"
-            class="hoverable inline-block cursor-pointer rounded-lg p-2 text-center"
-            @click="$emit('update', { icon })"
-          >
-            <v-remixicon :name="icon" />
-          </span>
-        </div>
-        <ui-input
-          :model-value="workflow.icon.startsWith('http') ? workflow.icon : ''"
-          type="url"
-          placeholder="http://example.com/img.png"
-          :label="t('workflow.detailsCard.iconUrl')"
-          @change="updateWorkflowIcon"
-        />
-      </div>
-    </ui-popover>
-    <div class="flex-1 overflow-hidden">
-      <p class="text-overflow mt-1 text-lg font-semibold leading-tight">
-        {{ workflow.name }}
-      </p>
-      <p
-        class="cursor-pointer leading-tight"
-        :class="descriptionCollapsed ? 'line-clamp' : 'whitespace-pre-wrap'"
-        @click="descriptionCollapsed = !descriptionCollapsed"
-      >
-        {{ workflow.description }}
-      </p>
-    </div>
-  </div>
+  <!--
+    T-185：卡头（图标 + 名称 + 描述）整行删除 —— 名称与描述只是顶栏信息的
+    重复展示，图标选择器并进了顶栏「更多 → 重命名」弹窗（EditorLocalActions），
+    那里本就是改这两样字的唯一入口。块库面板从搜索框直接开始，多让出一行高度。
+  -->
   <ui-input
     id="search-input"
     v-model="query"
@@ -87,18 +43,6 @@ import { categories } from '@/utils/shared';
 import { getBlocks } from '@/utils/getSharedData';
 import WorkflowBlockList from './WorkflowBlockList.vue';
 
-defineProps({
-  workflow: {
-    type: Object,
-    default: () => ({}),
-  },
-  dataChanged: {
-    type: Boolean,
-    default: false,
-  },
-});
-const emit = defineEmits(['update']);
-
 const { t, te } = useI18n();
 const shortcut = useShortcut('action:search', () => {
   const searchInput = document.querySelector('#search-input input');
@@ -110,21 +54,6 @@ const pinnedCategory = {
   name: t('workflow.detailsCard.pinnedBlocks'),
   color: 'bg-accent',
 };
-const icons = [
-  'mdiPackageVariantClosed',
-  'riGlobalLine',
-  'riFileTextLine',
-  'riEqualizerLine',
-  'riTimerLine',
-  'riCalendarLine',
-  'riFlashlightLine',
-  'riLightbulbFlashLine',
-  'riDatabase2Line',
-  'riWindowLine',
-  'riCursorLine',
-  'riDownloadLine',
-  'riCommandLine',
-];
 
 const copyBlocks = getBlocks();
 delete copyBlocks['block-package'];
@@ -146,8 +75,6 @@ const blocksArr = Object.entries(copyBlocks).map(([key, block]) => {
     name: te(localeKey) ? t(localeKey) : block.name,
   };
 });
-
-const descriptionCollapsed = ref(true);
 
 const query = ref('');
 const pinnedBlocks = ref([]);
@@ -180,13 +107,6 @@ const pinnedBlocksList = computed(() =>
     )
 );
 
-function updateWorkflowIcon(value) {
-  if (!value.startsWith('http')) return;
-
-  const iconUrl = value.slice(0, 1024);
-
-  emit('update', { icon: iconUrl });
-}
 function pinBlock({ id }) {
   const index = pinnedBlocks.value.indexOf(id);
 

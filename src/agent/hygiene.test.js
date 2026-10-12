@@ -75,7 +75,8 @@ const INVISIBLE_RE =
  */
 function scanInvisibleCharLines(src) {
   const offenders = [];
-  src.replace(/\r\n/g, '\n')
+  src
+    .replace(/\r\n/g, '\n')
     .split('\n')
     .forEach((line, idx) => {
       const codeOnly = line.replace(/\/\/.*$/, '').replace(/^\s*\*.*$/, '');

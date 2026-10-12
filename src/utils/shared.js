@@ -1550,6 +1550,24 @@ export const tagColors = {
   production: 'bg-green-200 dark:bg-green-300',
 };
 
+// 工作流图标的预定义清单（T-185：原在 WorkflowDetailsCard 卡头里，卡头删除后
+// 图标选择器并入顶栏重命名弹窗，清单收进 shared 供弹窗与守卫共用）。
+export const workflowIcons = [
+  'mdiPackageVariantClosed',
+  'riGlobalLine',
+  'riFileTextLine',
+  'riEqualizerLine',
+  'riTimerLine',
+  'riCalendarLine',
+  'riFlashlightLine',
+  'riLightbulbFlashLine',
+  'riDatabase2Line',
+  'riWindowLine',
+  'riCursorLine',
+  'riDownloadLine',
+  'riCommandLine',
+];
+
 export const eventList = [
   { id: 'click', name: 'Click', type: 'mouse-event' },
   { id: 'dblclick', name: 'Double Click', type: 'mouse-event' },

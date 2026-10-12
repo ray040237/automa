@@ -65,11 +65,8 @@
           <!-- T-90：面板收单个 host 对象（useAgentHost 的返回值），绑定只此一行 -->
           <agent-panel :host="agentHost" />
         </div>
-        <workflow-details-card
-          v-else
-          :workflow="workflow"
-          @update="updateWorkflow"
-        />
+        <!-- T-185：卡头删除后组件只剩块库，不再收 workflow/update -->
+        <workflow-details-card v-else />
       </template>
       <workflow-edit-block
         v-else
