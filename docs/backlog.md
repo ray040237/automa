@@ -29,54 +29,161 @@
 
 ### bug（先审，多数可快速定夺）
 
-### 改进
+#### T-231 — `restartWorkersCount` 从未初始化，「出错重启工作流」整条策略崩溃
 
-## T-186 — `riMagicLine` 是全项目「AI 助手」的品牌图标，唯一语义不搭的是画布自动布局
-
-登记日期：2026-10-09
-来源：2026-10-09 会话实施 T-182 时**产物级核验 `riMagicLine` 计数**才浮出来；触发点 `src/newtab/pages/workflows/[id].vue:280`
-现象：T-182 登记时把「魔法棒撞图标」描述成「助手入口 vs 画布自动布局」两处事件。实施后 grep 全仓才发现，`riMagicLine` 在**四个地方**出现，其中三个都是「AI 助手」入口：设置页「AI 助手」导航项（`Settings.vue:52`）、工作流列表页的助手入口项（`Workflows.vue:60`，`t('workflow.agent.tab')`）、以及本轮刚改掉的侧栏 tab。真正语义不搭的是**第四处** —— 画布左下角的自动布局按钮，它跟 AI 没有半点关系，只是借了助手的面包屑。
-证据：**产物级实测** —— 对 `build/newtab.bundle.js` 计 `riMagicLine` 得 4 命中；回源码逐个定位为 `vRemixicon.js:106/205`（注册表 import + 注册项，两条被 terser 合并计一条命中之外的部分）、`[id].vue:280`（自动布局）、`Settings.vue:52`、`Workflows.vue:60`，全仓再无第五处（`src/` 下 `*.vue`/`*.js` 全文 grep 已跑）。
-影响：不是功能缺陷，是**图标语义一致性**。用户学到的「魔法棒 = AI」这条约定，会被画布上一个纯排版按钮持续违反；反过来，本轮把助手侧换成 `riChat3Line` 之后，「魔法棒 = AI」在助手入口这条链路上反而断了一处（设置页与列表页仍是魔法棒）。两种读法指向相反的修法，**必须由用户裁决，不能由我顺手定**。
-建议（两条互斥，代价都很小）：
-  1. **认魔法棒为 AI 品牌**，则改 `[id].vue:280` 自动布局 → 对齐类图标（`riAlignLeft` 一类）。侧栏 tab 也换回 `riMagicLine`。代价：改两处。
-  2. **认侧栏 tab 的语义优先**（当前实现）：`块 | 助手` 并排时，对话框比魔法棒更准；则把 `Settings.vue:52` 与 `Workflows.vue:60` 一并换成 `riChat3Line`，让「助手」在三个入口统一。代价：同样两处，但风险更低（都是 AI 入口，换成对话气泡不会误导任何人）。
-注：本条**不阻塞** T-182 的结论 —— 本轮已按建议 2 的局部形态（只改侧栏 tab）落地并通过守卫。若用户选 1，需同步改守卫 `panelUi.test.js:1901` 的断言方向（当前钉的是「`[id].vue` 里 `riMagicLine` 只剩 1 处」）。
+登记日期：2026-10-12
+来源：`src/workflowEngine/WorkflowWorker.js:438`
+现象：`onError === 'restart-workflow'` 分支里读写 `this.engine.restartWorkersCount[this.id]`，但全仓库没有任何一处初始化这个对象（`WorkflowEngine` 构造函数与 `reset()` 都没有）。一旦命中该分支，在**错误处理块内部**直接抛 TypeError。
+证据：读码确认 —— `grep -rn "restartWorkersCount" src/` 全仓库只有 3 处引用，全在 `WorkflowWorker.js:438/442/452`，无初始化点。
+影响：任何把工作流「出错时」设为「重启工作流」的用户，块一报错就撞这个 TypeError；catch 块内没有二次 try/catch，异常变成未处理 rejection，工作流既不重启也不 destroy，state 永久停在 `running`，只能杀扩展。重启次数上限（`restartTimes`）因此整体失效。
+建议：在 `WorkflowEngine` 构造函数里建 `this.restartWorkersCount = {}`，并在 `destroy()` 时清理；同时给这段 catch 加二次保护。
 状态：待审核
 
-## T-185 — 侧栏卡头的工作流名称与描述，是顶栏重命名弹窗的重复第二份
+#### T-232 — `BackgroundWorkflowTriggers.js:196` 把实例方法当静态调，启动触发器注册整体中断
 
-登记日期：2026-10-09
-来源：2026-10-09 会话评审 agent 助手入口 UI；读 `src/components/newtab/workflow/WorkflowDetailsCard.vue:1-50` 与 `src/components/newtab/workflow/editor/EditorLocalActions.vue:695-706`
-现象：侧栏块库面板顶上那行「图标 + 名称 + 描述」里，名称与描述**可以就地编辑**，而顶栏「更多 → 重命名」弹窗（`moreActions` 的 `rename` 项，`riPencilLine`）也能改同样两个字段 —— 同一件事两处入口，且顶栏那处在任何工作流下都在、侧栏那处要先展开侧栏。
-证据：代码位置如上。`renameWorkflow()` 写 `{name, description}`；`WorkflowDetailsCard` 的 `descriptionCollapsed` 点击展开与名称输入走 `updateWorkflow({...})`。**未实测**两处是否会互相覆盖或产生竞态。
-影响：用户可能在一处改了、另一处看到旧值；更重要的是它让「块库面板」这个叫法别扭 —— 主体是块库，顶上却挂着重复的工作流信息（这是「详情卡」这个名字名不副实的根源）。
-影响面补充：**图标不能跟着一起删**。全仓只有侧栏这一处能改工作流图标，`renameWorkflow` 只写 name/description，没有 icon 字段（已核实 `EditorLocalActions.vue` 全文无 icon 输入）。
-建议：若要收，去掉卡头的名称与描述两行，保留图标那一格；或者反过来把图标选择器并进顶栏重命名弹窗，然后整个卡头删掉 —— 后者还能给侧栏多让出约 44px 高度。**两者都不是必须的**，纯收益项，用户不碰这两处也不会怎样。
+登记日期：2026-10-12
+来源：`src/background/BackgroundWorkflowTriggers.js:196`
+现象：`await BackgroundWorkflowUtils.executeWorkflow(currWorkflow)` 少写了 `.instance`。同文件另外 4 处（:37/:107/:143/:191）都是 `BackgroundWorkflowUtils.instance.executeWorkflow(...)`。
+证据：读码确认 —— `src/background/BackgroundWorkflowUtils.js:124` 的 `async executeWorkflow(...)` 无 `static` 修饰（该类只有 `flattenTeamWorkflows`、`getWorkflow` 两个 static）。
+影响：浏览器启动（`onRuntimeStartup`）或扩展更新时，若某工作流的 `trigger.triggers` 里含 `on-startup`，此处抛 TypeError；`reRegisterTriggers` 整个函数没有 try/catch，for 循环当场中断，**其后所有工作流的 `registerWorkflowTrigger` 全部不执行** —— 重启后定时/访问网页等触发器大面积静默失效。
+建议：补 `.instance`；顺带给 `reRegisterTriggers` 的循环体加 per-item try/catch，别让一个工作流带崩其余。
+状态：待审核
+
+#### T-233 — 本地备份「备份工作流」原地删 store 里的活对象字段，污染落盘数据
+
+登记日期：2026-10-12
+来源：`src/newtab/pages/settings/SettingsBackup.vue:337-345`
+现象：`workflowStore.getWorkflows.reduce(...)` 里对遍历到的每个 workflow 执行 `delete workflow.$id / createdAt / data / isDisabled / isProtected`，然后 `acc.push(workflow)`。这是**原地删**，不是拷贝。
+证据：读码确认 —— `src/stores/workflow.js:108` 的 `getWorkflows: (state) => Object.values(state.workflows)` 返回的是 state 里真实对象的引用（Pinia state 是 reactive），`Object.values` 不解绑。
+影响：点一次「备份工作流」，store 里所有未保护工作流的 `createdAt` / `isDisabled` / `isProtected` 被抹掉 —— 列表排序错乱、已禁用的工作流变回启用、保护标记丢失；后续任何一次 `saveToStorage` 会把这份残缺数据写进 storage，重启后依然是残缺的。属于静默数据损坏。
+建议：`acc.push({ ...workflow })` 先浅拷再删，或直接白名单挑选要导出的字段。同类写法见 `src/components/newtab/settings/SettingsCloudBackup.vue:449-456`（那里 `data.map(async () => {...})` 回调不接元素，用的是外层 `data` 本身，建议一并核）。
+状态：待审核
+
+#### T-234 — `WorkflowWorker.reset()` 丢 `activeTab.id` 与 `referenceData.secrets`
+
+登记日期：2026-10-12
+来源：`src/workflowEngine/WorkflowWorker.js:482`（`id: this.options?.tabId`）与 `:484-491`（referenceData 重写）
+现象：两处都在 `reset()` 里。(a) `this.options` 在 `WorkflowWorker` 上根本不存在 —— 构造函数（:38）只把 `options.blocksDetail` 取出来赋给 `this.blocksDetail`，从未 `this.options = options`，所以 `activeTab.id` 恒为 `undefined`。(b) 重写的 `referenceData` 少了 `secrets` 字段，而引擎原始构造（:84-92）里有 `secrets: {}`，`:323` 还有 `this.referenceData.secrets[name] = value` 的写入。
+证据：读码确认 —— `grep -n "this.options" src/workflowEngine/WorkflowWorker.js` 全文件只有 :482 一处引用，没有赋值点。
+影响：(a) 走到 `reset()` 的工作流，重启后第一个需要标签页的块立刻抛 `no-tab`（:496-501）；(b) 重启后 JS 块里 `automaRefData('secrets', ...)` 与模板 `{{secrets@...}}` 取到 undefined，或直接在 `:323` 抛 TypeError。仅在重启路径（T-231 的分支）与手动 reset 触发，但一旦触发整条后续流程全废。
+建议：`id: this.engine.options?.tabId`；`referenceData` 补 `secrets: {}`（并顺带确认 `googleSheets` 等其它字段是否也有遗漏）。与 T-231 同源，可一起修。
+状态：待审核
+
+#### T-235 — `addRefDataSnapshot` 把键名写回裸名，快照永不递增、互相覆盖
+
+登记日期：2026-10-12
+来源：`src/workflowEngine/WorkflowEngine.js:348-354`
+现象：`refDataSnapshotsKeys[key].index += 1` 之后紧接着 `refDataSnapshotsKeys[key].key = key`，把构造时形如 `##variables0` 的带索引键名覆盖成裸名 `variables`；第 352 行再拿它当 keyName，`refDataSnapshots[keyName]` 每次都写到同一个键上。
+证据：读码确认 —— :349-353 三行连续，自增的 `index` 计算完就再没被读过。
+影响：所有快照只留最后一次。日志详情页（`EditorDebugging.vue:177-178` 用 `dataSnapshot[referenceData.variables]` 取快照）拿到的永远是最终值，逐步回放数据在调试面板上是错的；`##loopData0` 这类首轮快照根本不存在，回退成空对象。对任何运行中工作流都生效（init 就会调一次）。
+建议：删掉 :350 那行，让 keyName 由 index 拼出（`##${key}${index}`），并补一条「连续两次快照得到两个不同键」的测试。
+状态：待审核
+
+#### T-236 — `updateBlockData` 的 250ms debounce 在回调里延迟读 `blockId`，会把 A 的字段写进 B
+
+登记日期：2026-10-12
+来源：`src/newtab/pages/workflows/[id].vue:778-810`
+现象：debounce 回调体里现读 `editState.blockData.blockId` 与 `.itemId`，而不是发起时捕获的那一份。
+证据：读码确认 —— :781 的 `editor.value.getNode.value(editState.blockData.blockId)` 在 250ms 后才求值。
+影响：改完块字段后 250ms 内点另一个块 → 前一个块的数据被写进后一个节点（字段串味，且 UI 看不出来）；若这期间点了返回箭头触发 `closeEditingCard`（:912-917 把 `blockData` 置空），`getNode.value(undefined)` 返回 undefined，`:796 node.data = dataCopy` 直接 TypeError。
+建议：debounce 前捕获 `{blockId, itemId}` 闭包传进去，回调体不再读 `editState`。
+状态：待审核
+
+#### T-237 — 顶栏任何写操作都无条件清掉 `dataChanged`，未保存改动静默丢失
+
+登记日期：2026-10-12
+来源：`src/newtab/pages/workflows/[id].vue:1371-1372`（`onActionUpdated`）
+现象：`state.dataChanged = changedIndicator;` 无条件赋值，而 `updateWorkflow` 的 `changedIndicator` 默认 `false`。
+证据：读码确认 —— :1372 直接赋值；同页 :242/:243/:754/:1182 等处都是 `state.dataChanged = true`，唯独这一条从外面盖回来。
+影响：画布有未保存改动时，点「重命名」「启用/停用」（:199）或「编辑详情」后，`dataChanged` 变成 false，离开页面的未保存确认（`onBeforeLeave` :1792）不再弹 → 直接丢改动。对用户是「我明明改了，它一声不吭就没了」。
+建议：改成 `if (changedIndicator) state.dataChanged = true;`（只升不降），或让各 action 显式传值。
+状态：待审核
+
+#### T-238 — `removeModel(p, index)` 拿下标当对象取 `.id`，删掉在用模型后 activeModelId 指向空气
+
+登记日期：2026-10-12
+来源：`src/newtab/pages/settings/SettingsAgent.vue:582-589`
+现象：形参 `index` 是 `p.models` 的下标（模板 :242 传 `removeModel(p, mi)`），函数体却写 `activeModelId.value === index.id` —— 恒为 `undefined`，比较永不成立。
+证据：读码确认 —— :582 `p.models.splice(index, 1)` 用的是下标语义，:585 又当对象用。正确写法应先取 `p.models[index].id` 再 splice。
+影响：删掉正在使用的模型后 `activeModelId` 不回退，助手仍指向一个已不存在的模型 id；下次 send 用空/错模型发请求。相邻的同款逻辑（:570-578 删 provider）写法是对的，可以照抄。
+建议：splice 前先 `const removedId = p.models[index]?.id`，再按 removedId 比较回退。
+状态：待审核
+
+#### T-239 — `throttle` 只丢弃不延后，托管工作流退出前最后一次上传被静默吞掉
+
+登记日期：2026-10-12
+来源：`src/utils/helper.js:73-85`（实现）+ `src/newtab/pages/workflows/[id].vue:812`（`updateHostedWorkflow = throttle(async () => {...}, 5000)`）
+现象：`waiting` 期间的新调用被直接扔掉，没有 trailing 执行。而 `updateHostedWorkflow` 正是被 `onBeforeUnmount` / `onBeforeLeave` 拿来做退出前最后一次 flush（:1790、:1889）。
+证据：读码确认 —— throttle 体内 `if (!waiting) { callback.apply(...); waiting = true; setTimeout(...) }`，else 分支什么都不做。
+影响：编辑托管工作流时，5 秒内有过一次自动上传，然后关闭页面 → 退出前那次保存被丢弃，托管端永远落后一个版本，且用户没有任何提示。
+建议：给 throttle 加 trailing（`debounce`-like 的尾部执行并带上最后一次 args），或把退出路径改成显式 await 一次非节流版本。其余 throttle 调用点建议一并核（是否都接受「丢弃」语义）。
+状态：待审核
+
+#### T-240 — 快捷方式入口 `checkParam` 拼错（少一个 s），参数窗口每次都弹
+
+登记日期：2026-10-12
+来源：`src/execute/index.js:56` vs `src/workflowEngine/WorkflowEngine.js:155`
+现象：写入 options 的是 `checkParam: !hasVariables`，引擎读的是 `this.options?.checkParams ?? true`。
+证据：读码确认 —— 前者单数、后者复数，两处无别名映射，默认 `true` 生效。
+影响：用 `chrome-extension://.../execute/index.html#/<id>?var=...` 这类带参快捷方式/webhook 调工作流时，URL 里明明带了变量，引擎仍走参数检查分支弹出输入框，自动化链路被打断；`execute/index.js:60` 还会在 1s 后 `window.close()`，窗口直接消失。
+建议：统一成 `checkParams`。
+状态：待审核
+
+#### T-241 — `handlerLoopData` 对表格/列数据 `reverse()` 原地反转引擎里的真实数组
+
+登记日期：2026-10-12
+来源：`src/workflowEngine/blocksHandler/handlerLoopData.js:102-104`（配合 :27/:29 的 `getLoopData`）
+现象：`loopThrough` 为 `table` / `data-columns` 时 `getLoopData` 返回的是 `refData.table` / 引用本身（展开自 `this.engine.referenceData`，同一数组引用），随后 `currLoopData.reverse()` 是原地反转。
+证据：读码确认 —— :27/:29 直接 `return refData.table` 类取值，:103 调 `.reverse()`；`Array.prototype.reverse` 是 in-place。
+影响：循环数据源选「表格」并勾选 reverseLoop 时，引擎里的 `referenceData.table` 被就地倒序 —— 导出数据、后续 `addDataToColumn`（按 index 写入）与最终落库的表格全部错位。用户只要求「反着遍历」，不要求改数据本身。
+建议：`[...currLoopData].reverse()`，或让 `getLoopData` 返回拷贝。
+状态：待审核
+
+#### T-242 — 下载完成回调按队首乱序匹配，并发下载时文件名与回调张冠李戴
+
+登记日期：2026-10-12
+来源：`src/background/index.js:1256-1258`
+现象：`handleDownloadCreated` 里对任意新下载都执行 `pendingRequests.shift()` 取队首，完全不按 `tabId` / URL / 文件名匹配 —— 而 pending 请求里存了 `tabId`（:1414）却没拿来用。
+证据：读码确认 —— :1256 无条件 shift，无匹配判据。
+影响：两个及以上工作流（或多标签页）并发触发下载时，A 的下载被赋成 B 的文件名，完成回调打给错误的工作流，后续块拿到错的下载结果继续执行。
+建议：按 `tabId` + URL（或 filename 建议值）匹配取对应 pending 项，取不到就当作非工作流触发的下载忽略；并给 pending 项加超时清理，避免无限堆积。
+状态：待审核
+
+#### T-243 — 「执行工作流」块在子工作流提前 return 的路径上永久挂起
+
+登记日期：2026-10-12
+来源：`src/workflowEngine/blocksHandler/handlerExecuteWorkflow.js:19-34`
+现象：块用 Promise 包住子引擎，只靠 `engine.on('destroyed')` 一个出口 settle。但 `WorkflowEngine.init()` 有 4 条**提前 return 且不调 destroy** 的路径：子工作流被禁用（:125）、drawflow 无节点（:135-136）、找不到 trigger 块（:144-145）、trigger 定义了 parameters 弹出参数窗口后（:234）。这 4 条路径下 `destroyed` 永不触发。
+证据：读码确认 —— :19 `new WorkflowEngine(...)` → :20 `engine.init()` → 只挂 `on('destroyed')`；对照 `WorkflowEngine.js:130-131` 那条（states 缺失）是有 `this.destroy('error')` 的，说明「提前 return 必须 destroy」是既有约定，另外 4 条漏了。
+影响：父工作流用「执行工作流」块调用一个被禁用 / 空画布 / 无 trigger / 带参数的子工作流时，该块永久挂起（除非设了 blockTimeout），父工作流既不停也不报错，日志无任何痕迹。
+建议：在 `init()` 的每条提前 return 上补 `this.destroy(...)`（含明确的 status/message，让父块能 reject 成一条可读的 error）；或让 handler 侧加一个兜底超时。
+状态：待审核
+
+#### T-244 — 错误轮与压缩摘要的 token 消耗完全不计入会话 usage
+
+登记日期：2026-10-12
+来源：`src/agent/loop.js:1141`（错误轮 return 丢 usage）+ `:615-646`（`requestSummary` 走独立 stream）
+现象：两处漏计。(a) `send()` 在 `if (errorEv) { ... return errorEv; }` 处直接返回，没有把 try 里已 `harvestUsage(usage)` 累加的结果带出去，index.js:552 拿到的 `result.usage` 是 undefined，按 0 累加 —— 尤其是跑了「压缩一次 + continue() 续跑」的溢出恢复路径，那一轮可能比正常轮还贵，账面却是 0。(b) T-76 的压缩摘要走 `streamFnWithRetry` 的独立请求，结果不进 `piAgent.state.messages`，`harvestUsage` 扫的全是 `piAgent.state.messages`，所以每次摘要的 input/output 永远扫不到。
+证据：读码确认 —— `loop.js:1141` 的 return 语句只带 errorEv；`harvestUsage`（:580-588）的遍历源恒为 `piAgent.state.messages`，`requestSummary` 的 `stream.result()` 不写回该数组。
+影响：设置页/面板显示的累计 token 系统性偏低，多轮长会话（恰恰是最会触发压缩的会话）偏差最大；用户据此判断成本会低估。
+建议：(a) 错误轮把 `usage` 一并带出（或让 index.js 走 `agent.getUsage()` 之类的读口）；(b) 摘要请求结束后从 `result.usage` 直接累加。是否要把内部开销算进用户可见用量，属于产品口径，建议先定口径再改。
+注：是否为缺陷取决于「用户可见 usage 是否应含内部开销」的口径，先审口径。
+状态：待审核
+
+### 改进
+
+#### T-245 — AGENTS.md「把 build/ 重命名挪开」没写命名约定，随手起的旧目录名会逃逸 .gitignore
+
+登记日期：2026-10-12
+来源：2026-10-12 会话；`AGENTS.md`「命令与本机坑」第 2 条 vs `.gitignore:15`（`/build.bak.*`）
+现象：按 AGENTS.md 的字面做法把 `build/` 重命名挪开时，命名由执行者自定。`.gitignore` 只为这个用途准备了 `/build.bak.*`（点号）一条，其上方注释还写着「构建前把旧 build/ 挪开…时产生」。用连字符命名（本次实际用了 `build.old-20261012`）不匹配，目录逃逸忽略规则。
+证据：实测 —— `git check-ignore -v build.old-20261012` 无输出（未被忽略）；改名后 `git check-ignore -v build.bak.20261012` 命中 `.gitignore:15`。扫与不扫的差别直接体现在 lint 上：`npm run lint` 从 **49 秒 / 0 error / EXIT=0** 变成 **18 分钟跑不完 + `FATAL ERROR: Reached heap limit`（exit 134）**；那 7.5M 旧产物里含 3.4MB 的 `newtab.bundle.js` 与 900KB 的 `offscreen.bundle.js`。
+影响：任何一次「挪开 build/ 再重建」之后跑全量 lint（或任何按 `.` 递归扫目录的工具），都会把旧构建产物当源码解析，轻则慢十几倍，重则 OOM 崩掉。症状表现为「lint 突然 OOM」，很难联想到根因是自己刚 mv 出来的目录名。
+建议：① AGENTS.md 那条坑里把命名写死为 `build.bak.<日期>`，与 `.gitignore` 对齐（代价为零，推荐）；② 或放宽 `.gitignore`，补 `/build.old*` 一类通配（更宽容，但要动忽略规则，可能误伤同名源码目录）。
+注：本次已按 ① 把目录就地改名为 `build.bak.20261012` 恢复正轨，**代码与配置均未改动**；本条只为修文档口径。
 状态：待审核
 
 ### 新功能（要讨论场景，审得慢）
-
-## T-201 — 面板内没有模型 / 服务商选择器
-
-登记日期：2026-10-10
-来源：2026-10-10 会话 UI 对比；触发点 `src/components/newtab/workflow/agent/AgentSessionList.vue:109-116`
-现象：面板里能看到的模型信息只有会话列表底部那一行 `config.model` 字符串，**不可点、不可切换**。要换模型必须离开助手去设置页（`src/newtab/pages/settings/SettingsAgent.vue`）。
-证据：**代码事实** —— `AgentSessionList.vue:109-116` 显示 `data-test="model-name"` 的纯文本；`AgentPanel.vue` 全面板无模型选择控件。参考实现 sidepanel 有常驻 `ModelPicker`（显示 `Provider · model`，流式时锁定并禁用）。
-影响：换模型是「这一轮答得不好，换个模型再试」的常规动作。现在这个动作要跳出助手、在设置页翻到对应连接、改完再回来，且**改完当前会话仍会沿用旧模型直到新建会话**（这个行为面板上完全没说）。
-建议：在 composer 底行加一个紧凑的模型选择器（底行现在只有「上下文圆环 + 快捷键提示 + 发送」，320px 下横向预算紧张 —— 可能需要先把快捷键提示那句收掉或缩短）。**要讨论的点**：是否需要「下次发送生效」的提示文案，以及多连接下选择器的组织方式（按 provider 分组还是平铺）。
-注：**已随 T-213 落地（2026-10-10）** —— 选择器放在 composer 底行左侧（`flex-1` 撑开前），芯片只剩等宽模型名 + 箭头（不用服务商图标），弹层底部固定小字「换模型后从下一轮开始生效，当前会话不重放」，按连接分组、无 Key 的连接标注。实现见 `src/components/newtab/workflow/agent/AgentModelPicker.vue`（新增）与 `.scratch/t213-impl.png` 的存证。**本票剩余待决项只剩「多连接下弹层怎么组织」的细化**（当前是按连接分组 + 组标题，未做折叠/搜索）。
-状态：部分落地（选择器已可用；多连接组织方式仍待观察用户反馈）
-
-## T-202 — 没有「编辑这条消息并回溯重发」
-
-登记日期：2026-10-10
-来源：2026-10-10 会话 UI 对比；参考实现 `pie-ai-agent/src/sidepanel` 的 `chat.rewind.*` 与 `useSession/rewind.ts`
-现象：想改一句已经发出的话，只能清空重开一轮。错误卡上有「重试」（`AgentTranscript.vue:128-136`），但它重发的是**出错那一轮之前最近的那条用户消息**，不是用户指定的任意一条，也不能改内容。
-证据：代码位置如上；全面板无「编辑用户消息」入口。参考实现：点用户气泡的铅笔 → 原地 textarea → Cmd+Enter → 截断该条之后全部历史并重发，文案明确写着「Editing resends this message and discards everything after it.」。
-影响：改一句 prompt 重跑是很常见的诉求（尤其调 selector、调抓取规则时）。现在的替代方案是复制原文、新建会话、粘贴、再发 —— 会话历史被切成两截。
-建议：先想清楚**语义**再动手：回溯意味着丢弃该条之后的所有内容（含工具调用与画布改动），这个破坏性要有明确确认。且它与红线「agent 永不保存工作流」的关系要理清（画布改动是内存的，回溯要不要一起回滚？）。**这是产品决策，不是 UI 改动**，建议单独立项讨论。
-状态：待审核
 
 ---
 ## 已批准（待排期）

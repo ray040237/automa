@@ -4234,3 +4234,75 @@ if (process.env.OFFLINE_MODE === '1' && manifestObj.content_security_policy) {
 建议：trigger 加 `aria-expanded`、面板加 `role="menu"`（菜单项 `role="menuitem"`）；列表补 ↑↓ 导航 + 回车选中 + Esc 关闭（复用 slash 菜单已有的路由逻辑）。
 结论：2026-10-12 执行（用户睡前打包批准）。**架构决策：四实例、条目全走 slot 由消费方渲染，slash 菜单的「索引 + active 高亮」路由搬不进来——改在 AgentDropdown 内用 DOM 焦点回绕实现单点键盘导航**（现查弹层内可聚焦按钮，条目是按钮时 Enter/点击天然生效，消费方零配合）。落地：① trigger aria 经 **scoped slot** 交给消费方绑到真实按钮（挂包装 div 读屏不认；haspopup 值=面板角色）；② 面板 `role` prop（默认 'menu'；AgentPanel 圆环明细是混排内容传 `role=""` 退 disclosure，只留 aria-expanded）；③ 键盘：trigger 上 ↑↓ 关着顺势开+落焦首/末条、开着 ↑↓/Home/End 在条目间移动（首末回绕）、Esc 收起+焦点回 trigger（APG）、Tab 走人即收起、条目点击关闭后焦点掉 body 时送回 trigger（点别处关闭不偷焦点）；④ menuitem：AgentTabList 行按钮、AgentModelPicker 模型条目无条件挂，AgentSessionList 仅 popover 模式挂（view 模式是整块历史视图不是菜单）。守卫：panelUi.test.js 新增一条 12 断言（aria scoped slot 机制/键盘键位/焦点回归/四消费点接线/menuitem 挂法）。**坑×2**：panelUi 的 `agentFile` 是后段 describe 局部帮手够不到（测试内自建）；`#trigger="{ aria }"` 是消费侧写法、定义侧是 `<slot name="trigger">`（第一版正则用错查不到）。**验收**：`npm test` 880 tests / 879 pass / 0 fail / 1 skip（既有 provider 429 环境用例，+1 守卫块）；`npm run build` 产物 aria-haspopup×2 / aria-expanded×17 / menuitem×6；触碰 10 文件 eslint 0 error（3 处 prettier --fix）。**未做（留档）**：面板与 trigger 的 id 级关联（aria-controls）未接——menuitem 语义已够 AT 播报，id 关联属 T-178 欠账的同一族。
 状态：已清（2026-10-12 完成）
+
+### T-186 — `riMagicLine` 是全项目「AI 助手」的品牌图标，唯一语义不搭的是画布自动布局
+
+登记日期：2026-10-09
+来源：2026-10-09 会话实施 T-182 时**产物级核验 `riMagicLine` 计数**才浮出来；触发点 `src/newtab/pages/workflows/[id].vue:280`
+现象：T-182 登记时把「魔法棒撞图标」描述成「助手入口 vs 画布自动布局」两处事件。实施后 grep 全仓才发现，`riMagicLine` 在**四个地方**出现，其中三个都是「AI 助手」入口：设置页「AI 助手」导航项（`Settings.vue:52`）、工作流列表页的助手入口项（`Workflows.vue:60`，`t('workflow.agent.tab')`）、以及本轮刚改掉的侧栏 tab。真正语义不搭的是**第四处** —— 画布左下角的自动布局按钮，它跟 AI 没有半点关系，只是借了助手的面包屑。
+证据：**产物级实测** —— 对 `build/newtab.bundle.js` 计 `riMagicLine` 得 4 命中；回源码逐个定位为 `vRemixicon.js:106/205`（注册表 import + 注册项，两条被 terser 合并计一条命中之外的部分）、`[id].vue:280`（自动布局）、`Settings.vue:52`、`Workflows.vue:60`，全仓再无第五处（`src/` 下 `*.vue`/`*.js` 全文 grep 已跑）。
+影响：不是功能缺陷，是**图标语义一致性**。用户学到的「魔法棒 = AI」这条约定，会被画布上一个纯排版按钮持续违反；反过来，本轮把助手侧换成 `riChat3Line` 之后，「魔法棒 = AI」在助手入口这条链路上反而断了一处（设置页与列表页仍是魔法棒）。两种读法指向相反的修法，**必须由用户裁决，不能由我顺手定**。
+建议（两条互斥，代价都很小）：
+  1. **认魔法棒为 AI 品牌**，则改 `[id].vue:280` 自动布局 → 对齐类图标（`riAlignLeft` 一类）。侧栏 tab 也换回 `riMagicLine`。代价：改两处。
+  2. **认侧栏 tab 的语义优先**（当前实现）：`块 | 助手` 并排时，对话框比魔法棒更准；则把 `Settings.vue:52` 与 `Workflows.vue:60` 一并换成 `riChat3Line`，让「助手」在三个入口统一。代价：同样两处，但风险更低（都是 AI 入口，换成对话气泡不会误导任何人）。
+注：本条**不阻塞** T-182 的结论 —— 本轮已按建议 2 的局部形态（只改侧栏 tab）落地并通过守卫。若用户选 1，需同步改守卫 `panelUi.test.js:1901` 的断言方向（当前钉的是「`[id].vue` 里 `riMagicLine` 只剩 1 处」）。
+结论：2026-10-12 用户裁决**选方案 2**（AI 入口统一对话气泡）。`Settings.vue:52` 与 `Workflows.vue:63` 两处助手入口 `riMagicLine` → `riChat3Line`（注册表已有，无 T-108 半截接线风险）；画布自动布局保留魔法棒——「魔法棒 = 自动布局的本名」，AI 用气泡。守卫：T-182 测试块扩两条（两文件助手入口必须 riChat3Line + 全文不得再出现 riMagicLine）；原「[id].vue 里剩 1 处」断言按方案 2 原样成立不动。**验收**：panelUi 守卫绿；随四票合轮 `npm test` 885/884/0/1、build 产物重建。
+状态：已清（2026-10-12 完成）
+
+### T-185 — 侧栏卡头的工作流名称与描述，是顶栏重命名弹窗的重复第二份
+
+登记日期：2026-10-09
+来源：2026-10-09 会话评审 agent 助手入口 UI；读 `src/components/newtab/workflow/WorkflowDetailsCard.vue:1-50` 与 `src/components/newtab/workflow/editor/EditorLocalActions.vue:695-706`
+现象：侧栏块库面板顶上那行「图标 + 名称 + 描述」里，名称与描述**可以就地编辑**，而顶栏「更多 → 重命名」弹窗（`moreActions` 的 `rename` 项，`riPencilLine`）也能改同样两个字段 —— 同一件事两处入口，且顶栏那处在任何工作流下都在、侧栏那处要先展开侧栏。
+证据：代码位置如上。`renameWorkflow()` 写 `{name, description}`；`WorkflowDetailsCard` 的 `descriptionCollapsed` 点击展开与名称输入走 `updateWorkflow({...})`。**未实测**两处是否会互相覆盖或产生竞态。
+影响：用户可能在一处改了、另一处看到旧值；更重要的是它让「块库面板」这个叫法别扭 —— 主体是块库，顶上却挂着重复的工作流信息（这是「详情卡」这个名字名不副实的根源）。
+影响面补充：**图标不能跟着一起删**。全仓只有侧栏这一处能改工作流图标，`renameWorkflow` 只写 name/description，没有 icon 字段（已核实 `EditorLocalActions.vue` 全文无 icon 输入）。
+建议：若要收，去掉卡头的名称与描述两行，保留图标那一格；或者反过来把图标选择器并进顶栏重命名弹窗，然后整个卡头删掉 —— 后者还能给侧栏多让出约 44px 高度。**两者都不是必须的**，纯收益项，用户不碰这两处也不会怎样。
+结论：2026-10-12 用户裁决**选方案 B（卡头整删 + 图标选择器并入重命名弹窗）**。实施时**修正登记证据的一处偏差**：卡头的名称/描述实为**纯展示**（`<p>` + 折叠开关，无输入），「就地编辑」不在场——重复是「重复展示」而非「双编辑入口」，方案 B 因此零功能损失。落地：① `shared.js` 新增 `export const workflowIcons`（13 个预定义图标清单从卡头收编）；② `WorkflowDetailsCard.vue` 删卡头 + props/emit 全撤（组件只剩搜索框 + 块库，多让一行高度），图标 URL 输入的 http 校验约束随迁；③ `EditorLocalActions.vue` 重命名弹窗加图标区（预定义 7 列网格点选高亮 + 自定义 URL 输入），`renameState` 加 icon 字段、`initRenameWorkflow` 种子、`renameWorkflow` 写 `{name, description, icon}`、`clearRenameModal` 复位——**弹窗成为改名/描述/图标的唯一入口**；④ 父组件 `[id].vue` 的 `:workflow`/`@update` 绑定清干净。守卫：新建 `src/utils/workflowDetailsCard.test.js` 四条（卡头痕迹清零/弹窗带 icon 落盘/父绑定清净/清单 13 项无重复）。**验收**：守卫 4/4 绿；随四票合轮 `npm test` 885/884/0/1、`npm run build` 产物重建、eslint 0 error。
+状态：已清（2026-10-12 完成）
+
+### T-201 — 面板内没有模型 / 服务商选择器
+
+登记日期：2026-10-10
+来源：2026-10-10 会话 UI 对比；触发点 `src/components/newtab/workflow/agent/AgentSessionList.vue:109-116`
+现象：面板里能看到的模型信息只有会话列表底部那一行 `config.model` 字符串，**不可点、不可切换**。要换模型必须离开助手去设置页（`src/newtab/pages/settings/SettingsAgent.vue`）。
+证据：**代码事实** —— `AgentSessionList.vue:109-116` 显示 `data-test="model-name"` 的纯文本；`AgentPanel.vue` 全面板无模型选择控件。参考实现 sidepanel 有常驻 `ModelPicker`（显示 `Provider · model`，流式时锁定并禁用）。
+影响：换模型是「这一轮答得不好，换个模型再试」的常规动作。现在这个动作要跳出助手、在设置页翻到对应连接、改完再回来，且**改完当前会话仍会沿用旧模型直到新建会话**（这个行为面板上完全没说）。
+建议：在 composer 底行加一个紧凑的模型选择器（底行现在只有「上下文圆环 + 快捷键提示 + 发送」，320px 下横向预算紧张 —— 可能需要先把快捷键提示那句收掉或缩短）。**要讨论的点**：是否需要「下次发送生效」的提示文案，以及多连接下选择器的组织方式（按 provider 分组还是平铺）。
+注：**已随 T-213 落地（2026-10-10）** —— 选择器放在 composer 底行左侧（`flex-1` 撑开前），芯片只剩等宽模型名 + 箭头（不用服务商图标），弹层底部固定小字「换模型后从下一轮开始生效，当前会话不重放」，按连接分组、无 Key 的连接标注。实现见 `src/components/newtab/workflow/agent/AgentModelPicker.vue`（新增）与 `.scratch/t213-impl.png` 的存证。**本票剩余待决项只剩「多连接下弹层怎么组织」的细化**（当前是按连接分组 + 组标题，未做折叠/搜索）。
+状态：部分落地（选择器已可用；多连接组织方式仍待观察用户反馈）
+结论：2026-10-12 用户裁决**维持现状关票**——多连接弹层当前「按连接分组 + 组标题 + 无 Key 标注」的形态已经可用，用户尚未在真实多连接场景使用，「连接多到需要搜索/折叠」是推测的需求；等真实痛点出现再立新票。选择器本体与生效提示均已随 T-213 落地，本票全部诉求闭环。
+状态：已清（2026-10-12 用户裁决维持现状；若多连接使用中弹层组织成为痛点，重开新票并引用本条）
+
+### T-202 — 没有「编辑这条消息并回溯重发」
+
+登记日期：2026-10-10
+来源：2026-10-10 会话 UI 对比；参考实现 `pie-ai-agent/src/sidepanel` 的 `chat.rewind.*` 与 `useSession/rewind.ts`
+现象：想改一句已经发出的话，只能清空重开一轮。错误卡上有「重试」（`AgentTranscript.vue:128-136`），但它重发的是**出错那一轮之前最近的那条用户消息**，不是用户指定的任意一条，也不能改内容。
+证据：代码位置如上；全面板无「编辑用户消息」入口。参考实现：点用户气泡的铅笔 → 原地 textarea → Cmd+Enter → 截断该条之后全部历史并重发，文案明确写着「Editing resends this message and discards everything after it.」。
+影响：改一句 prompt 重跑是很常见的诉求（尤其调 selector、调抓取规则时）。现在的替代方案是复制原文、新建会话、粘贴、再发 —— 会话历史被切成两截。
+建议：先想清楚**语义**再动手：回溯意味着丢弃该条之后的所有内容（含工具调用与画布改动），这个破坏性要有明确确认。且它与红线「agent 永不保存工作流」的关系要理清（画布改动是内存的，回溯要不要一起回滚？）。**这是产品决策，不是 UI 改动**，建议单独立项讨论。
+状态：挂起（2026-10-12 用户裁决）
+结论：2026-10-12 用户裁决**挂起**——语义未钉清（画布改动是否随回溯回滚、破坏性确认形态、截断点交互）且真实需求频率未知，不值得现在占讨论预算。按「待审核区不留已裁决条目」整条移入本文件存档。**重开触发条件**：用户实际表达「想改已发出的 prompt 重跑」的诉求时，按登记票建议先出半页语义方案（参考 pie 的 rewind 文案与截断行为）再立项。
+
+### T-246 — 模型选择弹层右对齐于底行最左侧的芯片，整块挂在侧栏外（最多 171px）
+
+类型：bug
+登记日期：2026-10-12
+来源：2026-10-12 会话，用户原话「侧边栏底部选择模型的UI界面宽度没有设置好」；`src/components/newtab/workflow/agent/AgentModelPicker.vue:4`（`align="right" side="top" width="w-72"`）
+现象：点开底行的模型芯片，弹出的列表不落在侧栏里 —— 它以芯片**右缘**为右边界向左铺满 288px（`w-72`），而芯片是底行**最左**一个元素（`AgentPanel.vue:387`，在 `flex-1` 之前），于是弹层绝大部分落在侧栏左侧之外、压在工作流画布上；只有右端一小截还在侧栏内。模型名越短、芯片越窄，外挂得越多（`deepseek-chat` 最惨）。弹层文件头那句注释「它在底行偏右，右对齐才不会顶出面板右边」与现状不符 —— 芯片自 T-201 落地起就在最左（`git show 843a6b76` 的同一处代码即为最左），注释是从水位环那个右对齐下拉（真在右边）照抄来的。
+证据：实测 —— 用 `build/newtab.css` 在 headless Chromium 里按源码 class 复现 composer 底行（侧栏宽 320/360/480px，模型名 `deepseek-chat` 与 `google/gemini-2.5-flash-preview-09-2025-thinking`；探针 `.scratch/model-picker-probe.mjs` / `model-picker-probe2.mjs`）：
+
+```
+align=right sidebar=320 chip 23..117   panel -171..117   |  超出侧栏左 171px
+align=right sidebar=320 chip 23..209   panel  -79..209   |  超出侧栏左  79px
+align=right sidebar=360 chip 23..117   panel -171..117   |  超出侧栏左 171px
+align=left  sidebar=320 chip 23..117   panel   23..311   |  超出侧栏左   0px（右留 9px）
+```
+
+芯片自身的宽度是好的：可用宽度 188px，超长模型名（`google/gemini-2.5-flash-preview-09-2025-thinking`，288px）在该处正常 `truncate`，不会挤走圆环与发送键 —— 出问题的只有弹层。
+影响：任何在编辑器侧栏（宿主窄，默认 `w-80`=320px）里点模型芯片的用户都会看到弹层跑到侧栏外、半截压在画布上；侧栏拖宽后症状随芯片相对位置变化而时好时坏（480px + 长模型名才碰巧不出界），属于难复现的观感缺陷。
+建议：① 改成 `align="left"`（一行，实测 23..311 完整落在 320px 侧栏内，右留 9px），并把文件头那句「偏右」的注释改成实际依据；② 若要求弹层左右与 composer 卡（16..304）严格对齐，需另做偏移（`-left-1.5` 之类）或把宽度锚到卡片，代价是引入一个与 chip 宽度相关的魔数。
+注：同一 `w-72` 宽的水位环下拉用 `align="right"` 是对的（它在底行最右），不要一并改。
+结论：2026-10-12 按建议①执行（用户批准）。`AgentModelPicker.vue:13` 的 `align="right"` → `align="left"`，文件头注释一并改真（写清「芯片是底行最左，右对齐会把 288px 弹层往左铺出侧栏 79~171px」的实测量，并注明水位环那处 right 是对的）。**守卫**：`src/agent/panelUi.test.js` 新增「底行弹层的横向对齐跟随触发器位置（T-246）」——模型芯片必须 `align="left"`、水位环必须 `align="right"`，把「长的那一侧朝面板内部」这条不变量钉住；变异验证：把 align 改回 right 后该守卫 `not ok`，`npm test` 883 pass / 1 fail。**验收**：还原后 `npm test` 884 pass / 0 fail / 1 skip；`npx eslint src/agent/panelUi.test.js` 0 error；`npm run build` 重建后 `build/` 91 个文件（构建先清空 `build/` 撞批量删除守卫，按 AGENTS.md 把残缺目录改名 `build.bak.20261012b` 后在空目录重跑成功）。视觉验收待用户装进浏览器实看。
+状态：已清（2026-10-12 完成）
