@@ -25,6 +25,8 @@
     "aiPower": "AI Power",
     "charactersLimit": "Characters limit",
     "flows": "Flows",
+    "clickToCopy": "(click to copy)",
+    "imageLoadFailed": "Failed to load image",
     "settings": "Settings",
     "options": "Options",
     "confirm": "Confirm",

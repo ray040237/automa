@@ -25,6 +25,8 @@
     "aiPower": "AI 能力",
     "charactersLimit": "字符上限",
     "flows": "工作流",
+    "clickToCopy": "（点击复制）",
+    "imageLoadFailed": "图片加载失败",
     "settings": "设置",
     "options": "选项",
     "confirm": "确认",

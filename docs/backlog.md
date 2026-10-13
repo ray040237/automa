@@ -232,7 +232,17 @@
 影响：中文用户在录制流程、元素选择器、命令面板、多数块编辑面板里仍看英文。用户诉求（「设置成中文可以变成中文」）目前只对 T-254 之后新国际化的部分生效。
 建议：分三批，每批单独一条 commit，共用 `.scratch/scan-hardcoded-en.mjs` 做前后对照（改动后扫描数应降为 0）。① content script 族要先设计 locale 来源 —— panel 走 shadow DOM 挂载、不等异步，得决定「读 `browser.storage.local` 的 `settings.locale`（异步，要等 or 先英文后切）」还是「由 background 通过消息把 locale 传进来」；② newtab 族是纯机械替换，可多次提交；③ 顺手。无论哪批，每批都要 `npm run check:i18n` 防 en/zh 漂移。
 注：扫描器有少量固有误报 —— 动态表达式（`param.name` / `param.placeholder`）、品牌名 `Automa`、示例值（`abc123`、`https://example.com/`、`.example.com`、`lax`、`value`、`site-cookie`）、以及 `title="dayjs(...)"` 这种时间格式化字符串。193 条是上限，真实需翻译的约 150 条左右。**实测甄别后**：② 档 124 条里真实文案只有 11 处，其余是示例值/技术枚举/动态表达式 —— **扫描数远高于真实工作量**，动手前必须先甄别，否则会为 `PNG` / `varA,varB,varC` 这种不存在翻译需求的东西造一堆没用的 key。
-**进度**：②（newtab 编辑界面）已于 2026-10-14 完成，见 `backlog-done.md` 的 **T-256**；①（content script 一族）与 ③（零散基础组件）仍待审核。
+**进度**：②（newtab 编辑界面）已于 2026-10-14 完成，见 `backlog-done.md` 的 **T-256**；③（零散基础组件）已于 2026-10-14 完成，见 **T-257**（真实文案 5 处 / 3 文件，远低于登记时估的「约 50 文件」）；**只剩 ①（content script 一族）** 仍待审核 —— 动手前需先定 locale 来源设计（见本条「建议」的两个选项）。
+状态：待审核
+
+#### T-258 — `blocksValidation.js` 整族硬编码英文校验消息，中文用户在块上看不到任何校验提示的母语
+
+登记日期：2026-10-14
+来源：T-257 收尾时的产物侧 grep —— `build/newtab.bundle.js` 里仍有 `Loop id` / `Reference key`，回查定位到 `src/newtab/utils/blocksValidation.js:142,176,181,196` 等（该文件不在 T-255 扫描器覆盖范围内：扫描器只扫 `.vue` 的 template 段，**扫不到纯 JS 模块里的字符串**）
+现象：块的校验失败提示（块下方/红字）全是英文，如 `The Loop id is empty`、`The Reference key is empty`、`The Selector is empty`。中文用户配错块时看到的提示是英文，且这是**只会在用户犯错时出现的文案**——恰恰是最需要看懂的场景。
+证据：**实测 grep**，该文件 401 行、32 个 `errors.push` 点，去重后约 20 条消息，高频重复 4 条（`The Selector is empty` ×4、`The Variable name is empty` ×2、`The Reference key is empty` ×2、`The Loop id is empty` ×2），另有 1 条模板字符串 `` `"${name}" is empty in the ${location}` ``（T-257 产物侧 grep 时以 `Loop id` / `Reference key` 形式命中主 bundle，已坐实是它而非漏改的 .vue）。另注：同类 JS 侧文案可能还有别的文件 —— 本条目只覆盖已实测的这一个文件，全仓 JS 侧扫描未做。
+影响：中文用户的校验提示 100% 英文。最坏结果：用户看不懂为什么块报错，直接放弃该功能。
+建议：词的翻译小事，接入方式是设计点 —— 该模块是**纯 JS、不挂 i18n 实例**，三条路：① 模块内 `import { createI18n }` 或用 `src/lib/vueI18n.js` 的全局实例拿 `t`（注意 `legacy:false` 下要用 `i18n.global.t`）；② 把消息下沉到 `blocks.json` 词条 + 模块只返回 key，由调用方（vue 侧）翻译；③ 维持现状 + 单独评估。**另需先扫一遍 `src/**/*.js` 还有没有同类 JS 侧硬编码**，避免修完一个文件发现一个。上一条（`is empty` 句式）涉及模板字符串插值，走 ① 的话要注意插值语法（`t(key, { name, location })`）。
 状态：待审核
 
 ### 新功能（要讨论场景，审得慢）

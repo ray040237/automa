@@ -7,7 +7,9 @@
         ></div>
       </slot>
       <slot v-else-if="state.error" name="error">
-        <p class="text-lighter text-center">Failed to load image</p>
+        <p class="text-lighter text-center">
+          {{ $t('common.imageLoadFailed') }}
+        </p>
       </slot>
       <div
         v-else

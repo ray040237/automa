@@ -15,7 +15,7 @@
     <div class="flex items-center p-4">
       <input
         :value="data.name"
-        placeholder="name"
+        :placeholder="t('common.name')"
         type="text"
         class="rounded-lg bg-white px-4 py-2"
         @input="emit('update', { name: $event.target.value })"
@@ -36,6 +36,7 @@
 </template>
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 defineProps({
   id: {
@@ -64,6 +65,8 @@ defineProps({
   },
 });
 const emit = defineEmits(['delete', 'edit', 'update']);
+
+const { t } = useI18n();
 
 let parent = null;
 const initialRect = {
