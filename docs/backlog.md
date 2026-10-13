@@ -29,6 +29,17 @@
 
 ### bug（先审，多数可快速定夺）
 
+#### T-251 — SVG 文档里 `document.head`/`document.body` 恒为 null，content script 一族（选择器/命令面板/样式注入）崩或被吞成静默失效
+
+登记日期：2026-10-13
+来源：2026-10-13 会话（T-250 修完后用户要求「举一反三，审查代码找类似情况」）；`src/content/elementSelector/index.js:27`、`src/content/injectAppStyles.js:23,35`、`src/content/commandPalette/index.js:45`
+现象：**与 T-250 同一种错误形状**（读属性即炸，且崩点前后的错误处理兜不住）。在 `.svg` 文档 —— 直接打开的 SVG 文件、或页面里 `<embed>`/`<object>` 内嵌的 SVG frame（content script `all_frames: true` 会注入进去）—— 里：① `elementSelector` 的非主 frame 分支 `document.body.appendChild(style)` 抛 TypeError，被外层 try/catch 吞掉 → **`selectorFrameContext()` 不再执行，该 frame 内元素无法被选取/回传坐标**；② `injectAppStyles` 的 `document.head.querySelector(...)` 抛 TypeError 被自己的 catch 吞 → 高亮描边（`#6366f1` 虚线边）与 Inter 字体**静默丢失**，面板显示成无边框裸界面；③ `commandPalette`（Alt+K）的 `document.body.appendChild(element)` 抛错被吞 → 快捷键**毫无反应**。另外该入口第 25 行已有 `if (/(json|xml)$/.test(location.pathname)) return;` 排除清单，说明作者知道「非 HTML 文档会出问题」，但清单里**没有 svg**。
+证据：**实测**（`.scratch/clipboard-probe3.mjs`，Chromium + `--host-resolver-rules`）：同一个 `http://example.com:8082/doc.svg` 文档里 `head: "null"`、`body: "null"`、`documentElement: "ok"`，且 `document.head.querySelector('.x')` 抛 `TypeError: Cannot read properties of null (reading 'querySelector')` —— 与 T-250 的报错同款句式。对照组：`application/xml` 文档 head/body 都在（object）；`about:blank` / `srcdoc` iframe 的 head/body 也都在（`appendChildWouldThrow: "no-throw"`），所以**问题只针对 `image/svg+xml` 一种文档类型**，不是通用的 iframe/早期注入问题。
+影响：正在做自动化的页面只要内嵌 SVG（图表、图标、设计稿预览），选择器在这些 frame 里直接不可用；直接打开 SVG 文件时选择器与命令面板双双失效，控制台只留一条被吞的 TypeError，用户侧表现为「扩展在这个页面上坏了」。
+建议：三处统一挂到 `document.documentElement` 或补 `if (!document.body) return` 守卫（SVG 的 `documentElement` 实测存在，可正常挂载）；`commandPalette` 的排除正则补上 `svg`。谁改谁顺手把 `elementSelector/index.js:27` 改成「样式挂不上也继续跑 `selectorFrameContext()`」—— 后者才是功能主体。
+注：同族已排查、判为**不需要动**的：可选链后直接跟方法调用（`a?.b().c`）全仓 0 命中；`about:blank`/`srcdoc` iframe DOM 实测完好；content script 里其余 7 处 `document.body.appendChild`（`showExecutedBlock` / `handlerCreateElement` / `handlerTakeScreenshot` / `recordWorkflow` / `handlerConditions`）均在交互后执行且各有 try/catch，按本票方案一并扫过即可。
+状态：待审核
+
 #### T-249 — 存包时 `asBlock` 写在顶层，拖入画布却读 `settings.asBlock`，「设为模块」开关失效
 
 登记日期：2026-10-13
