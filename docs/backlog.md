@@ -29,6 +29,17 @@
 
 ### bug（先审，多数可快速定夺）
 
+#### T-249 — 存包时 `asBlock` 写在顶层，拖入画布却读 `settings.asBlock`，「设为模块」开关失效
+
+登记日期：2026-10-13
+来源：2026-10-13 会话（用户问「包在工作流里怎么用」，读这条链路时发现）；`src/newtab/pages/workflows/[id].vue:1041` 写 vs `:1503` 读
+现象：从画布选中若干块 → 「保存到包」弹窗里把「把包设为模块」打开 → 存下来的是顶层 `asBlock: true`，而 `settings.asBlock` 仍是默认 `false`。之后把这个包从包抽屉拖进任意工作流，落地的不是单个包块，而是把包内部的全部节点/连线**平铺展开**贴进画布 —— 开关等于没生效。
+证据：读码确认，**推断，未实测**（未起扩展复现）。① `packageStore.insert` 是 `{...defaultPackage, ...data}`（`src/stores/package.js:44`），`defaultPackage.settings = { asBlock: false }`（:15-17）只会被同名的 `settings` 覆盖，`data.asBlock` 这个顶层字段覆盖不到它；② 写入侧 `[id].vue:1041` 传的是顶层 `asBlock: blockFolderModal?.asBlock ?? false`（弹窗状态在 :1011）；③ 读取侧 `[id].vue:1503` 判的是 `savedBlocks.settings.asBlock`，为真才加 `BlockPackage` 单节点（:1504-1512），否则走 `copyElements` 平铺（:1513-1520）；④ 包详情页的开关写的是正确位置 `packageState.settings.asBlock`（`src/components/newtab/package/PackageSettings.vue:3`），全仓 `settings.asBlock` 的生产者只有它一处。
+影响：只有「先建包 → 去包详情页开 asBlock → 定义输入输出」这条路径能做出可复用的包块；「选中块直接存包」这条更快路径上勾了开关也没用，用户会以为是自己没配对。最坏结果是被平铺展开的节点与包再无关联，后续包更新同步不到这些副本。
+建议：`saveBlockToFolder` 里改成 `settings: { asBlock: blockFolderModal?.asBlock ?? false }`（同时保留/去掉顶层字段二选一，别两处并存）；改完顺手确认 `defaultPackage` 的 `variable: []` 是否也有人往顶层写而别处读 `settings.*`。
+注：功能可用性缺陷，不是崩溃；与包块的运行时展开（`handlerBlockPackage.js`）无关。
+状态：待审核
+
 #### T-231 — `restartWorkersCount` 从未初始化，「出错重启工作流」整条策略崩溃
 
 登记日期：2026-10-12

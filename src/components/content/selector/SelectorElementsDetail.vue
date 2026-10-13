@@ -98,6 +98,10 @@
 </template>
 <script setup>
 import { inject } from 'vue';
+import {
+  copyTextToClipboard,
+  fallbackCopyTextToClipboard,
+} from '@/utils/clipboard';
 import SelectorBlocks from './SelectorBlocks.vue';
 import SelectorElementList from './SelectorElementList.vue';
 
@@ -129,15 +133,17 @@ function copySelector(name, value) {
     .querySelector(`[data-testid="${name}"] input`)
     ?.select();
   const type = rootElement.shadowRoot.querySelector(`select#select--1`)?.value;
-  navigator.clipboard
-    .writeText(
-      type === 'css'
-        ? `${props.selectedElements[0].tagName.toLowerCase()}[${name}="${value}"]`
-        : `//${props.selectedElements[0].tagName.toLowerCase()}[@${name}='${value}']`
-    )
-    .catch((error) => {
-      document.execCommand('copy');
-      console.error(error);
-    });
+  const tagName = props.selectedElements[0].tagName.toLowerCase();
+  const text =
+    type === 'css'
+      ? `${tagName}[${name}="${value}"]`
+      : `//${tagName}[@${name}='${value}']`;
+
+  // 面板注入在用户浏览的页面上，http 站点没有 navigator.clipboard
+  // （secure-context-only），裸调会在读 writeText 时同步抛 TypeError。见 T-250。
+  copyTextToClipboard(text).catch((error) => {
+    console.error(error);
+    fallbackCopyTextToClipboard(text);
+  });
 }
 </script>

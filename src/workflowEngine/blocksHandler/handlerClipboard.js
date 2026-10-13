@@ -1,6 +1,6 @@
 import { IS_FIREFOX } from '@/common/utils/constant';
 import BrowserAPIService from '@/service/browser-api/BrowserAPIService';
-import { copyTextToClipboard } from '../helper';
+import { copyTextToClipboard } from '@/utils/clipboard';
 
 function doCommand(command, value) {
   const textarea = document.createElement('textarea');

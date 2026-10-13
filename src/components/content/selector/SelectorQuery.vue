@@ -65,6 +65,10 @@
 </template>
 <script setup>
 import { inject } from 'vue';
+import {
+  copyTextToClipboard,
+  fallbackCopyTextToClipboard,
+} from '@/utils/clipboard';
 import UiInput from '@/components/ui/UiInput.vue';
 
 const props = defineProps({
@@ -102,9 +106,10 @@ const rootElement = inject('rootElement');
 function copySelector() {
   rootElement.shadowRoot.querySelector('input')?.select();
 
-  navigator.clipboard.writeText(props.selector).catch((error) => {
-    document.execCommand('copy');
+  // 同 SelectorElementsDetail：http 站点上 navigator.clipboard 不存在。见 T-250。
+  copyTextToClipboard(props.selector).catch((error) => {
     console.error(error);
+    fallbackCopyTextToClipboard(props.selector);
   });
 }
 </script>
