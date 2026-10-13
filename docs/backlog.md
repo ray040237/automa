@@ -220,6 +220,20 @@
 注：纯观感统一，无功能缺陷。T-247 的处置（冗余通知该删而不是该美化）对这批同样适用 —— 动手前先过一遍：这 30+ 条里有多少本身也是冗余的？
 状态：待审核
 
+#### T-255 — 全仓仍有 84 个文件 / 193 条硬编码英文文案未走语言包，中文设置在多数界面无效
+
+登记日期：2026-10-14
+来源：2026-10-14 会话用户原话：「你看看还有哪些硬编码英文，帮我添加成语言包，设置成中文可以变成中文」；扫描脚本 `.scratch/scan-hardcoded-en.mjs`（扫 `src/` 下全部 `.vue` 的 template 段：元素文本节点 + `placeholder`/`title`/`alt`/`label` 静态属性，排除已 `t()`/`$t()` 的与 CSS/JS 残留）
+现象：用户在设置里切到中文后，只有已国际化的部分变中文，仍有大量界面显示英文。T-254 修掉了运行时参数弹窗一处，但剩下的分散在三个界面域（详见证据）。
+证据：**实测扫描**，`src/` 下 84 个 `.vue` 文件共命中 193 条（`text` 54 / `placeholder` 70 / `title` 44 / `label` 23 / `alt` 2）。按界面域分三档：
+① **content script 一族** ~45 条 / 5 文件 —— 注入用户网页的浮动面板：`src/content/services/recordWorkflow/App.vue`(18)、`src/content/elementSelector/App.vue`(15)、`src/content/commandPalette/App.vue`(12)、`src/components/content/selector/SelectorElementsDetail.vue`(8)、`SelectorQuery.vue`(7)。**这族不只是漏改文案**：`src/content/elementSelector/vueI18n.js` 只 `mergeLocaleMessage('en', …)` 且 `locale: 'en'` 是硬编码，即元素选择器即便改了文案也只有英文一个档。
+② **newtab 编辑界面** ~130 条 / ~75 文件 —— 已 `.use(vueI18n)`，只需补 t() + 词条，机械但面广。头部几个：`EditCookie.vue`(7)、`EditAiWorkflow.vue`(4)、`EditWebhook.vue`(4)、`TriggerEventKeyboard.vue`(4)、`SettingsBackup.vue`(4)、`LogsHistory.vue`(3)、`AgentPanel.vue`(3)、`EditInsertData/LoopData/TakeScreenshot/TriggerElementChange` 各 3。
+③ **零散 1-2 条** 的文件约 50 个（含 `src/components/ui/UiDialog.vue`、`UiImg.vue`、`BlockBasic.vue` 等被广泛复用的基础组件 —— 这些虽然只有 1 条，但辐射面最大）。
+影响：中文用户在录制流程、元素选择器、命令面板、多数块编辑面板里仍看英文。用户诉求（「设置成中文可以变成中文」）目前只对 T-254 之后新国际化的部分生效。
+建议：分三批，每批单独一条 commit，共用 `.scratch/scan-hardcoded-en.mjs` 做前后对照（改动后扫描数应降为 0）。① content script 族要先设计 locale 来源 —— panel 走 shadow DOM 挂载、不等异步，得决定「读 `browser.storage.local` 的 `settings.locale`（异步，要等 or 先英文后切）」还是「由 background 通过消息把 locale 传进来」；② newtab 族是纯机械替换，可多次提交；③ 顺手。无论哪批，每批都要 `npm run check:i18n` 防 en/zh 漂移。
+注：扫描器有少量固有误报 —— 动态表达式（`param.name` / `param.placeholder`）、品牌名 `Automa`、示例值（`abc123`、`https://example.com/`、`.example.com`、`lax`、`value`、`site-cookie`）、以及 `title="dayjs(...)"` 这种时间格式化字符串。193 条是上限，真实需翻译的约 150 条左右。
+状态：待审核
+
 ### 新功能（要讨论场景，审得慢）
 
 ---

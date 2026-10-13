@@ -11,7 +11,7 @@
     </nav>
     <div class="scroll flex-1 overflow-auto px-4 pb-4">
       <p class="my-4 text-gray-600 dark:text-gray-200">
-        Input these workflows parameters before it runs.
+        {{ t('workflow.parameters.inputBeforeRun') }}
       </p>
       <ui-expand
         v-for="(workflow, index) in sortedWorkflows"
@@ -27,7 +27,7 @@
             :src="workflow.data.icon"
             class="overflow-hidden rounded-lg"
             style="height: 40px; width: 40px"
-            alt="Can not display"
+            :alt="t('common.cantDisplay')"
           />
           <span v-else class="bg-box-transparent rounded-lg p-2">
             <v-remixicon :name="workflow.data.icon" />
@@ -44,7 +44,7 @@
           </div>
         </template>
         <p v-if="workflow.type === 'block'" class="px-4 pb-2">
-          By Parameter Prompt block
+          {{ t('workflow.parameters.byParamPromptBlock') }}
         </p>
         <div class="px-4 pb-4">
           <ul class="space-y-4 divide-y">
@@ -77,7 +77,7 @@
               />
               <p
                 v-if="param.description"
-                title="Description"
+                :title="t('common.description')"
                 class="ml-1 text-sm leading-tight"
               >
                 {{ param.description }}
@@ -92,19 +92,19 @@
                 class="mr-4"
                 @click="cancelParamBlock(index, workflow, 'Canceled')"
               >
-                Cancel
+                {{ t('common.cancel') }}
               </ui-button>
               <ui-button
                 :disabled="!isValidParams(workflow.params)"
                 variant="accent"
                 @click="continueWorkflow(index, workflow)"
               >
-                Continue
+                {{ t('common.continue') }}
               </ui-button>
             </template>
             <template v-else>
               <ui-button class="mr-4" @click="deleteWorkflow(index)">
-                Cancel
+                {{ t('common.cancel') }}
               </ui-button>
               <ui-button
                 :disabled="!isValidParams(workflow.params)"
@@ -112,7 +112,7 @@
                 @click="runWorkflow(index, workflow)"
               >
                 <v-remixicon name="riPlayLine" class="mr-2 -ml-1" />
-                Run
+                {{ t('common.run') }}
               </ui-button>
             </template>
           </div>
@@ -127,10 +127,13 @@ import ParameterInputValue from '@/components/newtab/workflow/edit/Parameter/Par
 import ParameterJsonValue from '@/components/newtab/workflow/edit/Parameter/ParameterJsonValue.vue';
 import { useTheme } from '@/composable/theme';
 import dayjs from '@/lib/dayjs';
+import { loadLocaleMessages, setI18nLanguage } from '@/lib/vueI18n';
+import { useStore } from '@/stores/main';
 import { parseJSON } from '@/utils/helper';
 import automa from '@business';
 import workflowParameters from '@business/parameters';
 import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import browser from 'webextension-polyfill';
 
 const paramsList = {
@@ -156,6 +159,9 @@ const paramsList = {
 
 const theme = useTheme();
 theme.init();
+
+const { t } = useI18n();
+const store = useStore();
 
 const retrieved = ref(false);
 const workflows = ref([]);
@@ -357,6 +363,12 @@ browser.runtime.onMessage.addListener(({ name, data }) => {
 
 onMounted(async () => {
   try {
+    // 语言包必须在 retrieved 置真之前就绪 —— 模板由 v-if="retrieved" 控制，
+    // 晚了 t() 会抢跑、直接把键名显示给用户（与 newtab/App.vue:363 同序）。
+    await store.loadSettings();
+    await loadLocaleMessages(store.settings.locale, 'newtab');
+    await setI18nLanguage(store.settings.locale);
+
     const query = new URLSearchParams(window.location.search);
     const workflowId = query.get('workflowId');
     if (workflowId) addWorkflow(workflowId);
@@ -364,7 +376,9 @@ onMounted(async () => {
 
     Object.assign(paramsList, workflowParameters());
   } catch (error) {
-    // Do nothing
+    // 原来是 // Do nothing：静默吞错正是本项目踩过三次的坑（T-250/251/253），
+    // 语言包加载失败时会表现为「键名直显」，必须留下线索。
+    console.error(error);
   } finally {
     retrieved.value = true;
   }

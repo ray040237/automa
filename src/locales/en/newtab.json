@@ -499,7 +499,9 @@
     },
     "parameters": {
       "add": "Add parameter",
-      "preferInTab": "Prefer input parameters in the tab"
+      "preferInTab": "Prefer input parameters in the tab",
+      "inputBeforeRun": "Input these workflows parameters before it runs.",
+      "byParamPromptBlock": "By Parameter Prompt block"
     },
     "my": "My workflows",
     "testing": {
