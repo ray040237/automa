@@ -12,7 +12,7 @@
         class="mr-2 flex-1"
         autocomplete="off"
         :label="t('workflow.blocks.press-key.target')"
-        placeholder="CSS Selector or XPath"
+        :placeholder="t('common.selectorHint')"
         @change="updateData({ selector: $event })"
       />
       <shared-el-selector-actions

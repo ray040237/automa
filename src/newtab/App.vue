@@ -8,7 +8,7 @@
     <ui-dialog>
       <template #auth>
         <div class="text-center">
-          <p class="text-xl font-semibold">Oops!! 😬</p>
+          <p class="text-xl font-semibold">{{ t('common.oops') }}</p>
           <p class="mt-2 text-gray-600 dark:text-gray-200">
             {{ t('auth.text') }}
           </p>

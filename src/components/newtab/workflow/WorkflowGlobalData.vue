@@ -1,6 +1,6 @@
 <template>
   <div class="global-data">
-    <p class="text-right" title="Characters limit">
+    <p class="text-right" :title="t('common.charactersLimit')">
       {{ globalData.length }}/{{ maxLength.toLocaleString() }}
     </p>
     <shared-codemirror
@@ -12,11 +12,14 @@
 </template>
 <script setup>
 import { ref, watch, defineAsyncComponent } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { debounce } from '@/utils/helper';
 
 const SharedCodemirror = defineAsyncComponent(() =>
   import('@/components/newtab/shared/SharedCodemirror.vue')
 );
+
+const { t } = useI18n();
 
 const props = defineProps({
   workflow: {

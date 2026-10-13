@@ -98,7 +98,9 @@
 
       <span class="text-sm text-gray-500 block text-center mt-10"
         >{{ t('workflow.blocks.ai-workflow.poweredBy') }}
-        <a href="https://aipower.automa.site/">AI Power</a></span
+        <a href="https://aipower.automa.site/">{{
+          t('common.aiPower')
+        }}</a></span
       >
     </template>
 

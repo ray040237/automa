@@ -22,7 +22,7 @@
     <ui-input
       v-model="observeDetail.baseSelector"
       class="mt-4 w-full"
-      placeholder="CSS Selector or XPath"
+      :placeholder="t('common.selectorHint')"
     >
       <template #label>
         <span>
@@ -48,7 +48,7 @@
       v-model="observeDetail.selector"
       :label="t('workflow.blocks.trigger.element-change.target')"
       class="mt-4 w-full"
-      placeholder="CSS Selector or XPath"
+      :placeholder="t('common.selectorHint')"
     />
     <ui-expand header-class="w-full flex items-center focus:ring-0 group">
       <template #header>

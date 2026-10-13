@@ -231,7 +231,8 @@
 ③ **零散 1-2 条** 的文件约 50 个（含 `src/components/ui/UiDialog.vue`、`UiImg.vue`、`BlockBasic.vue` 等被广泛复用的基础组件 —— 这些虽然只有 1 条，但辐射面最大）。
 影响：中文用户在录制流程、元素选择器、命令面板、多数块编辑面板里仍看英文。用户诉求（「设置成中文可以变成中文」）目前只对 T-254 之后新国际化的部分生效。
 建议：分三批，每批单独一条 commit，共用 `.scratch/scan-hardcoded-en.mjs` 做前后对照（改动后扫描数应降为 0）。① content script 族要先设计 locale 来源 —— panel 走 shadow DOM 挂载、不等异步，得决定「读 `browser.storage.local` 的 `settings.locale`（异步，要等 or 先英文后切）」还是「由 background 通过消息把 locale 传进来」；② newtab 族是纯机械替换，可多次提交；③ 顺手。无论哪批，每批都要 `npm run check:i18n` 防 en/zh 漂移。
-注：扫描器有少量固有误报 —— 动态表达式（`param.name` / `param.placeholder`）、品牌名 `Automa`、示例值（`abc123`、`https://example.com/`、`.example.com`、`lax`、`value`、`site-cookie`）、以及 `title="dayjs(...)"` 这种时间格式化字符串。193 条是上限，真实需翻译的约 150 条左右。
+注：扫描器有少量固有误报 —— 动态表达式（`param.name` / `param.placeholder`）、品牌名 `Automa`、示例值（`abc123`、`https://example.com/`、`.example.com`、`lax`、`value`、`site-cookie`）、以及 `title="dayjs(...)"` 这种时间格式化字符串。193 条是上限，真实需翻译的约 150 条左右。**实测甄别后**：② 档 124 条里真实文案只有 11 处，其余是示例值/技术枚举/动态表达式 —— **扫描数远高于真实工作量**，动手前必须先甄别，否则会为 `PNG` / `varA,varB,varC` 这种不存在翻译需求的东西造一堆没用的 key。
+**进度**：②（newtab 编辑界面）已于 2026-10-14 完成，见 `backlog-done.md` 的 **T-256**；①（content script 一族）与 ③（零散基础组件）仍待审核。
 状态：待审核
 
 ### 新功能（要讨论场景，审得慢）
