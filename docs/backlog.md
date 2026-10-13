@@ -29,15 +29,15 @@
 
 ### bug（先审，多数可快速定夺）
 
-#### T-251 — SVG 文档里 `document.head`/`document.body` 恒为 null，content script 一族（选择器/命令面板/样式注入）崩或被吞成静默失效
+#### T-252 — 顶层 SVG 主文档里 elementSelector 起不来：Vue patchStyle 对 style 为 undefined 的元素做 `"top" in` 探测
 
 登记日期：2026-10-13
-来源：2026-10-13 会话（T-250 修完后用户要求「举一反三，审查代码找类似情况」）；`src/content/elementSelector/index.js:27`、`src/content/injectAppStyles.js:23,35`、`src/content/commandPalette/index.js:45`
-现象：**与 T-250 同一种错误形状**（读属性即炸，且崩点前后的错误处理兜不住）。在 `.svg` 文档 —— 直接打开的 SVG 文件、或页面里 `<embed>`/`<object>` 内嵌的 SVG frame（content script `all_frames: true` 会注入进去）—— 里：① `elementSelector` 的非主 frame 分支 `document.body.appendChild(style)` 抛 TypeError，被外层 try/catch 吞掉 → **`selectorFrameContext()` 不再执行，该 frame 内元素无法被选取/回传坐标**；② `injectAppStyles` 的 `document.head.querySelector(...)` 抛 TypeError 被自己的 catch 吞 → 高亮描边（`#6366f1` 虚线边）与 Inter 字体**静默丢失**，面板显示成无边框裸界面；③ `commandPalette`（Alt+K）的 `document.body.appendChild(element)` 抛错被吞 → 快捷键**毫无反应**。另外该入口第 25 行已有 `if (/(json|xml)$/.test(location.pathname)) return;` 排除清单，说明作者知道「非 HTML 文档会出问题」，但清单里**没有 svg**。
-证据：**实测**（`.scratch/clipboard-probe3.mjs`，Chromium + `--host-resolver-rules`）：同一个 `http://example.com:8082/doc.svg` 文档里 `head: "null"`、`body: "null"`、`documentElement: "ok"`，且 `document.head.querySelector('.x')` 抛 `TypeError: Cannot read properties of null (reading 'querySelector')` —— 与 T-250 的报错同款句式。对照组：`application/xml` 文档 head/body 都在（object）；`about:blank` / `srcdoc` iframe 的 head/body 也都在（`appendChildWouldThrow: "no-throw"`），所以**问题只针对 `image/svg+xml` 一种文档类型**，不是通用的 iframe/早期注入问题。
-影响：正在做自动化的页面只要内嵌 SVG（图表、图标、设计稿预览），选择器在这些 frame 里直接不可用；直接打开 SVG 文件时选择器与命令面板双双失效，控制台只留一条被吞的 TypeError，用户侧表现为「扩展在这个页面上坏了」。
-建议：三处统一挂到 `document.documentElement` 或补 `if (!document.body) return` 守卫（SVG 的 `documentElement` 实测存在，可正常挂载）；`commandPalette` 的排除正则补上 `svg`。谁改谁顺手把 `elementSelector/index.js:27` 改成「样式挂不上也继续跑 `selectorFrameContext()`」—— 后者才是功能主体。
-注：同族已排查、判为**不需要动**的：可选链后直接跟方法调用（`a?.b().c`）全仓 0 命中；`about:blank`/`srcdoc` iframe DOM 实测完好；content script 里其余 7 处 `document.body.appendChild`（`showExecutedBlock` / `handlerCreateElement` / `handlerTakeScreenshot` / `recordWorkflow` / `handlerConditions`）均在交互后执行且各有 try/catch，按本票方案一并扫过即可。
+来源：2026-10-13 会话（T-251 端到端验证时顺带抓到的另一个崩点）；崩点在 `elementSelector.bundle.js:22:41721`（minified，对应 Vue runtime 的 patchStyle vendor-prefix 探测）
+现象：**直接打开一个 `.svg` 文件**（或任何以 `image/svg+xml` 为主文档的页面），唤起元素选择器：面板完全不出现，控制台一条 `TypeError: Cannot use 'in' operator to search for 'top' in undefined at .../elementSelector.bundle.js:22:41721`，被 `elementSelector/index.js` 的外层 try/catch 吞掉。`#app-container`、shadowRoot、`#app` 全都没建出来。与 T-251 是两个不同崩点：T-251 修的是 **iframe（非主 frame）路径**（SVG frame 里 `document.body` 为 null），本条是**主 frame 落在 SVG 主文档上**时 Vue 应用启动失败。
+证据：**实测**（`.scratch/verify-t251-topsvg.mjs`：playwright 加载真实 `build/`，`goto http://example.com:8085/doc.svg`，确认 `document.body === null` / `document.head === null` / `documentElement.tagName === 'svg'`，再经 `chrome.scripting.executeScript` 注入 `elementSelector.bundle.js`）：注入后 +500/+1500/+3000ms 三次采样，`appContainer:false`、`shadowExists:false`、`appDiv:false`、`styleTexts:[]` 恒定不变；console 里只有那一条 TypeError。产物侧定位：`build/elementSelector.bundle.js:22` 第 41721 列落在 Vue runtime 的 `patchStyle` 里，具体是 CSS 属性 vendor 前缀探测 `…if("filter"!==r&&r in e)…`（`e` 即 `el.style`），报错字符串里的 `"top"` 就是被探测的属性名 —— 也就是说 **Vue 对一个 `el.style` 未定义的元素做了 style patch**。
+影响：直接打开 SVG 文件（设计资源、图标、SVG 导出的图）时选择器整体不可用；录制工作流面板（`recordWorkflow/main.js` 同样 `createElement('div')` + Vue + shadow DOM）大概率同病，**推断，未实测**。发生率低（要主文档恰是 SVG），但一旦命中就是「选择器在这个文件上完全打不开」且控制台信息毫无指向性。
+建议：留空，待判断。可能的切法：① 在 `elementSelector/index.js` 与 `recordWorkflow` 入口按 `document.contentType` / `documentElement.tagName` 直接 return（与 `commandPalette` 的 json/xml/svg 排除一致，最省事但放弃该场景）；② 查清 Vue 为何拿到 style 未定义的元素后修根因（可能是 SVG 主文档里 `createElement('div')` 的宿主行为差异）；先 ① 止损、② 另开票。
+注：机理**只定位到崩点，未完全定性**（production 堆栈已压缩、无 sourcemap），条目里关于「哪个元素的 style 未定义」是推断，勿当结论。T-251 的 domMount helper 覆盖不到本条 —— 那时 Vue 应用已经启动失败，还没走到挂载。
 状态：待审核
 
 #### T-249 — 存包时 `asBlock` 写在顶层，拖入画布却读 `settings.asBlock`，「设为模块」开关失效

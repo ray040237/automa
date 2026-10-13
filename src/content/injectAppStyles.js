@@ -1,4 +1,5 @@
 import browser from 'webextension-polyfill';
+import { getDocumentMount } from '@/utils/domMount';
 
 export function generateStyleEl(css, classes = true) {
   const style = document.createElement('style');
@@ -20,9 +21,10 @@ export default async function (appRoot, customCss = '') {
     const appStyleEl = generateStyleEl(mainCSS + customCss, false);
     appRoot.appendChild(appStyleEl);
 
-    const fontStyleExists = document.head.querySelector(
-      '.automa-element-selector'
-    );
+    // SVG 文档（image/svg+xml）里没有 document.head —— 实测 T-251。退回
+    // documentElement，<style> 在 SVG 里是合法子元素，样式照样生效。
+    const styleRoot = document.head || getDocumentMount();
+    const fontStyleExists = styleRoot.querySelector('.automa-element-selector');
 
     if (!fontStyleExists) {
       const commonCSS =
@@ -32,7 +34,7 @@ export default async function (appRoot, customCss = '') {
       const fontCSS = `@font-face { font-family: "Inter var"; font-weight: 100 900; font-display: swap; font-style: normal; font-named-instance: "Regular"; src: url("${fontURL}") format("woff2") }`;
       const fontStyleEl = generateStyleEl(fontCSS + commonCSS);
 
-      document.head.appendChild(fontStyleEl);
+      styleRoot.appendChild(fontStyleEl);
     }
   } catch (error) {
     console.error(error);

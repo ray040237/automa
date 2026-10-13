@@ -1,4 +1,5 @@
 import browser from 'webextension-polyfill';
+import { appendToDocument } from '@/utils/domMount';
 import initElementSelector from './main';
 import initRecordEvents from './recordEvents';
 import selectorFrameContext from '../../elementSelector/selectorFrameContext';
@@ -18,7 +19,7 @@ import selectorFrameContext from '../../elementSelector/selectorFrameContext';
       const style = document.createElement('style');
       style.textContent = '[automa-el-list] {outline: 2px dashed #6366f1;}';
 
-      document.body.appendChild(style);
+      appendToDocument(style);
 
       selectorFrameContext();
     }

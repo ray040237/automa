@@ -1,4 +1,5 @@
 import { customAlphabet } from 'nanoid/non-secure';
+import { appendToDocument } from '@/utils/domMount';
 import { visibleInViewport, isXPath } from '@/utils/helper';
 import { automaRefDataStr } from '@/workflowEngine/helper';
 import handleSelector from '../handleSelector';
@@ -76,7 +77,7 @@ async function handleConditionCode({ data, refData }) {
         });
     `;
 
-    document.body.appendChild(scriptEl);
+    appendToDocument(scriptEl);
 
     const handleAutomaEvent = ({ detail }) => {
       scriptEl.remove();

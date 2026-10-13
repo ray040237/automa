@@ -1,3 +1,4 @@
+import { appendToDocument } from '@/utils/domMount';
 import { elementSelectorInstance } from '../utils';
 import initElementSelector from './main';
 import injectAppStyles from '../injectAppStyles';
@@ -24,7 +25,7 @@ import selectorFrameContext from './selectorFrameContext';
       const style = document.createElement('style');
       style.textContent = '[automa-el-list] {outline: 2px dashed #6366f1;}';
 
-      document.body.appendChild(style);
+      appendToDocument(style);
 
       selectorFrameContext();
     }

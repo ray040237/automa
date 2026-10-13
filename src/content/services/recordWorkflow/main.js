@@ -1,4 +1,5 @@
 import { createApp } from 'vue';
+import { appendToDocument } from '@/utils/domMount';
 import vRemixicon from 'v-remixicon';
 import App from './App.vue';
 import icons from './icons';
@@ -19,7 +20,7 @@ export default function () {
   rootElement.attachShadow({ mode: 'open' });
   rootElement.setAttribute('id', 'automa-recording');
   rootElement.classList.add('automa-element-selector');
-  document.body.appendChild(rootElement);
+  appendToDocument(rootElement);
 
   return injectAppStyles(rootElement.shadowRoot, customCSS).then(() => {
     const appRoot = document.createElement('div');

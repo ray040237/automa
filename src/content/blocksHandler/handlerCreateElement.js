@@ -1,3 +1,4 @@
+import { appendToDocument } from '@/utils/domMount';
 import handleSelector from '../handleSelector';
 
 const positions = {
@@ -34,7 +35,7 @@ async function createElement(block) {
 
   if (data.css) {
     const style = createNode('style', { id: `${baseId}-style` }, data.css);
-    document.body.appendChild(style);
+    appendToDocument(style);
   }
 
   if (block.preloadCSS) {
@@ -43,7 +44,7 @@ async function createElement(block) {
       script.id = `${baseId}-script`;
       script.textContent = style.script;
 
-      document.body.appendChild(script);
+      appendToDocument(script);
     });
   }
 
@@ -53,14 +54,14 @@ async function createElement(block) {
       script.id = `${baseId}-script`;
       script.textContent = item.script;
 
-      document.body.appendChild(script);
+      appendToDocument(script);
     });
 
     const script = document.createElement('script');
     script.id = `${baseId}-javascript`;
     script.textContent = `(() => { ${data.automaScript}\n${data.javascript} })()`;
 
-    document.body.appendChild(script);
+    appendToDocument(script);
   }
 
   return true;

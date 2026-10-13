@@ -1,4 +1,5 @@
 import browser from 'webextension-polyfill';
+import { appendToDocument } from '@/utils/domMount';
 import initApp from './main';
 import injectAppStyles from '../injectAppStyles';
 
@@ -22,7 +23,9 @@ export default async function () {
     const isMainFrame = window.self === window.top;
     if (!isMainFrame) return;
 
-    const isInvalidURL = /.(json|xml)$/.test(window.location.pathname);
+    // 非 HTML 文档排除：json / xml 早就在名单里，svg 是 T-251 补的 ——
+    // SVG 文档没有 document.body，命令面板这种 HTML 容器挂上去也没意义。
+    const isInvalidURL = /\.(json|xml|svg)$/.test(window.location.pathname);
     if (isInvalidURL) return;
 
     const { automaShortcut } = await browser.storage.local.get(
@@ -42,7 +45,7 @@ export default async function () {
     await injectAppStyles(element.shadowRoot);
     initApp(element);
 
-    document.body.appendChild(element);
+    appendToDocument(element);
   } catch (error) {
     console.error(error);
   }

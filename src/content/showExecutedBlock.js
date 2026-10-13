@@ -1,4 +1,5 @@
 import { tasks } from '@/utils/shared';
+import { appendToDocument } from '@/utils/domMount';
 
 function generateElement(block) {
   return `
@@ -42,7 +43,7 @@ export default function (data, enable) {
   if (!container) {
     container = document.createElement('div');
     container.classList.add('automa-executed-block');
-    document.body.appendChild(container);
+    appendToDocument(container);
 
     const style = document.createElement('style');
     style.classList.add('automa-executed-block');
@@ -87,7 +88,7 @@ export default function (data, enable) {
         margin-left: 8px;
       }
     `;
-    document.body.appendChild(style);
+    appendToDocument(style);
   }
   container.innerHTML = generateElement(block);
 

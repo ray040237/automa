@@ -1,4 +1,5 @@
 import { sleep } from '@/utils/helper';
+import { appendToDocument } from '@/utils/domMount';
 import { sendMessage } from '@/utils/message';
 import handleSelector from '../handleSelector';
 
@@ -36,7 +37,7 @@ function injectStyle() {
   style.innerText =
     'html::-webkit-scrollbar, body::-webkit-scrollbar, .automa-scrollable-el::-webkit-scrollbar{ width: 0 !important; height: 0 !important } body.is-screenshotting [is-sticky] { position: relative !important; } .hide-fixed [is-fixed] {visibility: hidden !important; opacity: 0 !important;}';
   style.id = 'automa-css-scroll';
-  document.body.appendChild(style);
+  appendToDocument(style);
 
   return style;
 }
