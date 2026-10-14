@@ -220,19 +220,28 @@
 注：纯观感统一，无功能缺陷。T-247 的处置（冗余通知该删而不是该美化）对这批同样适用 —— 动手前先过一遍：这 30+ 条里有多少本身也是冗余的？
 状态：待审核
 
-#### T-262 — 块执行错误消息整层是英文（`blocksHandler/` 37 条），且原样进工作流日志；slug 部分与 docs 锚点绑定，本地化需先评估
+#### T-262 — 工作流日志里的块错误消息有 39 条没有 `log.messages` 词条，中文用户看到裸英文（机制早已存在，是补词条 + 少量 slug 化）
 
 登记日期：2026-10-14
-来源：T-261 修复时顺着「这两条错误消息为什么会进用户视野」往上追，发现 `src/workflowEngine/blocksHandler/` 的错误消息**整层**都没走语言包。
-现象：块处理器抛出的错误消息会**原样进工作流日志**（`WorkflowWorker.js:372-379` 把 `error.message` 放进 `errorLogData.message`；`LogsHistory.vue:141` / `:264` 直接渲染 `{{ item.message }}`，导出日志也带它，`:463`）。而这一层的消息几乎全是英文。
-证据：
-- **规模**：`blocksHandler/` 下 `new Error(...)` / `reject(new Error(...))` 的字面量去重 **37 条**，其中 15 条是含空格的多词英文句（如 `Can't find active tab`、`Clipboard block is not supported in background execution`、`AI Power token is not set`）。
-- **形态是混的**：一部分是**英文句子**（`handlerActiveTab.js:63`、`handlerClipboard.js:27`、`handlerAiWorkflow.js:15/22/51`…）；另一部分是**slug 标识符**（`handlerActiveTab.js:68` `'invalid-active-tab'`、`handlerBrowserEvent.js:34` `'no-tab'` / `:77` `'timeout'`、`handlerClipboard.js:39` `'no-clipboard-acces'`）。
-- **slug 那部分有额外耦合**：日志 UI 对带 `messageId` 的错误会渲染一条指向 `docs.extension.automa.site/reference/workflow-common-errors.html#<messageId>` 的文档链接（`LogsHistory.vue:19-20`、`:143-144`）—— 即 slug 既是消息也是文档锚点，本地化不能简单换字。
-- **为什么之前没被扫到**：T-255/T-258/T-259 那轮扫描把 `throw` 当「内部错误」排除了（T-259 登记原文：「排除内部 throw / console / CSS / 示例值」），但**块处理器抛的错是会进日志给用户看的**，这个排除对 blocksHandler 不成立。
-影响：中文用户的工作流一旦有块失败，日志里看到的是英文错误句/slug，中文界面下尤其突兀。
-建议：**先评估再动手**。① 分两半处理 —— 英文句子那半可机械接语言包；slug 那半要先决定「slug 保持英文（当 messageId 用）+ 另配一条本地化的展示文案」还是「slug 也翻译（但要同步 docs 锚点，成本高）」。② 语言包位置：这层跑在 workflowEngine（background/offscreen/content 多宿主），不像 params 页那样有现成 i18n 宿主 —— 要先确认可用的 locale 来源（参考 T-260 的结论：content 一族必须静态导入词条，fetch 原始 json 会撞 MV3 CSP）。③ 量不小（37 条），建议独立一张票、单独一轮做，别和收尾残余混。
-状态：待审核（**需先做设计评估**，不是机械替换）
+来源：T-261 修复时顺着「这两条错误消息为什么会进用户视野」往上追。（**2026-10-14 同日已完成评估**，结论见下；初稿的两处判断已被实测推翻，一并纠正。）
+现象：块处理器抛出的错误消息会**原样进工作流日志**（`WorkflowWorker.js:375-379` 把 `error.message` 与 `error.data`/`error.ctxData` 一起摊进日志条目；`LogsHistory.vue:141` / `:264` 直接渲染 `{{ item.message }}`，导出日志也带它）。而日志侧**早就有一套消息翻译机制**，只是没覆盖全。
+**机制（已有，不需要新建）**：`translateLog` 把 `log.message` 当 key 去查 `log.messages.<message>`（`t(path, params)` 的 `params` 就是整条 log，故 `{selector}`/`{url}` 这类占位符靠日志对象上的字段插值），查不到就**回落成原始英文**。两处实现：`src/utils/getTranslateLog.js:14`（供「Log Data」块 `handlerLogData.js:22` 输出）与 `src/components/newtab/logs/LogsHistory.vue:542`（供日志 UI）—— **两份是逐字复制**，逻辑同步但属重复知识。词条现挂在 `src/locales/{en,zh}/newtab.json` 的 `log.messages`。
+**精确盘点**（脚本扫 `src/workflowEngine` + `src/content` + `src/sandbox` + `src/background`，模式 `new Error(` / `generateError(` / `onError(new Error(`，排除 `.test.js` 与 `console.*` 行）：
+- 字面量 **100 处 / 去重 61 条**。
+- **已覆盖**：**22 条 key、命中 54 处**（slug 形态：`no-tab`/`element-not-found`/`no-permission`/`invalid-active-tab`/`empty-workflow`/`no-clipboard-acces`…）。`log.messages` en **27 条**、zh **也 27 条、零缺** —— 这一半是好的。（余下 5 条 key 不由 `new Error` 字面量产生：`active-tab-removed`/`stop-timeout` 是运行时赋值 `error.message = ...`，`no-match-tab` 走 `handlerSwitchTab.js:6` 的局部 `generateError` helper，`invalid-url`/`workflow-disabled`/`not-debug-mode` 同理。）
+- **未覆盖**：**39 条 / 命中 46 处**（中文用户看到的就是这些英文）：
+  - **需插值 12 条**：`Can't find ${data.eventName} event`；`Cant find "${data.varSourceName}" variable`（`handlerDataMapping`/`handlerSortData`）与 `Cant find "${data.variableName}" variable`（`handlerIncreaseVariable`/`handlerRegexVariable`）；`Can't map data with "${dataType}" data type`；`Can't sort data with "${dataType}" data type`；`Can't find download item with "${item.path}" id`；`Can't find block with "${inputNextBlockId}" id`；`Can't find a loop with "${block.data.loopId}" loop id`；`Can't find a tab with ${data.tabIndex} index`（`handlerSwitchTab.js:68`）；`"${data.label}" doesn't have a handler`；`(${response.status}) ${response.statusText}`；`API request failed: ${response.status}`。
+  - **纯静态 27 条**：`Can't find active tab`、`AI Workflow block is not available in offline mode`、`AI Power token is not set`、`Input not found`、`Can't find block for this input`、`timeout`（注意 `log.messages` 有 `stop-timeout` 却没有裸 `timeout`）、`Clipboard block is not supported in background execution`、`Invalid JSON format`、`Invalid URL`、`Google Drive block is not available in offline mode`、`You haven't connect Google Drive`、`Google Sheets block is not available in offline mode`、`Download feature requires download permission`、`Download id is not a number`、`The "type" must be "text" or "json"`、`No workflow is selected`、`No specific flow selected`、`Timeout`、`The body must be 2D Array`、`File not found`、`Element is not a link`、`Iframe not found`，外加 `src/background/index.js` 调试器 JS-code 通道的 6 条（`Callback is missing or invalid` / `Unable to get JavaScript code` / `Callback did not return JavaScript code string` / `Unable execute code` / `The "type" must be "text" or "json"` / `调试器没有返回结果` —— 最后一条**已经是中文**，与其余不一致；这 6 条也是**最该先确认是否真的进日志**的一批，那是调试器通道，可能只 `console`）。
+- **插值路径已有现成先例**：`src/workflowEngine/blocksHandler/handlerElementExists.js:6-7` 就是 `new Error('element-not-found')` + `error.data = { selector: block.data.selector }`，靠 `WorkflowWorker` 摊进日志后 `t()` 才插得出 `{selector}`。**即「抛 slug + 挂 data + 语言包写占位符」是本仓自己的做法**，不是新设计（`handlerSwitchTab.js:6` 那个 `generateError` helper 是同一思路的局部实现，可上提共用）。
+**纠正初稿两处错误结论**：① 初稿写「slug 部分与 docs 锚点绑定，本地化不能简单换字」——**不成立**。slug 恰恰就是 i18n key（`log.messages.<slug>`）；docs 锚点是**另一件事**：只有 `messageHasReferences`（`src/utils/shared.js:1825`，仅 5 条 `no-tab`/`invalid-active-tab`/`no-match-tab`/`invalid-body`/`element-not-found`）命中时才把 `messageId = message` 拼成 `workflow-common-errors.html#<slug>` 链接（`LogsHistory.vue:559-561`）。翻译 slug 的**显示文案**不影响这个链接。② 初稿估「37 条」是按出现次数算的；按上面口径重扫后，去重未覆盖实际是 **39 条**、已覆盖另有 22 条。
+影响：中文用户的工作流一旦有块失败，日志里看到的仍是英文句（27 条静态 + 12 条插值）。
+**隐性风险（比漏译更值得注意）**：`log.messages` 的 key 是**整条英文原文**（句子当 key）。即**任何一次英文措辞微调都会静默杀掉对应译文**（回落成英文），而全仓没有任何守卫/测试盯着这件事 —— 这也正是既有 27 条 key 一律用 slug 而不是句子的原因。按「句子当 key」快速补 zh，等于把这个脆弱面从 27 条扩到 54 条。
+建议（三选一，按推荐排序）：
+- **B（推荐）· 按既有 slug 约定补全**：未覆盖的逐条改成 `throw new Error('<slug>')`（插值那 12 条照 `handlerElementExists` 的样子挂 `error.data`），`log.messages` 补 en/zh 词条。收益：与既有 27 条一致、key 不随措辞漂移、插值那批才有救。代价：触及约 20 个文件（引擎层测试覆盖薄，虽只改字符串也要走端到端回归）；建议**分批**：先插值 12 条 + 高频静态，`background/index.js` 那 6 条先单独确认是否真的进日志（调试器通道，可能只 `console`）。
+- **A（最小改动，不推荐单独用）· 只补词条、零代码**：因为 key 就是整条消息串，给 27 条静态句子在 `log.messages` 各加一条 `"Can't find active tab": "找不到活动标签页"` 即可生效，**不动一行引擎代码**。代价：把「句子当 key」的脆弱面扩到 54 条，且**插值的 12 条救不了**（渲染后的串不可能当 key）。
+- **C（维持现状）**：日志是诊断面、错误消息偏技术，可接受英文。
+注：`check:i18n` **不检查** `log.messages` 的覆盖率（只查 en/zh parity），所以这条缺口不会被守卫发现。若要长期守住，B 之外可再加一条守卫：「引擎层 `new Error` 的字面量必须是 `log.messages` 的 key」（形态同 T-258 的扫描器）。另：`translateLog` 两份重复 + `messageHasReferences` 白名单散在 `shared.js`，属同族的小 hygiene，可顺带合并。
+状态：待审核（**评估已完成**；推荐 B、分批；等拍板）
 
 ### 新功能（要讨论场景，审得慢）
 
