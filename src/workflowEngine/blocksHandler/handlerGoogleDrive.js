@@ -18,13 +18,13 @@ function getFilename(url) {
 
 export async function googleDrive({ id, data }, { refData }) {
   if (IS_OFFLINE) {
-    throw new Error('Google Drive block is not available in offline mode');
+    throw new Error('google-drive-offline');
   }
 
   const { sessionToken } = await BrowserAPIService.storage.local.get(
     'sessionToken'
   );
-  if (!sessionToken) throw new Error("You haven't connect Google Drive");
+  if (!sessionToken) throw new Error('google-drive-not-connected');
 
   await validateOauthToken();
 
@@ -37,8 +37,12 @@ export async function googleDrive({ id, data }, { refData }) {
         exists: true,
         state: 'complete',
       });
-      if (!downloadItem || !downloadItem.filename)
-        throw new Error(`Can't find download item with "${item.path}" id`);
+      if (!downloadItem || !downloadItem.filename) {
+        const error = new Error('download-item-not-found');
+        error.data = { downloadId: item.path };
+
+        throw error;
+      }
 
       path = downloadItem.filename;
     }

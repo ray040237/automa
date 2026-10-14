@@ -114,7 +114,7 @@ async function executeBlock(data) {
     return result;
   }
 
-  const error = new Error(`"${data.label}" doesn't have a handler`);
+  const error = new Error('block-handler-not-found');
   console.error(error);
 
   throw error;

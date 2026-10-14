@@ -4501,3 +4501,46 @@ align=left  sidebar=320 chip 23..117   panel   23..311   |  超出侧栏左   0p
 **踩坑记录**：① 点「取消」后 `deleteWorkflow` 会把页面 `window.close()`，之后任何 `page.waitForTimeout` 都会抛 `Target page … has been closed` —— 用普通 `setTimeout` 替代；② 该页的 `runtime.onMessage` 监听器能被**扩展 SW 的 `chrome.runtime.sendMessage`** 唤起（`runtime.sendMessage` 会广播给同扩展的各上下文），不必去走 `tabs.sendMessage`；③ 只有 `workflow:params-block` 这条消息路径会 push `type:'block'` 的工作流（`addWorkflow` 那条 query-param 路径不设 `type`），而「取消」按钮只在 block 分支里 —— 想 e2e 这条文案只能走消息路径。
 **顺带发现（已登记 T-262）**：块执行错误消息**整层**是英文（`blocksHandler/` 37 条）且原样进日志；此前扫描把 `throw` 当「内部错误」排除，对 blocksHandler 不成立。
 状态：已清（2026-10-14 完成）
+
+### T-262 — 工作流日志里的块错误消息有 39 条没有 `log.messages` 词条，中文用户看到裸英文（机制早已存在，是补词条 + slug 化）
+
+类型：改进
+登记日期：2026-10-14（**同日评估、同日拍板、同日完成**）
+来源：T-261 结票时顺着「这两条错误消息为什么会进用户视野」往上追，发现整层块错误消息都没进翻译机制。
+现象：块处理器 `throw new Error('<英文句>')` 的 `error.message` 经 `WorkflowWorker.js:375-379` 摊进日志条目，由 `LogsHistory.vue:141/264` **原样渲染**、导出日志也带。而日志侧**早有翻译机制**：`translateLog` 把 `log.message` 当 key 查 `log.messages.<message>`，`t(path, params)` 的 `params` 就是**整条 log 对象**（故 `{selector}` 这类占位符靠日志对象上的字段插值），**查不到就回落成原始英文**。两处实现 `src/utils/getTranslateLog.js:14`（引擎侧，供「Log Data」块 `handlerLogData.js:22` 输出）与 `src/components/newtab/logs/LogsHistory.vue:542`（UI 侧）—— **两份逐字复制**。
+
+**登记时的盘点 vs 实测修正**：登记稿写「未覆盖 39 条 / 46 处」，是按行扫 `new Error(` 第一个字面量得出的。重写扫描器后（括号配对 + 提取参数内所有字面量）补齐两类盲区，真实数字下调，**最终改造 35 条**。「扫描数 ≫ 真实量」第三次成立（T-255 已登记此规律）：
+- 盲区 ④ **多行 `new Error(\n '...'\n)`**：行扫描整条漏掉（`handlerIncreaseVariable.js:13`、`handlerRegexVariable.js:13`、`handlerHandleDownload.js:111`）。
+- 盲区 ⑤ **`new Error(expr || 'Literal')`**：字面量不是第一个参数（`background/index.js` 一类）。
+
+**修法**（用户 2026-10-14 拍板 **B 方案：按既有 slug 约定补全**；A「只补词条、句子当 key」会因措辞微调静默杀译文、且救不了插值那批，C 维持现状均否决）：
+- **35 条英文句 → slug**，en/zh `log.messages` 各补 35 条，**27 → 62 条、零缺**（脚本校验 en 缺 `[]` / zh 缺 `[]`）。共 **34 个文件**（32 个 `src/` 下文件 + `package.json` + 本档）：`blocksHandler/` 20 个 handler + 引擎 `helper.js`/`WorkflowWorker.js`/两个 utils + `content`（2）+ `sandbox`（1）+ `background`（1）+ `offscreen`（1）+ 2 个语言包。
+- **插值的 12 条**照本仓既有先例 `handlerElementExists.js:6-7` 做三件事 —— 「抛 slug + 挂 `error.data` + 语言包写占位符」，缺一条用户看到的就是 slug 或没填上的 `{占位符}`。例：`handlerIncreaseVariable.js:8` → `new Error('variable-not-found')` + `error.data = { variableName: data.variableName }`，词条 en `Can't find the "{variableName}" variable` / zh `找不到 "{variableName}" 变量`。
+- **占位符命名有禁区**：`addBlockLog`（`WorkflowWorker.js:304-323`）先铺 `description/prevBlockData/type/name/blockId/workerId/timestamp/activeTabUrl/replacedValue/duration` 再 `...obj`（errorLogData），`addLogHistory` 再赋 `detail.id` —— 故 `name`/`id`/`type`/`description`/`blockId`/`message`/`ctxData` **绝不能当占位符名**，否则被覆写（既有 `no-tab` 的 `{name}` 实际插出来是块名，就是明证）。该清单已写进守卫注释。
+- **只能「英文句 → 新 slug」，不能重命名既有 slug**：`error.message` 在多处被当**标识符**比较 —— `content/index.js:263`、`handlerLoopElements.js:71`（`=== 'element-not-found'`）、`EditLoopData.vue:286`（`startsWith('invalid')`）、`handlerWebhook.js:122`（`includes('Failed to fetch'|'user aborted')`）。
+- **content script 那条只能静态**：`src/content/index.js:117` → `'block-handler-not-found'`。content script 抛的错跨 message 边界后只剩 `error.message` 字符串存活（`error.data` 丢失；仅 `content/index.js:29/181` 的 frame 通道显式传 `data.result.data` 是例外）→ 带插值也插不出来。
+- **11 条有意保留为英文**（守卫 `ALLOWED` 白名单，每条带理由，注释写明「此处意为用户永远看不到」）：`API request failed: ${response.status}`（WorkflowEngine.js 同函数 throw+catch，只 `console.error`）、`Invalid URL`（`Promise.allSettled` 的 rejected 被跳过）、`Iframe not found`（周围 try/catch 丢弃）、background `check-csp-and-inject` 通道 6 条（被 `checkCSPAndInject()` 的 catch 吞掉）、`调试器没有返回结果` / `调试器执行出错`（agent 通道，以 `{ok:false,error}` 返回给 agent，不进日志）。登记稿怀疑的「调试器 6 条是否真的进日志」**实测确认：不进**，故不为它们造词条。
+
+**顺带发现并修掉的既有 bug（不在原票范围）**：「Log Data」块此前**对所有 slug 都吐裸 key** —— offscreen 侧从未加载语言包。语言包只在 newtab / params / popup / sidepanel 四处 `loadLocaleMessages`，offscreen 一行都没有。修法见踩坑 ①。
+
+**守卫**：新建 `utils/check-engine-errors.js` + npm 脚本 `check:engine-errors`。扫 `workflowEngine`/`content`/`sandbox`/`background`，站点 `new Error(` / `generateError(` / `.message =`，**括号配对取参数 + 提取参数内所有字面量**（覆盖盲区 ④⑤），凡字面量不是 `log.messages` key 且不在 `ALLOWED` 就 EXIT=1。当前输出 `engine-errors check passed: every engine-side error literal is a log.messages key (62 keys).`
+**单测**：新建 `src/utils/logMessages.test.js`（4 条）—— 钉住「key 在 en/zh 都存在」「35 条 `[slug, data, expectedZh]` 用例表里每条都能插出来、不留 `{…}`」「占位符名避开保留字段」。用 `installGlobals()` + **动态** `await import('@/lib/vueI18n')`（静态 import 来不及注入 `IS_OFFLINE`）；**刻意不 import `@/utils/getTranslateLog`**（它经 `getSharedData` 拉 `@business/blocks`，Node 解不出），改为直接调 `i18n.global.t(path, log)`，注释写明与 `getTranslateLog.js:37-40` 的调用形状逐字一致。
+**旧测试随之更新**：`src/workflowEngine/blocksHandler.test.js` 有 2 条断言旧英文（`/Cant find "nope" variable/`），改为断言新 slug **且** `error.data`（`increase-variable` / `regex-variable` 各 2 处）。这不是回归，是预期的断言更新。
+
+**验收**：`npm run check:i18n` passed（zh-TW advisory 缺键为存量）；`npm run check:engine-errors` passed；`npm run lint` 0 error / 10 warning（存量）；`npm test` **894 pass / 0 fail / 1 skip**（895 tests / 59 suites，比 T-261 轮的 890 多 4 条新单测）；`npm run build` EXIT=0。
+**产物侧反向 grep**：zh 新文案（`找不到活动标签页` / `等待标签页加载超时` / `未设置 AI Power 令牌` / `此模块没有对应的处理器` / `无法与活动标签页建立连接`）全 FOUND；旧英文句只剩 `build/locales/locale-en-newtab-json.bundle.js`（就是译文本身）与 `build/offscreen.bundle.js`（内联 en locale 的**合法**译文，上下文确认 `"active-tab-not-found": e => {...; return t(["Can't find active tab"])}`）。
+**变异对照（两处各两步，先红后绿）**：① 守卫 —— 注入 `` `Can't find ${data.workflowId} workflow` `` → EXIT=1；还原 → EXIT=0。② 单测 —— 删掉 zh 词条的 `{variableName}` → 3 pass / 1 fail；还原 → 4 / 0。
+**端到端（真实 build + playwright，`.scratch/verify-t262-e2e.mjs`，7 条断言全绿）**：
+- 场景 1（trigger → increase-variable('nope') → delay 8s，`onError='keep-running'` 撑住状态）：日志条目 `type=error / message="variable-not-found" / variableName="nope" / name="increase-variable" / id=2` —— 证明 slug 存活、插值字段存活、**没撞掉保留字段 `name`（块 label）与 `id`（日志自增 id）**。
+- 场景 2（trigger → log-data 读场景 1 的日志 → `$$t262logs`）：message 列 = `["NULL","找不到 \"nope\" 变量"]` —— 证明**引擎侧（offscreen）真翻成中文且插值填上**。
+
+**踩坑记录**：
+① **offscreen 只 `loadLocaleMessages` 不够**（本轮最关键的一条）：加上后**仍吐裸 key**；插临时诊断日志拿到决定性证据 `locale= zh locale.value= en-US te= false t= Can't find the "X" variable` —— 词条其实加载成功、`t()` 也插得出正确英文，但 `i18n.global.locale` 是 `en-US`（`createI18n` 未给 `locale` 时的默认值），于是 `te()` 恒 false，`translateLog` 判定「key 不存在」直接回落。**必须再 `setI18nLanguage(locale)`**。最终 `src/offscreen/index.js`：`loadLocaleMessages(locale,'newtab')` + `setI18nLanguage(locale)`，并挂 `storage.onChanged` 跟随设置切换，失败只 `console.error` 不阻断。
+② **e2e 消息形状**：`RendererWorkflowService.executeWorkflow` 发 `sendMessage('workflow:execute', {...workflowData, options}, 'background')` —— `data` 是**工作流字段铺平**，不是再包一层 `{workflow}`；包两层报 `Cannot destructure property 'nodes' of 'this.workflow.drawflow'`。
+③ **e2e 状态采不到**：工作流结束时 `destroy()` 会 `states.delete()`（`WorkflowManager.js:497`），采样晚了 `chrome.storage.local.workflowStates` 就是空的 → 用 `settings.onError='keep-running'` + 末尾挂 delay 块把状态撑住，执行后立刻 300ms 高频采样。
+④ `npm run build` EXIT=1（`Compiler.emitAssets` 崩）是已知坑：`build/` 已存在时 clean 撞批量删除守卫 → `mv build build.bak.<时间戳>` 后空目录重跑（目录名必须落进 `build.bak.*`，`.gitignore` 只认这一族）。
+⑤ 新单测首跑 `ReferenceError: IS_OFFLINE is not defined`（`src/utils/shared.js:55`）→ 照 `blockCategories.test.js` 模式：`installGlobals()` + 动态 import。
+⑥ `npx eslint utils/check-engine-errors.js` 首跑 14 error（`no-continue` ×8、`no-template-curly-in-string`、`prefer-destructuring`、prettier 换行）→ 重写为无 `continue` 的扁平 if/else + 行内 disable + `--fix`。
+
+**已知残余（未动，登记在此）**：`translateLog` 在 `getTranslateLog.js:14` 与 `LogsHistory.vue:542` **两份逐字复制**；`messageHasReferences` 白名单（`shared.js:1825`，5 条）散在别处 —— 同族 hygiene。另：slug 与 `workflow-common-errors.html#<slug>` 文档锚点是**两件事**，只有那 5 条白名单命中时才拼链接，翻译显示文案不影响它（登记稿初版曾误判「本地化不能换字」）。
+状态：已清（2026-10-14 完成）

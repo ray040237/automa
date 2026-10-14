@@ -64,8 +64,9 @@ export default async function ({ data, id }) {
   } else if (findTabBy === 'tab-index') {
     tab = tabs[data.tabIndex];
 
-    if (!tab)
-      throw generateError(`Can't find a tab with ${data.tabIndex} index`);
+    if (!tab) {
+      throw generateError('tab-not-found', { tabIndex: data.tabIndex });
+    }
   }
 
   await BrowserAPIService.tabs.update(tab.id, { active: activeTab });

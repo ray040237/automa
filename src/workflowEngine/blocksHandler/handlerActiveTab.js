@@ -60,7 +60,7 @@ async function activeTab(block) {
 
     const [tab] = await BrowserAPIService.tabs.query(tabsQuery);
     if (!tab) {
-      throw new Error("Can't find active tab");
+      throw new Error('active-tab-not-found');
     }
     const isHttpUrl = tab?.url?.startsWith('http');
     const isFileUrl = tab?.url?.startsWith('file://');

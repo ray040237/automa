@@ -47,7 +47,8 @@ export async function webhook({ data, id }, { refData }) {
         };
       }
 
-      const error = new Error(`(${response.status}) ${response.statusText}`);
+      const error = new Error('webhook-response-error');
+      error.data = { status, statusText };
       error.ctxData = ctxData;
 
       throw error;

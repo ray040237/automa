@@ -27,7 +27,10 @@ export async function dataMapping({ id, data }) {
     const { variables } = this.engine.referenceData;
 
     if (!objectHasKey(variables, data.varSourceName)) {
-      throw new Error(`Cant find "${data.varSourceName}" variable`);
+      const error = new Error('variable-not-found');
+      error.data = { variableName: data.varSourceName };
+
+      throw error;
     }
 
     dataToMap = variables[data.varSourceName];
@@ -35,8 +38,10 @@ export async function dataMapping({ id, data }) {
 
   if (!isObject(dataToMap) && !Array.isArray(dataToMap)) {
     const dataType = dataToMap === null ? 'null' : typeof dataToMap;
+    const error = new Error('invalid-map-data-type');
+    error.data = { dataType };
 
-    throw new Error(`Can't map data with "${dataType}" data type`);
+    throw error;
   }
 
   if (isObject(dataToMap)) {

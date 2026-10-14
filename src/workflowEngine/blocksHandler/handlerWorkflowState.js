@@ -5,7 +5,7 @@ export default async function ({ data, id }) {
     if (data.type === 'stop-current') {
       // 如果需要抛出错误
       if (data.throwError) {
-        throw new Error(data.errorMessage || 'Workflow stopped manually');
+        throw new Error(data.errorMessage || 'workflow-stopped-manually');
       } else {
         return {};
       }

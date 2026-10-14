@@ -136,7 +136,7 @@ export function waitTabLoaded({ tabId, listenError = false, ms = 10000 }) {
         BrowserAPIService.webNavigation.onErrorOccurred.removeListener(
           onErrorOccurred
         );
-        reject(new Error('Timeout'));
+        reject(new Error('tab-load-timeout'));
       }, ms);
     }
     if (listenError && BROWSER_TYPE === 'chrome')

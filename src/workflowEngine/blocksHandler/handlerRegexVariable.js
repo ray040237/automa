@@ -5,14 +5,18 @@ export async function regexVariable({ id, data }) {
   const variableExist = objectPath.has(refVariables, data.variableName);
 
   if (!variableExist) {
-    throw new Error(`Cant find "${data.variableName}" variable`);
+    const error = new Error('variable-not-found');
+    error.data = { variableName: data.variableName };
+
+    throw error;
   }
 
   const str = objectPath.get(refVariables, data.variableName);
   if (typeof str !== 'string') {
-    throw new Error(
-      `The value of the "${data.variableName}" variable is not a string/text`
-    );
+    const error = new Error('invalid-variable-string');
+    error.data = { variableName: data.variableName };
+
+    throw error;
   }
 
   const method = data.method || 'match';

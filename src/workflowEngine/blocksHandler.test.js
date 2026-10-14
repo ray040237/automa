@@ -105,7 +105,12 @@ describe('处理器行为（假 worker 当 this）', () => {
           id: 'b1',
           data: { variableName: 'nope', increaseBy: 1 },
         }),
-      /Cant find "nope" variable/
+      (error) => {
+        assert.equal(error.message, 'variable-not-found');
+        assert.deepEqual(error.data, { variableName: 'nope' });
+
+        return true;
+      }
     );
 
     const notNumber = fakeWorker();
@@ -116,7 +121,12 @@ describe('处理器行为（假 worker 当 this）', () => {
           id: 'b1',
           data: { variableName: 'text', increaseBy: 1 },
         }),
-      /is not a number/
+      (error) => {
+        assert.equal(error.message, 'invalid-variable-number');
+        assert.deepEqual(error.data, { variableName: 'text' });
+
+        return true;
+      }
     );
   });
 
@@ -197,7 +207,12 @@ describe('处理器行为（假 worker 当 this）', () => {
           id: 'b6',
           data: { variableName: 'nope', expression: 'x', flag: [] },
         }),
-      /Cant find "nope" variable/
+      (error) => {
+        assert.equal(error.message, 'variable-not-found');
+        assert.deepEqual(error.data, { variableName: 'nope' });
+
+        return true;
+      }
     );
 
     const notString = fakeWorker();
@@ -208,7 +223,12 @@ describe('处理器行为（假 worker 当 this）', () => {
           id: 'b6',
           data: { variableName: 'n', expression: 'x', flag: [] },
         }),
-      /is not a string/
+      (error) => {
+        assert.equal(error.message, 'invalid-variable-string');
+        assert.deepEqual(error.data, { variableName: 'n' });
+
+        return true;
+      }
     );
   });
 

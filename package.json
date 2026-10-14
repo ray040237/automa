@@ -25,6 +25,7 @@
     "lint": "eslint --ext .js,.vue --ignore-path .gitignore .",
     "test": "node --import ./utils/test-loader.mjs --test \"src/agent/**/*.test.js\" \"src/composable/**/*.test.js\" \"src/workflowEngine/**/*.test.js\" \"src/utils/**/*.test.js\" \"utils/**/*.test.js\"",
     "check:i18n": "node utils/check-i18n.js",
+    "check:engine-errors": "node utils/check-engine-errors.js",
     "test:dom": "node --test .agent-test/dom.test.mjs .agent-test/verify-selector.test.mjs",
     "test:eval": "node --import ./utils/test-loader.mjs .agent-test/eval/runner.mjs"
   },

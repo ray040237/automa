@@ -124,7 +124,7 @@ async function updateSpreadsheetValues(
 
 export default async function ({ data, id }, { refData }) {
   if (IS_OFFLINE) {
-    throw new Error('Google Sheets block is not available in offline mode');
+    throw new Error('google-sheets-offline');
   }
 
   const isNotCreateAction = !['create', 'add-sheet'].includes(data.type);

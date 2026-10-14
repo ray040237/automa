@@ -51,7 +51,7 @@ async function cookie({ data, id }) {
 
   if (data.useJson) {
     const obj = parseJSON(data.jsonCode, null);
-    if (!obj) throw new Error('Invalid JSON format');
+    if (!obj) throw new Error('invalid-json-format');
 
     result = await BrowserAPIService.cookies[key](obj);
   } else {

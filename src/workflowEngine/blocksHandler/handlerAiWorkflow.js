@@ -12,14 +12,14 @@ async function aiWorkflow(block, { refData }) {
   } = block.data;
 
   if (IS_OFFLINE) {
-    throw new Error('AI Workflow block is not available in offline mode');
+    throw new Error('ai-workflow-offline');
   }
 
   const replacedValueList = {};
   const aipowerToken = this.engine.workflow.settings?.aipowerToken;
 
   if (!aipowerToken) {
-    throw new Error('AI Power token is not set');
+    throw new Error('ai-power-token-missing');
   }
 
   const inputForAPI = {};
@@ -48,7 +48,7 @@ async function aiWorkflow(block, { refData }) {
     const { success, msg } = runResponse;
 
     if (!success) {
-      throw new Error(msg || 'AI workflow execution failed');
+      throw new Error(msg || 'ai-workflow-failed');
     }
 
     if (assignVariable) {

@@ -18,7 +18,7 @@ function blockExecutionWrapper(blockHandler, blockData) {
     const timeoutMs = blockData?.settings?.blockTimeout;
     if (timeoutMs && timeoutMs > 0) {
       timeout = setTimeout(() => {
-        reject(new Error('Timeout'));
+        reject(new Error('block-timeout'));
       }, timeoutMs);
     }
 
@@ -549,7 +549,7 @@ class WorkflowWorker {
           );
           return result;
         }
-        error.message = 'Could not establish connection to the active tab';
+        error.message = 'no-connection-to-tab';
       } else if (error.message?.startsWith('No tab')) {
         error.message = 'active-tab-removed';
       }

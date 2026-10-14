@@ -61,7 +61,7 @@ async function registerDownloadListeners() {
         permissions: ['downloads'],
       });
       if (!granted) {
-        throw new Error('Download feature requires download permission');
+        throw new Error('download-permission-missing');
       }
     }
 
@@ -89,7 +89,7 @@ async function handleDownload({ data, id: blockId }) {
         permissions: ['downloads'],
       });
       if (!granted) {
-        throw new Error('Download feature requires download permission');
+        throw new Error('download-permission-missing');
       }
     }
 
@@ -101,16 +101,18 @@ async function handleDownload({ data, id: blockId }) {
     let downloadId = null;
     if (processedData.downloadId?.trim()) {
       if (Number.isNaN(+processedData.downloadId))
-        throw new Error('Download id is not a number');
+        throw new Error('invalid-download-id');
 
       const [downloadItem] = await BrowserAPIService.downloads.search({
         id: +processedData.downloadId,
       });
 
-      if (!downloadItem)
-        throw new Error(
-          `Can't find download item with ${processedData.downloadId} id`
-        );
+      if (!downloadItem) {
+        const error = new Error('download-item-not-found');
+        error.data = { downloadId: processedData.downloadId };
+
+        throw error;
+      }
 
       if (downloadItem.state === 'complete') {
         if (processedData.saveData) {

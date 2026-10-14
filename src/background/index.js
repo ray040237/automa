@@ -477,7 +477,7 @@ function automaFetchClient(id, { type, resource }) {
   return new Promise((resolve, reject) => {
     const validType = ['text', 'json', 'base64'];
     if (!type || !validType.includes(type)) {
-      reject(new Error('The "type" must be "text" or "json"'));
+      reject(new Error('invalid-fetch-type'));
       return;
     }
 

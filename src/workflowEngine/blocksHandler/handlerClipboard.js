@@ -24,7 +24,7 @@ function doCommand(command, value) {
 
 export default async function ({ data, id, label }) {
   if (!IS_FIREFOX && !this.engine?.isPopup && !this.engine?.isMV2)
-    throw new Error('Clipboard block is not supported in background execution');
+    throw new Error('clipboard-background-unsupported');
 
   const permissions = ['clipboardRead'];
   if (IS_FIREFOX) {

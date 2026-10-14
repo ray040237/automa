@@ -9,7 +9,10 @@ export async function sliceData({ id, data }) {
     const { variables } = this.engine.referenceData;
 
     if (!objectHasKey(variables, data.varSourceName)) {
-      throw new Error(`Cant find "${data.varSourceName}" variable`);
+      const error = new Error('variable-not-found');
+      error.data = { variableName: data.varSourceName };
+
+      throw error;
     }
 
     dataToSort = variables[data.varSourceName];
@@ -17,8 +20,10 @@ export async function sliceData({ id, data }) {
 
   if (!Array.isArray(dataToSort)) {
     const dataType = dataToSort === null ? 'null' : typeof dataToSort;
+    const error = new Error('invalid-sort-data-type');
+    error.data = { dataType };
 
-    throw new Error(`Can't sort data with "${dataType}" data type`);
+    throw error;
   }
 
   const getComparisonValue = ({ itemA, itemB, order = 'asc' }) => {

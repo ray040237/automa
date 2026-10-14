@@ -2,7 +2,7 @@ import getTranslateLog from '@/utils/getTranslateLog';
 
 export async function logData({ id, data }) {
   if (!data.workflowId) {
-    throw new Error('No workflow is selected');
+    throw new Error('no-workflow-selected');
   }
 
   // 工作流状态数组

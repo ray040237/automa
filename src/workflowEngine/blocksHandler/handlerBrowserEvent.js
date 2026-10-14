@@ -74,7 +74,7 @@ function onTabLoaded({ tabLoadedUrl, activeTabLoaded, timeout }, { id }) {
 
     setTimeout(() => {
       resolved = true;
-      reject(new Error('timeout'));
+      reject(new Error('tab-load-timeout'));
     }, timeout || 10000);
   });
 }
@@ -106,7 +106,10 @@ export default async function ({ data, id }) {
   const currentEvent = events[data.eventName];
 
   if (!currentEvent) {
-    throw new Error(`Can't find ${data.eventName} event`);
+    const error = new Error('event-not-found');
+    error.data = { eventName: data.eventName };
+
+    throw error;
   }
 
   const result = await currentEvent(data, this.activeTab);
