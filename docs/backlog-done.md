@@ -4478,3 +4478,26 @@ align=left  sidebar=320 chip 23..117   panel   23..311   |  超出侧栏左   0p
 **决定与理由（用户 2026-10-14 拍板「维持现状不修」）**：四条文案落在 T-258 的判据上（只会在用户犯错/卡住时出现，恰恰最需要看懂），技术上也可低成本实现；但该入口**零文档、零 UI 入口、不进 WAR**，属上游遗留的技术性入口，本仓未做任何推广，且这页**完全没有样式**（翻译成中文后仍是「白页一行字」，要真正变好用得配最小版式，属独立改进）。综合「改动收益（仅 4 条文案）× 引入成本（新 locale 文件 + 三处取值改造，或把 vue-i18n 拖进刻意无 UI 的页）」后决定**维持现状**，不为一个未推广的入口在刻意保持极简的执行页里加 i18n 机制。
 **附带记录（不在本票范围，未开票）**：① 该页无任何样式，错误态是白页 + 默认字体一行英文，可读性差 —— 若要改进应作独立票（居中版式 + 「请检查 URL 里的工作流 ID」），不要塞进 i18n；② **不建议**把 `execute.html` 加进 `web_accessible_resources` —— 现在只有地址栏/书签能到，一旦进 WAR，任何网页都能直接触发用户的工作流（扩大攻击面）。
 状态：已清（2026-10-14 评估后不修）
+
+### T-261 — `params/App.vue` 脚本侧两条错误文案（`Canceled` / `Timeout`）接入语言包
+
+类型：改进
+登记日期：2026-10-14
+来源：T-259 结票时核实 `utils/check-i18n.js` 的 `params/App.vue` 例外是否 stale（结论：例外 stale、已摘除），顺带按 T-258 的「扫描器有盲区」教训补扫该文件 script 段的字符串字面量。
+现象：`src/params/App.vue` 的模板已全部走 `t()`（T-254 接入 i18n），但 **script 侧还有两条英文文案**：
+- `:93` `cancelParamBlock(index, workflow, 'Canceled')`（用户点「取消」）
+- `:357` `cancelParamBlock(index, workflow, 'Timeout')`（`checkTimeout` 轮询判定超时）
+**为什么用户看得见**：`cancelParamBlock`（`:298`）把 `message` 写进 `browser.storage.local[data.promptId] = { message, $isError: true }`；消费方 `src/workflowEngine/blocksHandler/handlerParameterPrompt.js:19-21` 命中 `$isError` 时 `reject(new Error(newValue.message))` —— 该 Error 被 `WorkflowWorker.js:372-379` 收进 `errorLogData.message`，最终由 `LogsHistory.vue:141/264` 渲染、导出日志也带（`:463`）。即这两条会**原样进工作流日志/错误态**，中文用户看到英文。
+**为什么扫描器看不到**：两条都在 `<script setup>` 里，而 `utils/check-i18n.js`（`ATTR_RE`/`TEXT_RE`）与 `.scratch/scan-hardcoded-en.mjs` **都只扫 template 静态串** → 共同盲区（与 T-258 整族漏扫同型）。
+
+**修法**（用户 2026-10-14 拍板「顺手做掉」）：宿主已有完整 i18n 基建（`t()` 可用、locale 由 `loadLocaleMessages(store.settings.locale, 'newtab')` 加载），故只补语言包 + 换调用点：
+- `src/locales/en/newtab.json` + `src/locales/zh/newtab.json` 的 `workflow.parameters` 段各加 2 条：`canceled`（en `Canceled` / zh `已取消`）、`timeout`（en `Timeout` / zh `已超时`）。**放 `workflow.parameters` 而非 `common`**：这两条是「参数提示块」这条流程自己的消息，该段是 params 页的命名空间，且该页 `loadLocaleMessages(..., 'newtab')` 一定加载得到。**zh-TW 未补**（advisory，与 T-258 改 `newtab.json` 时的惯例一致：T-258 也没补 zh-TW）。
+- `src/params/App.vue`：`:93` 与 `:357` 两处把字面量换成 `t('workflow.parameters.canceled')` / `t('workflow.parameters.timeout')`。**注意第三参是数据**（会进 Error），必须传 `t(...)` 的结果而非 key。
+
+**顺手核实并记录的非问题**：同文件 `paramsList[x].name`（`'Input (string)'` / `'Input (JSON)'` / `'Checkbox'`，`:142,147,152`）与 `'retrieved'` / `'hosted'` 等串逐条核实**非用户可见**（`paramsList[x].name` 模板只用 `.valueComp`、从不渲染；后两者是内部标识符/前缀判断），**不计入**，也不改。
+
+**验收**：`npm run check:i18n` passed（zh-TW advisory 缺键为存量，本次 589）；`npm run lint` 0 error（10 条 no-console warning 为存量）；`npm test` **890 pass / 0 fail / 1 skip**（891 tests / 58 suites，与基线一致）；`npm run build` EXIT=0（仍旧例 `mv build` → `build.bak.202610141148` 再空目录重跑，2m59s）。**产物侧**：`build/params.bundle.js` 含 `workflow.parameters.canceled|timeout`、旧硬编码 `'Canceled'` **0 命中**；`build/locales/locale-zh-newtab-json.bundle.js` 含 `已取消`/`已超时`，en 含 `Canceled`/`Timeout`。
+**端到端 + 变异对照（先红后绿，两步都做）**：新建 `.scratch/verify-t261-e2e.mjs`（playwright 加载真实 `build/`，播种 `settings.locale` → 开 `params.html` → 用**真实消息名** `workflow:params-block`（`handlerParameterPrompt.js:105` 发给页面的那条）把工作流推进页面 → 点「取消」/ 等超时轮询 → 读回 `storage.local[promptId].message` 断言）。**红**：对 T-260 的旧 build 跑，zh 下按钮已是「取消」（页面 i18n 正常）但写入的 message 是 `"Canceled"` —— bug 复现；**绿**：重建后 zh → `已取消`、en → `Canceled`，超时路径 zh → `已超时`、en → `Timeout`，**4 条断言全过**。
+**踩坑记录**：① 点「取消」后 `deleteWorkflow` 会把页面 `window.close()`，之后任何 `page.waitForTimeout` 都会抛 `Target page … has been closed` —— 用普通 `setTimeout` 替代；② 该页的 `runtime.onMessage` 监听器能被**扩展 SW 的 `chrome.runtime.sendMessage`** 唤起（`runtime.sendMessage` 会广播给同扩展的各上下文），不必去走 `tabs.sendMessage`；③ 只有 `workflow:params-block` 这条消息路径会 push `type:'block'` 的工作流（`addWorkflow` 那条 query-param 路径不设 `type`），而「取消」按钮只在 block 分支里 —— 想 e2e 这条文案只能走消息路径。
+**顺带发现（已登记 T-262）**：块执行错误消息**整层**是英文（`blocksHandler/` 37 条）且原样进日志；此前扫描把 `throw` 当「内部错误」排除，对 blocksHandler 不成立。
+状态：已清（2026-10-14 完成）

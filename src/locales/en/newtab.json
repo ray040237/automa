@@ -501,7 +501,9 @@
       "add": "Add parameter",
       "preferInTab": "Prefer input parameters in the tab",
       "inputBeforeRun": "Input these workflows parameters before it runs.",
-      "byParamPromptBlock": "By Parameter Prompt block"
+      "byParamPromptBlock": "By Parameter Prompt block",
+      "canceled": "Canceled",
+      "timeout": "Timeout"
     },
     "blockValidation": {
       "issues": "Issues:",

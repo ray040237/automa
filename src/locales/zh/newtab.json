@@ -501,7 +501,9 @@
       "add": "添加参数",
       "preferInTab": "在标签页中输入参数",
       "inputBeforeRun": "请先在下方输入这些工作流参数。",
-      "byParamPromptBlock": "来自参数提示模块"
+      "byParamPromptBlock": "来自参数提示模块",
+      "canceled": "已取消",
+      "timeout": "已超时"
     },
     "blockValidation": {
       "issues": "问题：",

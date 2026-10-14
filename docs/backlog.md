@@ -220,18 +220,19 @@
 注：纯观感统一，无功能缺陷。T-247 的处置（冗余通知该删而不是该美化）对这批同样适用 —— 动手前先过一遍：这 30+ 条里有多少本身也是冗余的？
 状态：待审核
 
-#### T-261 — `params/App.vue` 脚本侧两条错误文案（`Canceled` / `Timeout`）仍是英文，进工作流错误态且扫描器看不到
+#### T-262 — 块执行错误消息整层是英文（`blocksHandler/` 37 条），且原样进工作流日志；slug 部分与 docs 锚点绑定，本地化需先评估
 
 登记日期：2026-10-14
-来源：T-259 结票时核实 `utils/check-i18n.js` 的 `params/App.vue` 例外是否 stale（结论：例外 stale、已摘除），顺带按 T-258 的「扫描器有盲区」教训补扫该文件 script 段的字符串字面量。
-现象：`src/params/App.vue` 的模板已全部走 `t()`（T-254 接入 i18n，`onMounted` 里 `loadLocaleMessages(store.settings.locale, 'newtab')`），但 **script 侧还有两条英文文案**：
-- `:93` `cancelParamBlock(index, workflow, 'Canceled')`（用户点「取消」）
-- `:357` `cancelParamBlock(index, workflow, 'Timeout')`（`checkTimeout` 轮询判定超时）
-证据：`cancelParamBlock`（`:292`）把 `message` 写进 `browser.storage.local[data.promptId] = { message, $isError: true }`；消费方 `src/workflowEngine/blocksHandler/handlerParameterPrompt.js:19-21` 命中 `$isError` 时 `reject(new Error(newValue.message))` —— 即 `'Canceled'` / `'Timeout'` 会**原样成为抛出的 Error message**，进工作流日志/错误态，中文用户看到的仍是英文。两条都在 `<script setup>` 里，`utils/check-i18n.js` 只扫 template（`ATTR_RE`/`TEXT_RE`）、`.scratch/scan-hardcoded-en.mjs` 同样只扫 template 静态串 → **两个扫描器都看不到**（与 T-258 整族漏扫同型）。
-注：同文件另有 `paramsList[x].name`（`'Input (string)'` / `'Input (JSON)'` / `'Checkbox'`，`:142,147,152`）与 `'retrieved'` / `'hosted'` 等串，逐条核实**非用户可见**（`paramsList[x].name` 模板只用 `.valueComp`、从不渲染；后两者是内部标识符/前缀判断），不计入。
-影响：量极小（2 条），但都是「用户主动取消 / 参数窗口超时」时刻的文案 —— 落在 T-258 的判据上（出错时最需要看懂）。
-建议：宿主已有完整 i18n 基建（`t()` 可用、locale 由 `loadLocaleMessages(..., 'newtab')` 加载），补 `newtab.json` 两条 key + 两处 `t()` 即可；注意 `cancelParamBlock` 的第三参是**数据**（会进 Error），要传 `t(...)` 的结果而非 key。
-状态：待审核（**低优先**：与 T-259 ③ 同属「收尾残余」，量小、非阻断）
+来源：T-261 修复时顺着「这两条错误消息为什么会进用户视野」往上追，发现 `src/workflowEngine/blocksHandler/` 的错误消息**整层**都没走语言包。
+现象：块处理器抛出的错误消息会**原样进工作流日志**（`WorkflowWorker.js:372-379` 把 `error.message` 放进 `errorLogData.message`；`LogsHistory.vue:141` / `:264` 直接渲染 `{{ item.message }}`，导出日志也带它，`:463`）。而这一层的消息几乎全是英文。
+证据：
+- **规模**：`blocksHandler/` 下 `new Error(...)` / `reject(new Error(...))` 的字面量去重 **37 条**，其中 15 条是含空格的多词英文句（如 `Can't find active tab`、`Clipboard block is not supported in background execution`、`AI Power token is not set`）。
+- **形态是混的**：一部分是**英文句子**（`handlerActiveTab.js:63`、`handlerClipboard.js:27`、`handlerAiWorkflow.js:15/22/51`…）；另一部分是**slug 标识符**（`handlerActiveTab.js:68` `'invalid-active-tab'`、`handlerBrowserEvent.js:34` `'no-tab'` / `:77` `'timeout'`、`handlerClipboard.js:39` `'no-clipboard-acces'`）。
+- **slug 那部分有额外耦合**：日志 UI 对带 `messageId` 的错误会渲染一条指向 `docs.extension.automa.site/reference/workflow-common-errors.html#<messageId>` 的文档链接（`LogsHistory.vue:19-20`、`:143-144`）—— 即 slug 既是消息也是文档锚点，本地化不能简单换字。
+- **为什么之前没被扫到**：T-255/T-258/T-259 那轮扫描把 `throw` 当「内部错误」排除了（T-259 登记原文：「排除内部 throw / console / CSS / 示例值」），但**块处理器抛的错是会进日志给用户看的**，这个排除对 blocksHandler 不成立。
+影响：中文用户的工作流一旦有块失败，日志里看到的是英文错误句/slug，中文界面下尤其突兀。
+建议：**先评估再动手**。① 分两半处理 —— 英文句子那半可机械接语言包；slug 那半要先决定「slug 保持英文（当 messageId 用）+ 另配一条本地化的展示文案」还是「slug 也翻译（但要同步 docs 锚点，成本高）」。② 语言包位置：这层跑在 workflowEngine（background/offscreen/content 多宿主），不像 params 页那样有现成 i18n 宿主 —— 要先确认可用的 locale 来源（参考 T-260 的结论：content 一族必须静态导入词条，fetch 原始 json 会撞 MV3 CSP）。③ 量不小（37 条），建议独立一张票、单独一轮做，别和收尾残余混。
+状态：待审核（**需先做设计评估**，不是机械替换）
 
 ### 新功能（要讨论场景，审得慢）
 

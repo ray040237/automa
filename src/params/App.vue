@@ -90,7 +90,13 @@
             <template v-if="workflow.type === 'block'">
               <ui-button
                 class="mr-4"
-                @click="cancelParamBlock(index, workflow, 'Canceled')"
+                @click="
+                  cancelParamBlock(
+                    index,
+                    workflow,
+                    t('workflow.parameters.canceled')
+                  )
+                "
               >
                 {{ t('common.cancel') }}
               </ui-button>
@@ -354,7 +360,7 @@ browser.runtime.onMessage.addListener(({ name, data }) => {
           )
             return;
 
-          cancelParamBlock(index, workflow, 'Timeout');
+          cancelParamBlock(index, workflow, t('workflow.parameters.timeout'));
         });
       }, 1000);
     }
