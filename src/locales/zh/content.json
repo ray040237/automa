@@ -1,0 +1,69 @@
+{
+  "content": {
+    "elementSelector": {
+      "interactWithPage": "与页面交互",
+      "selectElement": "选择元素",
+      "selectorSettings": "选择器设置",
+      "includeElementId": "包含元素 id",
+      "includeTagName": "包含标签名",
+      "includeClassName": "包含类名",
+      "includeAttributes": "包含属性",
+      "attributeNames": "属性名",
+      "attributeName": "属性名",
+      "useCommasToSeparate": "多个属性请用逗号分隔",
+      "clickOrPress": "点击或按",
+      "toSelectElement": "以选择元素"
+    },
+    "selectorQuery": {
+      "cssSelector": "CSS 选择器",
+      "xpath": "XPath",
+      "selectListOfElements": "选择元素列表",
+      "selectorSettings": "选择器设置",
+      "elementSelector": "元素选择器",
+      "parentElement": "父元素",
+      "childElement": "子元素"
+    },
+    "selectorBlocks": {
+      "selectBlock": "选择块"
+    },
+    "selectorDetail": {
+      "attributes": "属性",
+      "options": "选项",
+      "blocks": "块",
+      "attributeName": "属性名",
+      "empty": "空",
+      "selectElementOptions": "选择元素选项",
+      "optionName": "选项名",
+      "optionValue": "选项值"
+    },
+    "recordWorkflow": {
+      "stopRecording": "停止录制",
+      "selectElement": "选择元素",
+      "selectListElement": "选择列表元素",
+      "selectElementByClicking": "点击以选择元素",
+      "elementListId": "元素列表 id",
+      "save": "保存",
+      "selectWhatToDo": "选择要做什么",
+      "selectAttribute": "选择属性",
+      "assignToVariable": "赋值给变量",
+      "insertToTable": "插入到表格",
+      "selectColumnNone": "选择列 [无]",
+      "variableName": "变量名",
+      "press": "按",
+      "toCancel": "取消"
+    },
+    "commandPalette": {
+      "searchWorkflows": "搜索工作流...",
+      "cantFindWorkflows": "找不到工作流",
+      "openDashboard": "打开主面板",
+      "press": "按",
+      "escape": "Esc",
+      "toCancel": "取消"
+    },
+    "install": {
+      "confirm": "确定要将此工作流添加到 Automa 吗？",
+      "installed": "工作流已安装"
+    },
+    "blockIdEmpty": "块 id 为空"
+  }
+}

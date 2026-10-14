@@ -17,7 +17,7 @@ import selectorFrameContext from './selectorFrameContext';
       rootElement.classList.add('automa-element-selector');
       rootElement.attachShadow({ mode: 'open' });
 
-      initElementSelector(rootElement);
+      await initElementSelector(rootElement);
       await injectAppStyles(rootElement.shadowRoot);
 
       document.documentElement.appendChild(rootElement);

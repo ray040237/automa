@@ -86,16 +86,8 @@ const exceptions = new Set([
   'components/newtab/workflow/edit/EditPressKey.vue',
   'components/newtab/workflow/edit/EditSwitchTo.vue',
   'components/newtab/workflow/edit/Trigger/TriggerElementChange.vue',
-  // phase 2: content-script UIs (element selector, command palette, recording
-  // toolbar, params page) need locale-loading plumbing before their strings
-  // can be moved
-  'content/commandPalette/App.vue',
-  'content/elementSelector/App.vue',
-  'content/services/recordWorkflow/App.vue',
+  // phase 3: the params page still needs its locale-loading plumbing
   'params/App.vue',
-  'components/content/selector/SelectorBlocks.vue',
-  'components/content/selector/SelectorElementsDetail.vue',
-  'components/content/selector/SelectorQuery.vue',
   // intentional: dead code blocks / brand names
   'newtab/App.vue',
   'newtab/pages/settings/SettingsBackup.vue',

@@ -43,7 +43,7 @@ export default async function () {
     element.id = 'automa-palette';
 
     await injectAppStyles(element.shadowRoot);
-    initApp(element);
+    await initApp(element);
 
     appendToDocument(element);
   } catch (error) {

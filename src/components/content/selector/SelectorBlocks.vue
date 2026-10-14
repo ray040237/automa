@@ -4,7 +4,7 @@
       <ui-select
         v-model="state.selectedBlock"
         class="mr-4 flex-1 p-0.5"
-        placeholder="Select block"
+        :placeholder="t('content.selectorBlocks.selectBlock')"
         @change="onSelectChanged"
       >
         <option v-for="(block, id) in blocks" :key="id" :value="id">
@@ -16,7 +16,7 @@
         variant="accent"
         @click="executeBlock"
       >
-        Execute
+        {{ t('common.execute') }}
       </ui-button>
     </div>
     <component
@@ -34,6 +34,7 @@
   </div>
 </template>
 <script setup>
+import { useI18n } from 'vue-i18n';
 import { shallowReactive } from 'vue';
 import { tasks } from '@/utils/shared';
 import EditForms from '@/components/newtab/workflow/edit/EditForms.vue';
@@ -56,6 +57,8 @@ const props = defineProps({
   },
 });
 const emit = defineEmits(['update', 'execute']);
+
+const { t } = useI18n();
 
 const blocks = {
   forms: {

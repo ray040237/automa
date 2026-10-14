@@ -7,15 +7,19 @@
         class="w-full"
         @change="$emit('update:selectorType', $event)"
       >
-        <option value="css">CSS Selector</option>
-        <option value="xpath">XPath</option>
+        <option value="css">
+          {{ t('content.selectorQuery.cssSelector') }}
+        </option>
+        <option value="xpath">
+          {{ t('content.selectorQuery.xpath') }}
+        </option>
       </ui-select>
       <template v-if="selectorType === 'css'">
         <ui-button
           :class="{ 'text-primary': selectList }"
           icon
           class="ml-2"
-          title="Select a list of elements"
+          :title="t('content.selectorQuery.selectListOfElements')"
           @click.stop.prevent="$emit('update:selectList', !selectList)"
         >
           <v-remixicon name="riListUnordered" />
@@ -23,7 +27,7 @@
         <ui-button
           icon
           class="ml-2"
-          title="Selector settings"
+          :title="t('content.selectorQuery.selectorSettings')"
           @click="$emit('settings', !settingsActive)"
         >
           <v-remixicon
@@ -35,7 +39,7 @@
     <div class="mt-2 flex items-center">
       <ui-input
         :model-value="selector"
-        placeholder="Element selector"
+        :placeholder="t('content.selectorQuery.elementSelector')"
         class="element-selector h-full flex-1 leading-normal"
         @change="$emit('selector', $event)"
       >
@@ -51,12 +55,15 @@
       <template v-if="selectedCount === 1 && !selector.includes('|>')">
         <button
           class="mr-1 ml-2"
-          title="Parent element"
+          :title="t('content.selectorQuery.parentElement')"
           @click.stop.prevent="$emit('parent')"
         >
           <v-remixicon rotate="90" name="riArrowLeftLine" />
         </button>
-        <button title="Child element" @click.stop.prevent="$emit('child')">
+        <button
+          :title="t('content.selectorQuery.childElement')"
+          @click.stop.prevent="$emit('child')"
+        >
           <v-remixicon rotate="-90" name="riArrowLeftLine" />
         </button>
       </template>
@@ -64,12 +71,15 @@
   </div>
 </template>
 <script setup>
+import { useI18n } from 'vue-i18n';
 import { inject } from 'vue';
 import {
   copyTextToClipboard,
   fallbackCopyTextToClipboard,
 } from '@/utils/clipboard';
 import UiInput from '@/components/ui/UiInput.vue';
+
+const { t } = useI18n();
 
 const props = defineProps({
   selector: {

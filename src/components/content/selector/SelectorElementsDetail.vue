@@ -5,9 +5,15 @@
     fill
     @change="$emit('update:activeTab', $event)"
   >
-    <ui-tab value="attributes"> Attributes </ui-tab>
-    <ui-tab v-if="selectElements.length > 0" value="options"> Options </ui-tab>
-    <ui-tab v-if="!hideBlocks" value="blocks"> Blocks </ui-tab>
+    <ui-tab value="attributes">
+      {{ t('content.selectorDetail.attributes') }}
+    </ui-tab>
+    <ui-tab v-if="selectElements.length > 0" value="options">
+      {{ t('content.selectorDetail.options') }}
+    </ui-tab>
+    <ui-tab v-if="!hideBlocks" value="blocks">
+      {{ t('content.selectorDetail.blocks') }}
+    </ui-tab>
   </ui-tabs>
   <ui-tab-panels
     :model-value="activeTab"
@@ -27,13 +33,13 @@
           >
             <p
               class="text-overflow text-sm leading-tight text-gray-600"
-              title="Attribute name"
+              :title="t('content.selectorDetail.attributeName')"
             >
               {{ name }}
             </p>
             <ui-input
               :model-value="value"
-              :placeholder="!value ? 'EMPTY' : null"
+              :placeholder="!value ? t('content.selectorDetail.empty') : null"
               :data-testid="name"
               :title="name"
               readonly
@@ -55,7 +61,7 @@
     <ui-tab-panel value="options">
       <selector-element-list
         :elements="selectElements"
-        element-name="Select element options"
+        :element-name="t('content.selectorDetail.selectElementOptions')"
         @highlight="
           $emit('highlight', {
             index: $event.element.elIndex,
@@ -71,13 +77,13 @@
           >
             <p
               class="text-overflow text-sm leading-tight text-gray-600"
-              title="Option name"
+              :title="t('content.selectorDetail.optionName')"
             >
               {{ option.name }}
             </p>
             <input
               :value="option.value"
-              title="Option value"
+              :title="t('content.selectorDetail.optionValue')"
               class="text-overflow w-full bg-transparent focus:ring-0"
               readonly
               @click="$event.target.select()"
@@ -97,6 +103,7 @@
   </ui-tab-panels>
 </template>
 <script setup>
+import { useI18n } from 'vue-i18n';
 import { inject } from 'vue';
 import {
   copyTextToClipboard,
@@ -104,6 +111,8 @@ import {
 } from '@/utils/clipboard';
 import SelectorBlocks from './SelectorBlocks.vue';
 import SelectorElementList from './SelectorElementList.vue';
+
+const { t } = useI18n();
 
 const props = defineProps({
   activeTab: {

@@ -3,10 +3,14 @@ import vRemixicon from 'v-remixicon';
 import App from './App.vue';
 import compsUi from './compsUi';
 import icons from './icons';
+import { createContentI18n } from '../contentI18n';
 
 const additionalStyle = `.list-item-active svg { visibility: visible }`;
 
-export default function (rootElement) {
+export default async function (rootElement) {
+  // 同 elementSelector：locale 就绪后再挂载，见 contentI18n.js 注释。
+  const i18n = await createContentI18n();
+
   const appRoot = document.createElement('div');
   appRoot.setAttribute('id', 'app');
 
@@ -18,6 +22,7 @@ export default function (rootElement) {
 
   createApp(App)
     .use(compsUi)
+    .use(i18n)
     .use(vRemixicon, icons)
     .provide('rootElement', rootElement)
     .mount(appRoot);

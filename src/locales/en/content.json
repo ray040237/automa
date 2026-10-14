@@ -1,0 +1,69 @@
+{
+  "content": {
+    "elementSelector": {
+      "interactWithPage": "Interact with page",
+      "selectElement": "Select Element",
+      "selectorSettings": "Selector settings",
+      "includeElementId": "Include element id",
+      "includeTagName": "Include tag name",
+      "includeClassName": "Include class name",
+      "includeAttributes": "Include attributes",
+      "attributeNames": "Attribute names",
+      "attributeName": "Attribute name",
+      "useCommasToSeparate": "Use commas to separate the attribute",
+      "clickOrPress": "Click or press",
+      "toSelectElement": "to select an element"
+    },
+    "selectorQuery": {
+      "cssSelector": "CSS Selector",
+      "xpath": "XPath",
+      "selectListOfElements": "Select a list of elements",
+      "selectorSettings": "Selector settings",
+      "elementSelector": "Element selector",
+      "parentElement": "Parent element",
+      "childElement": "Child element"
+    },
+    "selectorBlocks": {
+      "selectBlock": "Select block"
+    },
+    "selectorDetail": {
+      "attributes": "Attributes",
+      "options": "Options",
+      "blocks": "Blocks",
+      "attributeName": "Attribute name",
+      "empty": "EMPTY",
+      "selectElementOptions": "Select element options",
+      "optionName": "Option name",
+      "optionValue": "Option value"
+    },
+    "recordWorkflow": {
+      "stopRecording": "Stop recording",
+      "selectElement": "Select element",
+      "selectListElement": "Select list element",
+      "selectElementByClicking": "Select an element by clicking on it",
+      "elementListId": "Element list id",
+      "save": "Save",
+      "selectWhatToDo": "Select what to do",
+      "selectAttribute": "Select attribute",
+      "assignToVariable": "Assign to variable",
+      "insertToTable": "Insert to table",
+      "selectColumnNone": "Select column [none]",
+      "variableName": "Variable name",
+      "press": "Press",
+      "toCancel": "to cancel"
+    },
+    "commandPalette": {
+      "searchWorkflows": "Search workflows...",
+      "cantFindWorkflows": "Can't find workflows",
+      "openDashboard": "Open dashboard",
+      "press": "Press",
+      "escape": "Escape",
+      "toCancel": "to cancel"
+    },
+    "install": {
+      "confirm": "Do you want to add this workflow into Automa?",
+      "installed": "Workflow installed"
+    },
+    "blockIdEmpty": "Block id is empty"
+  }
+}

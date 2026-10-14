@@ -7,6 +7,7 @@ import { nanoid } from 'nanoid';
 import browser from 'webextension-polyfill';
 import blocksHandler from './blocksHandler';
 import initCommandPalette from './commandPalette';
+import { createContentI18n } from './contentI18n';
 import handleSelector, {
   getDocumentCtx,
   queryElements,
@@ -143,11 +144,12 @@ async function messageListener({ data, source }) {
     if (data.type === 'automa:execute-block') {
       const messageToken = await browser.storage.local.get(data.messageId);
       if (!data.messageId || !messageToken[data.messageId]) {
+        const i18n = await createContentI18n();
         window.top.postMessage(
           {
             result: {
               $isError: true,
-              message: 'Block id is empty',
+              message: i18n.global.t('content.blockIdEmpty'),
               data: {},
             },
             type: 'automa:block-execute-result',
@@ -362,7 +364,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (!isAutomaWorkflow) return;
 
   const accept = window.confirm(
-    'Do you want to add this workflow into Automa?'
+    (await createContentI18n()).global.t('content.install.confirm')
   );
   if (!accept) return;
   const workflow = JSON.parse(document.documentElement.innerText);
@@ -388,5 +390,5 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   await browser.storage.local.set({ workflows: workflowsStorage });
 
-  alert('Workflow installed');
+  alert((await createContentI18n()).global.t('content.install.installed'));
 });

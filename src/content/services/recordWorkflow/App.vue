@@ -16,7 +16,7 @@
       <span
         class="relative flex cursor-pointer items-center justify-center rounded-full bg-red-400"
         style="height: 24px; width: 24px"
-        title="Stop recording"
+        :title="t('content.recordWorkflow.stopRecording')"
         @click="stopRecording"
       >
         <v-remixicon
@@ -39,23 +39,23 @@
           class="bg-input w-full rounded-lg px-4 py-2 transition"
           @click="startSelecting()"
         >
-          Select element
+          {{ t('content.recordWorkflow.selectElement') }}
         </button>
         <button
           class="bg-input mt-2 w-full rounded-lg px-4 py-2 transition"
           @click="startSelecting(true)"
         >
-          Select list element
+          {{ t('content.recordWorkflow.selectListElement') }}
         </button>
       </template>
       <div v-else-if="selectState.status === 'selecting'" class="leading-tight">
         <p v-if="selectState.selectedElements.length === 0">
-          Select an element by clicking on it
+          {{ t('content.recordWorkflow.selectElementByClicking') }}
         </p>
         <template v-else>
           <template v-if="selectState.list && !selectState.listId">
             <label for="list-id" class="ml-1" style="font-size: 14px">
-              Element list id
+              {{ t('content.recordWorkflow.elementListId') }}
             </label>
             <input
               id="list-id"
@@ -69,7 +69,7 @@
               class="mt-2 w-full rounded-lg bg-accent px-4 py-2 text-white"
               @click="saveElementListId"
             >
-              Save
+              {{ t('content.recordWorkflow.save') }}
             </button>
           </template>
           <template v-else>
@@ -96,7 +96,9 @@
               v-model="addBlockState.activeBlock"
               class="bg-input mt-2 w-full rounded-lg px-4 py-2"
             >
-              <option value="" disabled selected>Select what to do</option>
+              <option value="" disabled selected>
+                {{ t('content.recordWorkflow.selectWhatToDo') }}
+              </option>
               <option
                 v-for="block in addBlockState.blocks"
                 :key="block"
@@ -117,7 +119,9 @@
                 v-model="addBlockState.activeAttr"
                 class="bg-input mt-2 block w-full rounded-lg px-4 py-2"
               >
-                <option value="" selected disabled>Select attribute</option>
+                <option value="" selected disabled>
+                  {{ t('content.recordWorkflow.selectAttribute') }}
+                </option>
                 <option
                   v-for="(value, name) in addBlockState.attributes"
                   :key="name"
@@ -130,26 +134,28 @@
                 for="variable-name"
                 class="ml-2 mt-2 text-sm text-gray-600"
               >
-                Assign to variable
+                {{ t('content.recordWorkflow.assignToVariable') }}
               </label>
               <input
                 id="variable-name"
                 v-model="addBlockState.varName"
-                placeholder="Variable name"
+                :placeholder="t('content.recordWorkflow.variableName')"
                 class="bg-input w-full rounded-lg px-4 py-2"
               />
               <label
                 for="select-column"
                 class="ml-2 mt-2 text-sm text-gray-600"
               >
-                Insert to table
+                {{ t('content.recordWorkflow.insertToTable') }}
               </label>
               <select
                 id="select-column"
                 v-model="addBlockState.column"
                 class="bg-input block w-full rounded-lg px-4 py-2"
               >
-                <option value="" selected>Select column [none]</option>
+                <option value="" selected>
+                  {{ t('content.recordWorkflow.selectColumnNone') }}
+                </option>
                 <option
                   v-for="column in addBlockState.workflowColumns"
                   :key="column.id"
@@ -169,13 +175,14 @@
               class="mt-4 block w-full rounded-lg bg-accent px-4 py-2 text-white"
               @click="addFlowItem"
             >
-              Save
+              {{ t('content.recordWorkflow.save') }}
             </button>
           </template>
         </template>
         <p class="mt-4" style="font-size: 14px">
-          Press <kbd class="bg-box-transparent rounded-md p-1">Esc</kbd> to
-          cancel
+          {{ t('content.recordWorkflow.press') }}
+          <kbd class="bg-box-transparent rounded-md p-1">Esc</kbd>
+          {{ t('content.recordWorkflow.toCancel') }}
         </p>
       </div>
     </div>
@@ -196,6 +203,7 @@
 </template>
 <script setup>
 import { ref, reactive, watch, onMounted, onBeforeUnmount } from 'vue';
+import { useI18n } from 'vue-i18n';
 import browser from 'webextension-polyfill';
 import { toCamelCase } from '@/utils/helper';
 import { tasks } from '@/utils/shared';
@@ -203,6 +211,8 @@ import findSelector from '@/lib/findSelector';
 import SharedElementSelector from '@/components/content/shared/SharedElementSelector.vue';
 import { getElementRect } from '../../utils';
 import addBlock from './addBlock';
+
+const { t } = useI18n();
 
 const mouseRelativePos = { x: 0, y: 0 };
 const elementsPath = {

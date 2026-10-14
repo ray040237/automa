@@ -1,0 +1,69 @@
+{
+  "content": {
+    "elementSelector": {
+      "interactWithPage": "與頁面互動",
+      "selectElement": "選擇元素",
+      "selectorSettings": "選擇器設定",
+      "includeElementId": "包含元素 id",
+      "includeTagName": "包含標籤名稱",
+      "includeClassName": "包含類別名稱",
+      "includeAttributes": "包含屬性",
+      "attributeNames": "屬性名稱",
+      "attributeName": "屬性名稱",
+      "useCommasToSeparate": "多個屬性請用逗號分隔",
+      "clickOrPress": "點擊或按",
+      "toSelectElement": "以選擇元素"
+    },
+    "selectorQuery": {
+      "cssSelector": "CSS 選擇器",
+      "xpath": "XPath",
+      "selectListOfElements": "選擇元素列表",
+      "selectorSettings": "選擇器設定",
+      "elementSelector": "元素選擇器",
+      "parentElement": "父元素",
+      "childElement": "子元素"
+    },
+    "selectorBlocks": {
+      "selectBlock": "選擇區塊"
+    },
+    "selectorDetail": {
+      "attributes": "屬性",
+      "options": "選項",
+      "blocks": "區塊",
+      "attributeName": "屬性名稱",
+      "empty": "空",
+      "selectElementOptions": "選擇元素選項",
+      "optionName": "選項名稱",
+      "optionValue": "選項值"
+    },
+    "recordWorkflow": {
+      "stopRecording": "停止錄製",
+      "selectElement": "選擇元素",
+      "selectListElement": "選擇列表元素",
+      "selectElementByClicking": "點擊以選擇元素",
+      "elementListId": "元素列表 id",
+      "save": "儲存",
+      "selectWhatToDo": "選擇要做什麼",
+      "selectAttribute": "選擇屬性",
+      "assignToVariable": "指派給變數",
+      "insertToTable": "插入到表格",
+      "selectColumnNone": "選擇欄位 [無]",
+      "variableName": "變數名稱",
+      "press": "按",
+      "toCancel": "取消"
+    },
+    "commandPalette": {
+      "searchWorkflows": "搜尋工作流程...",
+      "cantFindWorkflows": "找不到工作流程",
+      "openDashboard": "開啟主面板",
+      "press": "按",
+      "escape": "Esc",
+      "toCancel": "取消"
+    },
+    "install": {
+      "confirm": "確定要將此工作流程新增至 Automa 嗎？",
+      "installed": "工作流程已安裝"
+    },
+    "blockIdEmpty": "區塊 id 為空"
+  }
+}

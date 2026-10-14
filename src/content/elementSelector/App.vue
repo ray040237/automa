@@ -28,7 +28,7 @@
         <button
           class="hoverable mr-2 rounded-md p-1 transition"
           :class="{ 'bg-box-transparent': state.interact }"
-          title="Interact with page"
+          :title="t('content.elementSelector.interactWithPage')"
           @mousedown.stop.prevent
           @click.stop.prevent="state.interact = !state.interact"
         >
@@ -68,7 +68,7 @@
           class="mt-4 w-full"
           @click="saveSelector"
         >
-          Select Element
+          {{ t('content.elementSelector.selectElement') }}
         </ui-button>
         <selector-elements-detail
           v-if="
@@ -92,55 +92,57 @@
           "
           class="mt-4"
         >
-          <p class="mb-4 font-semibold">Selector settings</p>
+          <p class="mb-4 font-semibold">
+            {{ t('content.elementSelector.selectorSettings') }}
+          </p>
           <ul class="space-y-4">
             <li>
               <label class="flex items-center space-x-2">
                 <ui-switch v-model="selectorSettings.idName" />
-                <p>Include element id</p>
+                <p>{{ t('content.elementSelector.includeElementId') }}</p>
               </label>
             </li>
             <li>
               <label class="flex items-center space-x-2">
                 <ui-switch v-model="selectorSettings.tagName" />
-                <p>Include tag name</p>
+                <p>{{ t('content.elementSelector.includeTagName') }}</p>
               </label>
             </li>
             <li>
               <label class="flex items-center space-x-2">
                 <ui-switch v-model="selectorSettings.className" />
-                <p>Include class name</p>
+                <p>{{ t('content.elementSelector.includeClassName') }}</p>
               </label>
             </li>
             <li>
               <label class="flex items-center space-x-2">
                 <ui-switch v-model="selectorSettings.attr" />
-                <p>Include attributes</p>
+                <p>{{ t('content.elementSelector.includeAttributes') }}</p>
               </label>
               <template v-if="selectorSettings.attr">
                 <label
                   class="ml-1 mt-2 block text-sm text-gray-600"
                   for="automa-attribute-names"
                 >
-                  Attribute names
+                  {{ t('content.elementSelector.attributeNames') }}
                 </label>
                 <ui-textarea
                   id="automa-attribute-names"
                   v-model="selectorSettings.attrNames"
-                  label="Attribute name"
+                  :label="t('content.elementSelector.attributeName')"
                   placeholder="data-testid, aria-label, type"
                 />
                 <span class="text-sm">
-                  Use commas to separate the attribute
+                  {{ t('content.elementSelector.useCommasToSeparate') }}
                 </span>
               </template>
             </li>
           </ul>
         </div>
         <p class="mt-1 text-sm text-gray-600">
-          Click or press
-          <kbd class="bg-box-transparent rounded-md p-1">Space</kbd> to select
-          an element
+          {{ t('content.elementSelector.clickOrPress') }}
+          <kbd class="bg-box-transparent rounded-md p-1">Space</kbd>
+          {{ t('content.elementSelector.toSelectElement') }}
         </p>
       </div>
     </div>
@@ -173,9 +175,12 @@ import {
   toRaw,
   watch,
 } from 'vue';
+import { useI18n } from 'vue-i18n';
 import browser from 'webextension-polyfill';
 import { getElementRect } from '../utils';
 import getSelectorOptions from './getSelectorOptions';
+
+const { t } = useI18n();
 
 let connectedPort = null;
 const originalFontSize = document.documentElement.style.fontSize;
