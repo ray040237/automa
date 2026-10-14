@@ -220,15 +220,18 @@
 注：纯观感统一，无功能缺陷。T-247 的处置（冗余通知该删而不是该美化）对这批同样适用 —— 动手前先过一遍：这 30+ 条里有多少本身也是冗余的？
 状态：待审核
 
-#### T-259 — JS 侧（非 .vue）剩余用户可见硬编码英文：execute 独立页三条诊断文案（①② 已随 T-260 收口）
+#### T-261 — `params/App.vue` 脚本侧两条错误文案（`Canceled` / `Timeout`）仍是英文，进工作流错误态且扫描器看不到
 
 登记日期：2026-10-14
-来源：T-258 收尾时按登记条目要求补扫 `src/**/*.js`（grep 句子级英文串 + 逐条甄别）
-现象：登记时共 3 文件 5 条，**其中 ①② 已于 2026-10-14 随 T-260（content script 一族 i18n 接入）一并收口** —— ① `src/content/index.js` 的 `message: 'Block id is empty'` → `t('content.blockIdEmpty')`；② `alert('Workflow installed')` → `t('content.install.installed')`（另有 `window.confirm` 的 `t('content.install.confirm')`）。见 `backlog-done.md` 的 **T-260**。**剩余 ③**：`src/execute/index.js:32,44,50` 的 `Invalid path` / `Workflow not found` / `Executing workflow`（`writeResult` 直写 `document.body.innerText` 的独立执行页）。
-证据：全仓 grep 句子级英文串，排除内部 throw / console / CSS / 示例值 / browser 级 justification 后，用户可见的只剩这三处文件五条。③ 的宿主 `src/execute/index.js` 是**没有 Vue、没有 i18n 挂载**的裸 JS 页（产物 `build/execute.bundle.js` 仅 21KB，无 Vue 依赖）。
-影响：中文用户在 URL 执行入口（`*.automa.json` 触发的执行页）看到英文。量小（3 条）但都是「出结果/出异常」时刻的文案。
-建议：③ 单独评估 —— 要么读取 `browser.storage.local` 的 settings.locale 后走一个极简 t()（为 3 条建 Vue i18n 明显过度），要么维持现状（该页是 URL 触发的技术入口，用户面窄）。
-状态：待审核（仅剩 ③）
+来源：T-259 结票时核实 `utils/check-i18n.js` 的 `params/App.vue` 例外是否 stale（结论：例外 stale、已摘除），顺带按 T-258 的「扫描器有盲区」教训补扫该文件 script 段的字符串字面量。
+现象：`src/params/App.vue` 的模板已全部走 `t()`（T-254 接入 i18n，`onMounted` 里 `loadLocaleMessages(store.settings.locale, 'newtab')`），但 **script 侧还有两条英文文案**：
+- `:93` `cancelParamBlock(index, workflow, 'Canceled')`（用户点「取消」）
+- `:357` `cancelParamBlock(index, workflow, 'Timeout')`（`checkTimeout` 轮询判定超时）
+证据：`cancelParamBlock`（`:292`）把 `message` 写进 `browser.storage.local[data.promptId] = { message, $isError: true }`；消费方 `src/workflowEngine/blocksHandler/handlerParameterPrompt.js:19-21` 命中 `$isError` 时 `reject(new Error(newValue.message))` —— 即 `'Canceled'` / `'Timeout'` 会**原样成为抛出的 Error message**，进工作流日志/错误态，中文用户看到的仍是英文。两条都在 `<script setup>` 里，`utils/check-i18n.js` 只扫 template（`ATTR_RE`/`TEXT_RE`）、`.scratch/scan-hardcoded-en.mjs` 同样只扫 template 静态串 → **两个扫描器都看不到**（与 T-258 整族漏扫同型）。
+注：同文件另有 `paramsList[x].name`（`'Input (string)'` / `'Input (JSON)'` / `'Checkbox'`，`:142,147,152`）与 `'retrieved'` / `'hosted'` 等串，逐条核实**非用户可见**（`paramsList[x].name` 模板只用 `.valueComp`、从不渲染；后两者是内部标识符/前缀判断），不计入。
+影响：量极小（2 条），但都是「用户主动取消 / 参数窗口超时」时刻的文案 —— 落在 T-258 的判据上（出错时最需要看懂）。
+建议：宿主已有完整 i18n 基建（`t()` 可用、locale 由 `loadLocaleMessages(..., 'newtab')` 加载），补 `newtab.json` 两条 key + 两处 `t()` 即可；注意 `cancelParamBlock` 的第三参是**数据**（会进 Error），要传 `t(...)` 的结果而非 key。
+状态：待审核（**低优先**：与 T-259 ③ 同属「收尾残余」，量小、非阻断）
 
 ### 新功能（要讨论场景，审得慢）
 

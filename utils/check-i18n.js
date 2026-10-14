@@ -86,8 +86,6 @@ const exceptions = new Set([
   'components/newtab/workflow/edit/EditPressKey.vue',
   'components/newtab/workflow/edit/EditSwitchTo.vue',
   'components/newtab/workflow/edit/Trigger/TriggerElementChange.vue',
-  // phase 3: the params page still needs its locale-loading plumbing
-  'params/App.vue',
   // intentional: dead code blocks / brand names
   'newtab/App.vue',
   'newtab/pages/settings/SettingsBackup.vue',
