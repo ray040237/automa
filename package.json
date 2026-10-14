@@ -4,7 +4,7 @@
   "description": "An extension for automating your browser by connecting blocks",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AutomaApp/automa.git"
+    "url": "https://github.com/ray040237/automa.git"
   },
   "scripts": {
     "build": "cross-env OFFLINE_MODE=1 node utils/build.js",

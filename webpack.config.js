@@ -40,7 +40,10 @@ const ASSET_PATH = process.env.ASSET_PATH || '/';
 const alias = {
   '@': path.resolve(__dirname, 'src/'),
   secrets: path.join(__dirname, 'secrets.blank.js'),
-  '@business': path.resolve(__dirname, 'business/dev'),
+  // 原指向顶层 `business/dev`（上游闭源商业代码的空壳，Automa Commercial
+  // License）。本 fork 不携带商业代码，改指 `src/businessStubs`（AGPL 区，
+  // 等价空实现），使仓库里不再有商业许可文件。见 `src/businessStubs/index.js`。
+  '@business': path.resolve(__dirname, 'src/businessStubs'),
 };
 
 // load the secrets

@@ -2,17 +2,23 @@
 
 # Automa
 <p>
-  <img alt="Automa latest version" src="https://img.shields.io/github/package-json/v/AutomaApp/automa" />
-  <a href="https://twitter.com/AutomaApp">
-    <img alt="Follow Us on Twitter" src="https://img.shields.io/twitter/follow/AutomaApp?style=social" />
-  </a>
-  <a href="https://discord.gg/C6khwwTE84">
-    <img alt="Chat with us on Discord" src="https://img.shields.io/discord/942211415517835354?label=join%20discord&logo=Discord&logoColor=white" />
-  </a>
+  <img alt="Latest version" src="https://img.shields.io/github/package-json/v/ray040237/automa" />
 </p>
 
 An extension for automating your browser by connecting blocks. <br />
 Auto-fill forms, do a repetitive task, take a screenshot, or scrape website data — the choice is yours. You can even schedule when the automation will execute!
+
+## 关于本仓库（Fork 声明）
+
+本仓库 fork 自 [AutomaApp/automa](https://github.com/AutomaApp/automa)。上游已停止维护，
+此分支由本人接手继续维护：修 bug、补功能（内置 AI 助手、离线构建等）。
+
+- **许可**：顶层 `business/` 目录之外的源码遵循 AGPL，见 [LICENSE.txt](./LICENSE.txt)。
+- **商业代码已剥离**：上游 `business/` 目录内的源码属 Automa Commercial License（本仓库
+  只含闭源包的空壳占位）。本 fork 不携带任何商业许可文件——占位已替换为
+  `src/businessStubs/` 下的等价空实现，位于 AGPL 区。
+- **归属**：上游的版权与许可声明全部保留。"Automa" 名称与图标的商标权归上游作者所有，
+  本仓库不主张。
 
 ## Downloads
 <table cellspacing="0" cellpadding="0">
