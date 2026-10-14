@@ -235,14 +235,14 @@
 **进度**：②（newtab 编辑界面）已于 2026-10-14 完成，见 `backlog-done.md` 的 **T-256**；③（零散基础组件）已于 2026-10-14 完成，见 **T-257**（真实文案 5 处 / 3 文件，远低于登记时估的「约 50 文件」）；**只剩 ①（content script 一族）** 仍待审核 —— 动手前需先定 locale 来源设计（见本条「建议」的两个选项）。
 状态：待审核
 
-#### T-258 — `blocksValidation.js` 整族硬编码英文校验消息，中文用户在块上看不到任何校验提示的母语
+#### T-259 — JS 侧（非 .vue）剩余用户可见硬编码英文：content script 两条 alert/message + execute 独立页三条诊断文案
 
 登记日期：2026-10-14
-来源：T-257 收尾时的产物侧 grep —— `build/newtab.bundle.js` 里仍有 `Loop id` / `Reference key`，回查定位到 `src/newtab/utils/blocksValidation.js:142,176,181,196` 等（该文件不在 T-255 扫描器覆盖范围内：扫描器只扫 `.vue` 的 template 段，**扫不到纯 JS 模块里的字符串**）
-现象：块的校验失败提示（块下方/红字）全是英文，如 `The Loop id is empty`、`The Reference key is empty`、`The Selector is empty`。中文用户配错块时看到的提示是英文，且这是**只会在用户犯错时出现的文案**——恰恰是最需要看懂的场景。
-证据：**实测 grep**，该文件 401 行、32 个 `errors.push` 点，去重后约 20 条消息，高频重复 4 条（`The Selector is empty` ×4、`The Variable name is empty` ×2、`The Reference key is empty` ×2、`The Loop id is empty` ×2），另有 1 条模板字符串 `` `"${name}" is empty in the ${location}` ``（T-257 产物侧 grep 时以 `Loop id` / `Reference key` 形式命中主 bundle，已坐实是它而非漏改的 .vue）。另注：同类 JS 侧文案可能还有别的文件 —— 本条目只覆盖已实测的这一个文件，全仓 JS 侧扫描未做。
-影响：中文用户的校验提示 100% 英文。最坏结果：用户看不懂为什么块报错，直接放弃该功能。
-建议：词的翻译小事，接入方式是设计点 —— 该模块是**纯 JS、不挂 i18n 实例**，三条路：① 模块内 `import { createI18n }` 或用 `src/lib/vueI18n.js` 的全局实例拿 `t`（注意 `legacy:false` 下要用 `i18n.global.t`）；② 把消息下沉到 `blocks.json` 词条 + 模块只返回 key，由调用方（vue 侧）翻译；③ 维持现状 + 单独评估。**另需先扫一遍 `src/**/*.js` 还有没有同类 JS 侧硬编码**，避免修完一个文件发现一个。上一条（`is empty` 句式）涉及模板字符串插值，走 ① 的话要注意插值语法（`t(key, { name, location })`）。
+来源：T-258 收尾时按登记条目要求补扫 `src/**/*.js`（grep 句子级英文串 + 逐条甄别）
+现象：① `src/content/index.js:150` 工作流执行结果的 `message: 'Block id is empty'`（postMessage 给页面的错误消息）；② `src/content/index.js:391` `alert('Workflow installed')`（安装工作流后的原生弹窗）；③ `src/execute/index.js:32,44,50` `Invalid path` / `Workflow not found` / `Executing workflow`（`writeResult` 直写 `document.body.innerText` 的独立执行页）。
+证据：全仓 grep 句子级英文串，排除内部 throw / console / CSS / 示例值 / browser 级 justification 后，用户可见的只剩这三处文件五条。① ② 属 content script 一族（与 T-255 第 ① 档同一 infra 问题：elementSelector 系 i18n 只 merge en 且 locale 硬编码 'en'）；③ 的宿主 `src/execute/index.js` 是**没有 Vue、没有 i18n 挂载**的裸 JS 页。
+影响：中文用户在装工作流、异常路径、URL 执行入口看到英文。量小（5 条）但都是「出结果/出异常」时刻的文案。
+建议：①② 并入 T-255 第 ① 档的 locale 来源设计一起做（offscreen/content 一族一起解决）；③ 单独评估 —— 要么读取 `browser.storage.local` 的 settings.locale 后走一个极简 t()（为 3 条建 Vue i18n 明显过度），要么维持现状（该页是 URL 触发的技术入口，用户面窄）。
 状态：待审核
 
 ### 新功能（要讨论场景，审得慢）

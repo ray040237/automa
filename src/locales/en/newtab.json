@@ -503,6 +503,49 @@
       "inputBeforeRun": "Input these workflows parameters before it runs.",
       "byParamPromptBlock": "By Parameter Prompt block"
     },
+    "blockValidation": {
+      "issues": "Issues:",
+      "emptyField": "The {field} is empty",
+      "emptyIn": "\"{name}\" is empty in the {location}",
+      "noWorkflow": "No workflow selected",
+      "someFilePathsEmpty": "Some of the file paths is empty",
+      "permission": {
+        "contextMenu": "Doesn't have permission for the Context menu trigger (ignore if you already grant the permissions)",
+        "download": "Don't have download permission (ignore if you already grant the permissions)",
+        "clipboard": "Don't have permission to access the clipboard (ignore if you already grant the permissions)",
+        "notifications": "Don't have notifications permissions",
+        "cookies": "Don't have cookies permissions"
+      },
+      "fields": {
+        "expression": "Expression",
+        "contextMenuName": "Context menu name",
+        "date": "Date",
+        "shortcut": "Shortcut",
+        "url": "URL",
+        "matchPatterns": "Match patterns",
+        "tabTitle": "Tab title",
+        "host": "Host",
+        "cssSelector": "CSS selector",
+        "selector": "Selector",
+        "variableName": "Variable name",
+        "referenceKey": "Reference key",
+        "attributeName": "Attribute name",
+        "spreadsheetId": "Spreadsheet Id",
+        "range": "Range",
+        "loopId": "Loop id",
+        "loadMoreSelector": "Selector for loading more elements",
+        "iframeSelector": "Selector for Iframe",
+        "filePaths": "File paths",
+        "keysToPress": "Keys to press"
+      },
+      "locations": {
+        "cronJob": "Cron job trigger",
+        "contextMenu": "Context menu trigger",
+        "date": "On a specific date trigger",
+        "visitWeb": "Visit web trigger",
+        "shortcut": "Shortcut trigger"
+      }
+    },
     "my": "My workflows",
     "testing": {
       "title": "Testing mode",

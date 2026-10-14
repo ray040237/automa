@@ -503,6 +503,49 @@
       "inputBeforeRun": "请先在下方输入这些工作流参数。",
       "byParamPromptBlock": "来自参数提示模块"
     },
+    "blockValidation": {
+      "issues": "问题：",
+      "emptyField": "{field}为空",
+      "emptyIn": "{location}中的「{name}」为空",
+      "noWorkflow": "未选择工作流",
+      "someFilePathsEmpty": "部分文件路径为空",
+      "permission": {
+        "contextMenu": "没有右键菜单触发器权限（如已授权请忽略）",
+        "download": "没有下载权限（如已授权请忽略）",
+        "clipboard": "没有访问剪贴板的权限（如已授权请忽略）",
+        "notifications": "没有通知权限",
+        "cookies": "没有 Cookie 权限"
+      },
+      "fields": {
+        "expression": "表达式",
+        "contextMenuName": "右键菜单名称",
+        "date": "日期",
+        "shortcut": "快捷键",
+        "url": "URL",
+        "matchPatterns": "匹配模式",
+        "tabTitle": "标签页标题",
+        "host": "主机",
+        "cssSelector": "CSS 选择器",
+        "selector": "选择器",
+        "variableName": "变量名",
+        "referenceKey": "参考键",
+        "attributeName": "属性名",
+        "spreadsheetId": "表格 ID",
+        "range": "范围",
+        "loopId": "循环 id",
+        "loadMoreSelector": "加载更多元素的选择器",
+        "iframeSelector": "Iframe 的选择器",
+        "filePaths": "文件路径",
+        "keysToPress": "要按下的按键"
+      },
+      "locations": {
+        "cronJob": "定时任务触发器",
+        "contextMenu": "右键菜单触发器",
+        "date": "特定日期触发器",
+        "visitWeb": "访问网页触发器",
+        "shortcut": "快捷键触发器"
+      }
+    },
     "my": "我的工作流",
     "testing": {
       "title": "测试模式",

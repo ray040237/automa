@@ -1,5 +1,8 @@
 import { onMounted, watch, shallowRef } from 'vue';
 import blocksValidation from '@/newtab/utils/blocksValidation';
+import i18n from '@/lib/vueI18n';
+
+const t = (key, params) => i18n.global.t(key, params);
 
 export function useBlockValidation(blockId, data) {
   const errors = shallowRef('');
@@ -21,7 +24,9 @@ export function useBlockValidation(blockId, data) {
 
             errors.value =
               errorsStr.trim() &&
-              `Issues: <ol class='list-disc list-inside'>${errorsStr}</ol>`;
+              `${t(
+                'workflow.blockValidation.issues'
+              )} <ol class='list-disc list-inside'>${errorsStr}</ol>`;
           })
           .catch((error) => {
             console.error(error);

@@ -1,5 +1,6 @@
 import { onMounted, shallowReactive } from 'vue';
 import browser from 'webextension-polyfill';
+import i18n from '@/lib/vueI18n';
 
 const isMV2 = browser.runtime.getManifest().manifest_version === 2;
 
@@ -24,7 +25,7 @@ export function useHasPermissions(permissions) {
         });
 
         if (typeof needReload === 'boolean' && needReload) {
-          alert('Automa needs to reload to make this feature work');
+          alert(i18n.global.t('common.reloadRequired'));
 
           if (isMV2) {
             browser.runtime.getBackgroundPage().then((background) => {

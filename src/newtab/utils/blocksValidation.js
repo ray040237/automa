@@ -1,4 +1,5 @@
 import browser from 'webextension-polyfill';
+import i18n from '@/lib/vueI18n';
 
 const checkPermissions = (permissions) =>
   browser.permissions.contains({ permissions });
@@ -8,51 +9,60 @@ const defaultOptions = {
   once: false,
 };
 
+const P = 'workflow.blockValidation';
+const t = (key, params) => i18n.global.t(key, params);
+const field = (name) => t(`${P}.fields.${name}`);
+const emptyField = (name) => t(`${P}.emptyField`, { field: field(name) });
+const permission = (name) => t(`${P}.permission.${name}`);
+
 export async function validateTrigger(data) {
   const errors = [];
   const checkValue = (value, { name, location }) => {
     if (value && value.trim()) return;
 
-    errors.push(`"${name}" is empty in the ${location}`);
+    errors.push(
+      t(`${P}.emptyIn`, {
+        name: t(`${P}.fields.${name}`),
+        location: t(`${P}.locations.${location}`),
+      })
+    );
   };
   const triggersValidation = {
     'cron-job': (triggerData) => {
       checkValue(triggerData.expression, {
-        name: 'Expression',
-        location: 'Cron job trigger',
+        name: 'expression',
+        location: 'cronJob',
       });
     },
     'context-menu': async (triggerData) => {
-      const permission = isFirefox ? 'menus' : 'contextMenus';
-      const hasPermission = await checkPermissions([permission]);
+      const permission_ = isFirefox ? 'menus' : 'contextMenus';
+      const hasPermission = await checkPermissions([permission_]);
 
       if (!hasPermission) {
-        errors.push(
-          "Doesn't have permission for the Context menu trigger (ignore if you already grant the permissions)"
-        );
+        errors.push(permission('contextMenu'));
       } else {
         checkValue(triggerData.contextMenuName, {
-          name: 'Context menu name',
-          location: 'Context menu trigger',
+          name: 'contextMenuName',
+          location: 'contextMenu',
         });
       }
     },
     date: (triggerData) => {
       checkValue(triggerData.date, {
-        name: 'Date',
-        location: 'On a specific date tigger',
+        name: 'date',
+        location: 'date',
       });
     },
     'visit-web': (triggerData) => {
       checkValue(triggerData.url, {
-        name: 'URL',
-        location: 'Visit web trigger',
+        name: 'url',
+        location: 'visitWeb',
       });
     },
     'keyboard-shortcut': (triggerData) => {
       checkValue(triggerData.shortcut, {
-        name: 'Shortcut',
-        location: 'Shortcut trigger',
+        name: 'shortcut',
+        location: 'shortcut',
       });
     },
   };
@@ -71,13 +81,13 @@ export async function validateTrigger(data) {
 }
 
 export async function validateExecuteWorkflow(data) {
-  if (isEmptyStr(data.workflowId)) return ['No workflow selected'];
+  if (isEmptyStr(data.workflowId)) return [t(`${P}.noWorkflow`)];
 
   return [];
 }
 
 export async function validateNewTab(data) {
-  if (isEmptyStr(data.url)) return ['URL is empty'];
+  if (isEmptyStr(data.url)) return [emptyField('url')];
 
   return [];
 }
@@ -87,10 +97,10 @@ export async function validateSwitchTab(data) {
   const validateItems = {
     'match-patterns': () => {
       if (isEmptyStr(data.matchPattern))
-        errors.push('The Match patterns is empty');
+        errors.push(emptyField('matchPatterns'));
     },
     'tab-title': () => {
-      if (isEmptyStr(data.tabTitle)) errors.push('The Tab title is empty');
+      if (isEmptyStr(data.tabTitle)) errors.push(emptyField('tabTitle'));
     },
   };
 
@@ -100,14 +110,14 @@ export async function validateSwitchTab(data) {
 }
 
 export async function validateProxy(data) {
-  if (isEmptyStr(data.host)) return ['The Host is empty'];
+  if (isEmptyStr(data.host)) return [emptyField('host')];
 
   return [];
 }
 
 export async function validateCloseTab(data) {
   if (data.closeType === 'tab' && !data.activeTab && isEmptyStr(data.url)) {
-    return ['The Match patterns is empty'];
+    return [emptyField('matchPatterns')];
   }
 
   return [];
@@ -115,14 +125,14 @@ export async function validateCloseTab(data) {
 
 export async function validateTakeScreenshot(data) {
   if (data.type === 'element' && isEmptyStr(data.selector)) {
-    return ['The CSS selector is empty'];
+    return [emptyField('cssSelector')];
   }
 
   return [];
 }
 
 export async function validateInteractionBasic(data) {
-  if (isEmptyStr(data.selector)) return ['The Selector is empty'];
+  if (isEmptyStr(data.selector)) return [emptyField('selector')];
 
   return [];
 }
@@ -131,15 +141,12 @@ export async function validateExportData(data) {
   const errors = [];
 
   const hasPermission = await checkPermissions(['downloads']);
-  if (!hasPermission)
-    errors.push(
-      "Don't have download permission (ignore if you already grant the permissions)"
-    );
+  if (!hasPermission) errors.push(permission('download'));
 
   if (data.dataToExport === 'variable' && isEmptyStr(data.variableName)) {
-    errors.push('The Variable name is empty');
+    errors.push(emptyField('variableName'));
   } else if (data.dataToExport === 'google-sheets' && isEmptyStr(data.refKey)) {
-    errors.push('The Reference key is empty');
+    errors.push(emptyField('referenceKey'));
   }
 
   return errors;
@@ -148,9 +155,8 @@ export async function validateExportData(data) {
 export async function validateAttributeValue(data) {
   const errors = [];
 
-  if (isEmptyStr(data.selector)) errors.push('The Selector is empty');
-  if (isEmptyStr(data.attributeName))
-    errors.push('The Attribute name is empty');
+  if (isEmptyStr(data.selector)) errors.push(emptyField('selector'));
+  if (isEmptyStr(data.attributeName)) errors.push(emptyField('attributeName'));
 
   return errors;
 }
@@ -158,31 +164,30 @@ export async function validateAttributeValue(data) {
 export async function validateGoogleSheets(data) {
   const errors = [];
 
-  if (isEmptyStr(data.spreadsheetId))
-    errors.push('The Spreadsheet Id is empty');
-  if (isEmptyStr(data.range)) errors.push('The Range is empty');
+  if (isEmptyStr(data.spreadsheetId)) errors.push(emptyField('spreadsheetId'));
+  if (isEmptyStr(data.range)) errors.push(emptyField('range'));
 
   return errors;
 }
 
 export async function validateWebhook(data) {
-  if (isEmptyStr(data.url)) return ['The URL is empty'];
+  if (isEmptyStr(data.url)) return [emptyField('url')];
 
   return [];
 }
 
 export async function validateLoopData(data) {
   const errors = [];
-  if (isEmptyStr(data.loopId)) errors.push('The Loop id is empty');
+  if (isEmptyStr(data.loopId)) errors.push(emptyField('loopId'));
 
   const loopThroughItems = {
     'google-sheets': () => {
       if (isEmptyStr(data.referenceKey))
-        errors.push('The Reference key is empty');
+        errors.push(emptyField('referenceKey'));
     },
     variable: () => {
       if (isEmptyStr(data.variableName))
-        errors.push('The Variable name is empty');
+        errors.push(emptyField('variableName'));
     },
   };
   const validateItem = loopThroughItems[data.loopThrough];
@@ -193,14 +198,14 @@ export async function validateLoopData(data) {
 
 export async function validateLoopElements(data) {
   const errors = [];
-  if (isEmptyStr(data.loopId)) errors.push('The Loop id is empty');
-  if (isEmptyStr(data.selector)) errors.push('The Selector is empty');
+  if (isEmptyStr(data.loopId)) errors.push(emptyField('loopId'));
+  if (isEmptyStr(data.selector)) errors.push(emptyField('selector'));
 
   if (
     ['click-element', 'click-link'].includes(data.loadMoreAction) &&
     isEmptyStr(data.actionElSelector)
   ) {
-    errors.push('The Selector for loading more elements is empty');
+    errors.push(emptyField('loadMoreSelector'));
   }
 
   return errors;
@@ -212,17 +217,14 @@ export async function validateClipboard() {
     : ['clipboardRead'];
   const hasPermission = await checkPermissions(permissions);
 
-  if (!hasPermission)
-    return [
-      "Don't have permission to access the clipboard (ignore if you already grant the permissions)",
-    ];
+  if (!hasPermission) return [permission('clipboard')];
 
   return [];
 }
 
 export async function validateSwitchTo(data) {
   if (data.windowType === 'iframe' && isEmptyStr(data.selector)) {
-    return ['The Selector for Iframe is empty'];
+    return [emptyField('iframeSelector')];
   }
 
   return [];
@@ -231,10 +233,10 @@ export async function validateSwitchTo(data) {
 export async function validateUploadFile(data) {
   const errors = [];
 
-  if (isEmptyStr(data.selector)) errors.push('The Selector is empty');
+  if (isEmptyStr(data.selector)) errors.push(emptyField('selector'));
 
   const someInputsEmpty = data.filePaths.some((path) => isEmptyStr(path));
-  if (someInputsEmpty) errors.push('Some of the file paths is empty');
+  if (someInputsEmpty) errors.push(t(`${P}.someFilePathsEmpty`));
 
   return errors;
 }
@@ -243,12 +245,9 @@ export async function validateSaveAssets(data) {
   const errors = [];
 
   const hasPermission = await checkPermissions(['downloads']);
-  if (!hasPermission)
-    errors.push(
-      "Don't have download permission (ignore if you already grant the permissions)"
-    );
+  if (!hasPermission) errors.push(permission('download'));
   else if (isEmptyStr(data.selector) && data.type === 'element')
-    errors.push('The Selector is empty');
+    errors.push(emptyField('selector'));
 
   return errors;
 }
@@ -260,22 +259,21 @@ export async function validatePressKey(data) {
     !data.action || (data.action === 'press-key' && isEmptyStr(data.keys));
   const isMultipleKeysEmpty =
     data.action === 'multiple-keys' && isEmptyStr(data.keysToPress);
-  if (isKeyEmpty || isMultipleKeysEmpty)
-    errors.push('The Keys to press is empty');
+  if (isKeyEmpty || isMultipleKeysEmpty) errors.push(emptyField('keysToPress'));
 
   return errors;
 }
 
 export async function validateNotification() {
   const hasPermission = await checkPermissions(['notifications']);
-  if (!hasPermission) return ["Don't have notifications permissions"];
+  if (!hasPermission) return [permission('notifications')];
 
   return [];
 }
 
 export async function validateCookie() {
   const hasPermission = await checkPermissions(['cookies']);
-  if (!hasPermission) return ["Don't have cookies permissions"];
+  if (!hasPermission) return [permission('cookies')];
 
   return [];
 }
