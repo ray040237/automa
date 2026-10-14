@@ -15,7 +15,7 @@
         "selector": "Selettore elemento",
         "selectorOptions": "Opzioni del selettore",
         "timeout": "Timeout (millisecondi)",
-        "noPermission": "Automa non ha permessi sufficienti per eseguire questa azione",
+        "noPermission": "FlowWing non ha permessi sufficienti per eseguire questa azione",
         "grantPermission": "Autorizza",
         "action": "Azione",
         "element": {
@@ -232,7 +232,7 @@
         "name": "Gestici download",
         "description": "Gestisci il file da scaricare",
         "timeout": "Timeout (millisecondi)",
-        "noPermission": "Automa non dispone del permesso per accedere ai download",
+        "noPermission": "FlowWing non dispone del permesso per accedere ai download",
         "onConflict": "In caso di conflitto",
         "waitFile": "Attendi il download del file",
         "downloadId": "ID di download del file (opzionale)",
@@ -246,7 +246,7 @@
         "name": "Appunti",
         "description": "Ottieni il testo copiato dagli appunti",
         "data": "Dati degli appunti",
-        "noPermission": "Automa non dispone del permesso per accedere agli appunti",
+        "noPermission": "FlowWing non dispone del permesso per accedere agli appunti",
         "grantPermission": "Autorizza",
         "copySelection": "Copia il testo selezionato sulla pagina",
         "types": {
@@ -281,7 +281,7 @@
         "addFile": "Aggiungi file",
         "onlyURL": "Nel browser Firefox è supportato solo il caricamento di file da un URL",
         "requirement": "Leggi i requisiti prima di usare questo blocco",
-        "noFileAccess": "Automa non ha accesso ai file"
+        "noFileAccess": "FlowWing non ha accesso ai file"
       },
       "browser-event": {
         "name": "Evento browser",
@@ -348,7 +348,7 @@
           "targetWebsite": "Il Match Pattern del sito web in cui si trova l'elemento target (clicca per vedere più esempi di Match Pattern)",
           "baseEl": {
             "title": "Elemento base (opzionale)",
-            "description": "Automa ricomincerà ad osservare l'elemento target quando questo elemento cambia"
+            "description": "FlowWing ricomincerà ad osservare l'elemento target quando questo elemento cambia"
           },
           "subtree": {
             "title": "Includi sottoalbero",

@@ -17,7 +17,7 @@
     },
     "elementSelector": {
       "name": "Selettore elemento",
-      "noAccess": "Automa non ha accesso a questo sito"
+      "noAccess": "FlowWing non ha accesso a questo sito"
     },
     "workflow": {
       "new": "Nuovo workflow",

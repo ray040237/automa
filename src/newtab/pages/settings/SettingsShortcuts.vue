@@ -3,7 +3,7 @@
     {{ t('settings.language.reloadPage') }}
   </p>
   <div class="mb-8 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-    <p class="mb-2 font-semibold capitalize">Automa</p>
+    <p class="mb-2 font-semibold capitalize">FlowWing</p>
     <ui-list>
       <ui-list-item class="group">
         <p class="flex-1">{{ t('settings.shortcuts.shortcut') }}</p>

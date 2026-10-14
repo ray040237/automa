@@ -15,7 +15,7 @@
         "selector": "Selector de elementos",
         "selectorOptions": "Opciones de selección",
         "timeout": "Tiempo de espera (milisegundos)",
-        "noPermission": "Automa no tiene permisos suficientes para realizar esta acción",
+        "noPermission": "FlowWing no tiene permisos suficientes para realizar esta acción",
         "grantPermission": "Conceder permiso",
         "action": "Acción",
         "element": {
@@ -282,7 +282,7 @@
         "addFile": "Añadir archivo",
         "onlyURL": "El navegador Firefox sólo admite la carga de archivos desde una URL.",
         "requirement": "Lea los requisitos antes de utilizar este bloque",
-        "noFileAccess": "Automa no tiene acceso a los archivos"
+        "noFileAccess": "FlowWing no tiene acceso a los archivos"
       },
       "browser-event": {
         "name": "Evento del navegador",
@@ -349,7 +349,7 @@
           "targetWebsite": "El patrón de coincidencia del sitio web en el que se encuentra el elemento de destino (haga clic para ver más ejemplos de patrones de coincidencia)",
           "baseEl": {
             "title": "Base element (opcional)",
-            "description": "Automa reiniciará la observación del elemento de destino cuando este elemento cambie"
+            "description": "FlowWing reiniciará la observación del elemento de destino cuando este elemento cambie"
           },
           "subtree": {
             "title": "Incluir subárbol",

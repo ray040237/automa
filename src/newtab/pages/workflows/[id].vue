@@ -1802,7 +1802,7 @@ useHead({
   title: () =>
     `${workflow.value?.name} ${
       isPackage ? t('packages.package') : t('common.workflow')
-    }` || 'Automa',
+    }` || 'FlowWing',
 });
 const shortcut = useShortcut([
   getShortcut('editor:toggle-sidebar', toggleSidebar),

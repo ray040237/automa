@@ -4,10 +4,10 @@
     "communities": "Communities"
   },
   "welcome": {
-    "title": "Welcome to Automa! 🎉",
-    "text": "Get started by reading the documentation or browsing workflows in the Automa Marketplace.",
+    "title": "Welcome to FlowWing! 🎉",
+    "text": "Get started by reading the documentation or browsing workflows in the FlowWing Marketplace.",
     "marketplace": "Marketplace",
-    "tutorials": "To learn how to use Automa, watch the tutorials on our YouTube Channel."
+    "tutorials": "To learn how to use FlowWing, watch the tutorials on our YouTube Channel."
   },
   "packages": {
     "name": "Package | Packages",
@@ -151,7 +151,7 @@
     }
   },
   "updateMessage": {
-    "text1": "Automa has been updated to v{version},",
+    "text1": "FlowWing has been updated to v{version},",
     "text2": "see what's new."
   },
   "workflows": {
@@ -266,7 +266,7 @@
         "encrypt": "Encrypt with password",
         "schedule": "Schedule local backup",
         "alsoBackup": "Also backup",
-        "permissionRequired": "Automa requires the \"Downloads\" permission for the schedule backup to work",
+        "permissionRequired": "FlowWing requires the \"Downloads\" permission for the schedule backup to work",
         "allowPermission": "Allow \"Downloads\" permission",
         "everyDay": "Every day",
         "everyWeek": "Every week",
@@ -329,7 +329,7 @@
     "about": {
       "version": "Version: {version}",
       "offlineBuild": "Offline build",
-      "description": "Automa is a chrome extension for browser automation. From auto-fill forms, doing a repetitive task, taking a screenshot, to scraping data of the website, it's up to you what you want to do with this extension.",
+      "description": "FlowWing is a chrome extension for browser automation. From auto-fill forms, doing a repetitive task, taking a screenshot, to scraping data of the website, it's up to you what you want to do with this extension.",
       "contributors": "Contributors",
       "contributorsDescription": "Thanks to everyone who has submitted issues, made suggestions, and generally helped make this a better project.",
       "contributorAvatar": "{name} avatar",
@@ -745,7 +745,7 @@
       },
       "autocomplete": {
         "title": "Autocomplete",
-        "description": "Enable autocomplete in the input block (disable if it makes Automa unstable)"
+        "description": "Enable autocomplete in the input block (disable if it makes FlowWing unstable)"
       },
       "clearCache": {
         "title": "Clear cache",
@@ -788,7 +788,7 @@
       }
     },
     "url": "Workflow URL",
-    "clipboardPermission": "Automa require clipboard permission to paste blocks",
+    "clipboardPermission": "FlowWing require clipboard permission to paste blocks",
     "dataTable": {
       "connectTable": "Connect to a storage table",
       "selectTable": "Select a table",
@@ -1005,7 +1005,7 @@
       "active-tab-removed": "Workflow active tab was removed",
       "empty-spreadsheet-range": "Spreadsheet range is empty",
       "stop-timeout": "Workflow was stopped due to timeout",
-      "no-file-access": "Automa doesn't have access to the file",
+      "no-file-access": "FlowWing doesn't have access to the file",
       "no-workflow": "Can't find a workflow with the ID \"{workflowId}\"",
       "no-match-tab": "Can't find a tab matching the pattern \"{pattern}\"",
       "no-clipboard-acces": "Don't have permission to access the clipboard",
@@ -1126,12 +1126,12 @@
     "appSurvey": {
       "testimonial": {
         "title": "Hi There 👋",
-        "body": "Thank you for using Automa, and if you have a great experience. Would you like to give us a testimonial?",
+        "body": "Thank you for using FlowWing, and if you have a great experience. Would you like to give us a testimonial?",
         "button": "Give Testimonial"
       },
       "survey": {
         "title": "How do you think we're doing?",
-        "body": "To help us make Automa as best it can be, we need a few minutes of your time to get your feedback.",
+        "body": "To help us make FlowWing as best it can be, we need a few minutes of your time to get your feedback.",
         "button": "Take Survey"
       }
     },

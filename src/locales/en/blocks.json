@@ -15,7 +15,7 @@
         "selector": "Element selector",
         "selectorOptions": "Selector options",
         "timeout": "Timeout (milliseconds)",
-        "noPermission": "Automa doesn't have enough permissions to perform this action",
+        "noPermission": "FlowWing doesn't have enough permissions to perform this action",
         "grantPermission": "Grant permission",
         "action": "Action",
         "element": {
@@ -119,7 +119,7 @@
         "noInputs": "No inputs",
         "outputs": "Workflow Outputs(view only)",
         "noOutputs": "No outputs",
-        "poweredBy": "Powered by Automa",
+        "poweredBy": "Powered by FlowWing",
         "modal": {
           "description": "Enter your AI Power token to enable AI Workflow features",
           "howToGet": "How to get your AI Power Token",
@@ -394,7 +394,7 @@
         "addFile": "Add file",
         "onlyURL": "Only uploading files from a URL is supported in the Firefox browser",
         "requirement": "Read the requirements before using this block",
-        "noFileAccess": "Automa doesn't have access to files",
+        "noFileAccess": "FlowWing doesn't have access to files",
         "pathPlaceholder": "URL/File path/base64"
       },
       "browser-event": {
@@ -487,7 +487,7 @@
           "targetWebsite": "The Match Pattern of the website where the target element is (click to see more Match Pattern examples)",
           "baseEl": {
             "title": "Base element (optional)",
-            "description": "Automa will restart observing the target element when this element changes"
+            "description": "FlowWing will restart observing the target element when this element changes"
           },
           "subtree": {
             "title": "Include subtree",
@@ -567,7 +567,7 @@
         "select": "Select sheet",
         "connect": "Connect sheet",
         "notConnectedPrefix": "You haven't",
-        "notConnectedLink": "connected Automa to Google Drive",
+        "notConnectedLink": "connected FlowWing to Google Drive",
         "notConnectedSuffix": ".",
         "tabs": {
           "connected": "Connected",
@@ -588,7 +588,7 @@
           "upload": "Upload files"
         },
         "notConnectedPrefix": "You haven't",
-        "notConnectedLink": "connected Automa to Google Drive",
+        "notConnectedLink": "connected FlowWing to Google Drive",
         "notConnectedSuffix": ".",
         "fileLocation": "File location",
         "localComputer": "Local computer",
@@ -635,7 +635,7 @@
           "create": "Create a spreadsheet",
           "add-sheet": "Add sheet"
         },
-        "noAccess": "Automa doesn't have access to the spreadsheet.",
+        "noAccess": "FlowWing doesn't have access to the spreadsheet.",
         "readMore": "Click here to read more.",
         "customData": "Custom data",
         "messages": {

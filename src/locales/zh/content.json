@@ -61,7 +61,7 @@
       "toCancel": "取消"
     },
     "install": {
-      "confirm": "确定要将此工作流添加到 Automa 吗？",
+      "confirm": "确定要将此工作流添加到 FlowWing 吗？",
       "installed": "工作流已安装"
     },
     "blockIdEmpty": "块 id 为空"

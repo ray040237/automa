@@ -15,7 +15,7 @@
         "selector": "Öğe seçici",
         "selectorOptions": "Seçici seçenekleri",
         "timeout": "Zaman aşımı (milisaniye)",
-        "noPermission": "Automa, bu işlemi gerçekleştirmek için yeterli izne sahip değil",
+        "noPermission": "FlowWing, bu işlemi gerçekleştirmek için yeterli izne sahip değil",
         "grantPermission": "İzni ver",
         "action": "Eylem",
         "element": {
@@ -150,139 +150,139 @@
         "addDestination": "Hedef ekle"
       },
       "sort-data": {
-          "name": "Veriyi Sırala",
-          "description": "Veri öğelerini sırala",
-          "property": "Öğenin özelliğine göre sırala",
-          "addProperty": "Özellik ekle"
+        "name": "Veriyi Sırala",
+        "description": "Veri öğelerini sırala",
+        "property": "Öğenin özelliğine göre sırala",
+        "addProperty": "Özellik ekle"
+      },
+      "increase-variable": {
+        "name": "Değişkeni Artır",
+        "description": "Bir değişkenin değerini belirli bir miktar artır",
+        "increase": "Artış miktarı"
+      },
+      "notification": {
+        "name": "Bildirim",
+        "description": "Bir bildirim görüntüle",
+        "title": "Başlık",
+        "message": "Mesaj",
+        "imageUrl": "Resim URL'si (isteğe bağlı)",
+        "iconUrl": "Simge URL'si (isteğe bağlı)"
+      },
+      "delete-data": {
+        "name": "Veriyi Sil",
+        "description": "Tablo veya değişken verisini sil",
+        "from": "Şu veriden",
+        "allColumns": "[Tüm sütunlar]"
+      },
+      "log-data": {
+        "name": "Günlük Veriyi Al",
+        "description": "Bir iş akışının en son günlük verisini al",
+        "data": "Günlük veri"
+      },
+      "tab-url": {
+        "name": "Sekme URL'sini Al",
+        "description": "Sekmenin URL'sini al",
+        "select": "Sekme seç",
+        "types": {
+          "active-tab": "Aktif sekme",
+          "all": "Tüm sekmeler"
         },
-        "increase-variable": {
-          "name": "Değişkeni Artır",
-          "description": "Bir değişkenin değerini belirli bir miktar artır",
-          "increase": "Artış miktarı"
+        "query": {
+          "title": "Sorgu",
+          "matchPatterns": "@:workflow.blocks.switch-tab.matchPattern (isteğe bağlı)",
+          "tabTitle": "Sekme başlığı (isteğe bağlı)"
+        }
+      },
+      "reload-tab": {
+        "name": "Sekmeyi Yeniden Yükle",
+        "description": "Aktif sekme üzerindeki yeniden yükle"
+      },
+      "press-key": {
+        "name": "Tuşa Bas",
+        "description": "Bir tuşa veya kombinasyona bas",
+        "target": "Hedef element (isteğe bağlı)",
+        "key": "Tuş",
+        "detect": "Tuşu Algıla",
+        "actions": {
+          "press-key": "Tuşa bas",
+          "multiple-keys": "Birden çok tuşa bas"
         },
-        "notification": {
-          "name": "Bildirim",
-          "description": "Bir bildirim görüntüle",
-          "title": "Başlık",
-          "message": "Mesaj",
-          "imageUrl": "Resim URL'si (isteğe bağlı)",
-          "iconUrl": "Simge URL'si (isteğe bağlı)"
-        },
-        "delete-data": {
-          "name": "Veriyi Sil",
-          "description": "Tablo veya değişken verisini sil",
-          "from": "Şu veriden",
-          "allColumns": "[Tüm sütunlar]"
-        },
-        "log-data": {
-          "name": "Günlük Veriyi Al",
-          "description": "Bir iş akışının en son günlük verisini al",
-          "data": "Günlük veri"
-        },
-        "tab-url": {
-          "name": "Sekme URL'sini Al",
-          "description": "Sekmenin URL'sini al",
-          "select": "Sekme seç",
-          "types": {
-            "active-tab": "Aktif sekme",
-            "all": "Tüm sekmeler"
-          },
-          "query": {
-            "title": "Sorgu",
-            "matchPatterns": "@:workflow.blocks.switch-tab.matchPattern (isteğe bağlı)",
-            "tabTitle": "Sekme başlığı (isteğe bağlı)"
+        "press-time": "Basma süresi (milisaniye)"
+      },
+      "save-assets": {
+        "name": "Varlıkları Kaydet",
+        "description": "Bir öğeden veya URL'den varlıkları (resim, video, ses veya dosya) kaydet",
+        "filename": "Dosya adı (isteğe bağlı)",
+        "saveDownloadIds": "Öğelerin indirme kimliklerini kaydet",
+        "contentTypes": {
+          "title": "Tür",
+          "element": "Medya öğesi (resim, ses veya video)",
+          "url": "URL"
+        }
+      },
+      "handle-dialog": {
+        "name": "Diyalogu İşle",
+        "description": "JavaScript başlatılmış bir iletişim kutusunu (uyarı, onay, prompt veya onbeforeunload) kabul eder veya reddeder",
+        "accept": "Diyalogu Kabul Et",
+        "promptText": {
+          "label": "Prompt metni (isteğe bağlı)",
+          "description": "Kabul etmeden önce prompt ile gireceğiniz metin"
+        }
+      },
+      "handle-download": {
+        "name": "İndirmeyi İşle",
+        "description": "İndirilen dosyayı işle",
+        "timeout": "Zaman aşımı (milisaniye)",
+        "noPermission": "İndirmelere erişim izni yok",
+        "onConflict": "Çakışma durumunda",
+        "waitFile": "Dosyanın indirilmesini bekle",
+        "downloadId": "Dosya indirme kimliği (isteğe bağlı)",
+        "filePath": "Dosya yolu"
+      },
+      "insert-data": {
+        "name": "Veri Ekleyin",
+        "description": "Veriyi tabloya veya değişkene ekleyin"
+      },
+      "clipboard": {
+        "name": "Pano",
+        "description": "Panodan kopyalanan metni al",
+        "data": "Pano verisi",
+        "noPermission": "Panoya erişim izni yok",
+        "grantPermission": "İzni ver",
+        "copySelection": "Sayfadaki seçilen metni kopyala",
+        "types": {
+          "get": "Panodan veri al",
+          "insert": "Metni panoya ekle"
+        }
+      },
+      "hover-element": {
+        "name": "Öğenin Üzerine Gel",
+        "description": "Bir öğenin üzerine gel"
+      },
+      "create-element": {
+        "name": "Öğe Oluştur",
+        "description": "Bir öğe oluşturun ve sayfaya ekleyin",
+        "edit": "Öğeyi Düzenle",
+        "wrap": "Öğeyi içine al",
+        "insertEl": {
+          "title": "Öğe Ekle",
+          "items": {
+            "before": "İlk çocuk olarak",
+            "after": "Son çocuk olarak",
+            "next-sibling": "Sonraki kardeş olarak",
+            "prev-sibling": "Önceki kardeş olarak",
+            "replace": "Hedef Öğeyi değiştir"
           }
-        },
-        "reload-tab": {
-          "name": "Sekmeyi Yeniden Yükle",
-          "description": "Aktif sekme üzerindeki yeniden yükle"
-        },
-        "press-key": {
-          "name": "Tuşa Bas",
-          "description": "Bir tuşa veya kombinasyona bas",
-          "target": "Hedef element (isteğe bağlı)",
-          "key": "Tuş",
-          "detect": "Tuşu Algıla",
-          "actions": {
-            "press-key": "Tuşa bas",
-            "multiple-keys": "Birden çok tuşa bas"
-          },
-          "press-time": "Basma süresi (milisaniye)"
-        },
-        "save-assets": {
-          "name": "Varlıkları Kaydet",
-          "description": "Bir öğeden veya URL'den varlıkları (resim, video, ses veya dosya) kaydet",
-          "filename": "Dosya adı (isteğe bağlı)",
-          "saveDownloadIds": "Öğelerin indirme kimliklerini kaydet",
-          "contentTypes": {
-            "title": "Tür",
-            "element": "Medya öğesi (resim, ses veya video)",
-            "url": "URL"
-          }
-        },
-        "handle-dialog": {
-          "name": "Diyalogu İşle",
-          "description": "JavaScript başlatılmış bir iletişim kutusunu (uyarı, onay, prompt veya onbeforeunload) kabul eder veya reddeder",
-          "accept": "Diyalogu Kabul Et",
-          "promptText": {
-            "label": "Prompt metni (isteğe bağlı)",
-            "description": "Kabul etmeden önce prompt ile gireceğiniz metin"
-          }
-        },
-        "handle-download": {
-          "name": "İndirmeyi İşle",
-          "description": "İndirilen dosyayı işle",
-          "timeout": "Zaman aşımı (milisaniye)",
-          "noPermission": "İndirmelere erişim izni yok",
-          "onConflict": "Çakışma durumunda",
-          "waitFile": "Dosyanın indirilmesini bekle",
-          "downloadId": "Dosya indirme kimliği (isteğe bağlı)",
-          "filePath": "Dosya yolu"
-        },
-        "insert-data": {
-          "name": "Veri Ekleyin",
-          "description": "Veriyi tabloya veya değişkene ekleyin"
-        },
-        "clipboard": {
-          "name": "Pano",
-          "description": "Panodan kopyalanan metni al",
-          "data": "Pano verisi",
-          "noPermission": "Panoya erişim izni yok",
-          "grantPermission": "İzni ver",
-          "copySelection": "Sayfadaki seçilen metni kopyala",
-          "types": {
-            "get": "Panodan veri al",
-            "insert": "Metni panoya ekle"
-          }
-        },
-        "hover-element": {
-          "name": "Öğenin Üzerine Gel",
-          "description": "Bir öğenin üzerine gel"
-        },
-        "create-element": {
-          "name": "Öğe Oluştur",
-          "description": "Bir öğe oluşturun ve sayfaya ekleyin",
-          "edit": "Öğeyi Düzenle",
-          "wrap": "Öğeyi içine al",
-          "insertEl": {
-            "title": "Öğe Ekle",
-            "items": {
-              "before": "İlk çocuk olarak",
-              "after": "Son çocuk olarak",
-              "next-sibling": "Sonraki kardeş olarak",
-              "prev-sibling": "Önceki kardeş olarak",
-              "replace": "Hedef Öğeyi değiştir"
-            }
-          }
-        },
-        "upload-file": {
-          "name": "Dosya Yükle",
-          "description": "<input type=\"file\"> Öğesine dosya yükle",
-          "filePath": "URL veya Dosya yolu",
-          "addFile": "Dosya ekle",
-          "onlyURL": "Firefox tarayıcısında yalnızca URL'den dosya yükleme desteklenir",
-          "requirement": "Bu bloku kullanmadan önce gereksinimleri okuyun",
-          "noFileAccess": "Automa dosyalara erişim izni bulunmamaktadır"
+        }
+      },
+      "upload-file": {
+        "name": "Dosya Yükle",
+        "description": "<input type=\"file\"> Öğesine dosya yükle",
+        "filePath": "URL veya Dosya yolu",
+        "addFile": "Dosya ekle",
+        "onlyURL": "Firefox tarayıcısında yalnızca URL'den dosya yükleme desteklenir",
+        "requirement": "Bu bloku kullanmadan önce gereksinimleri okuyun",
+        "noFileAccess": "FlowWing dosyalara erişim izni bulunmamaktadır"
       },
       "browser-event": {
         "name": "Tarayıcı Olayı",
@@ -349,7 +349,7 @@
           "targetWebsite": "Hedef öğenin bulunduğu web sitesinin Eşleşme Deseni (Daha fazla Eşleşme Deseni örneğini görmek için tıklayın)",
           "baseEl": {
             "title": "Temel öğe (isteğe bağlı)",
-            "description": "Bu öğe değiştiğinde Automa hedef öğeyi izlemeyi yeniden başlatır"
+            "description": "Bu öğe değiştiğinde FlowWing hedef öğeyi izlemeyi yeniden başlatır"
           },
           "subtree": {
             "title": "Alt ağacı dahil et",

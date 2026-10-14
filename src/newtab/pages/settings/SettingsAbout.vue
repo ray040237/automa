@@ -3,7 +3,7 @@
     <div class="bg-box-transparent mb-2 inline-block rounded-full p-3">
       <img src="@/assets/svg/logo.svg" class="w-14" />
     </div>
-    <p class="text-2xl font-semibold">Automa</p>
+    <p class="text-2xl font-semibold">FlowWing</p>
     <p class="mb-2 mt-1">
       {{ t('settings.about.version', { version: extensionVersion }) }}
       <span

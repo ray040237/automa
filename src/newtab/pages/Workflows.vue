@@ -147,7 +147,7 @@ function closeTab(index, tab) {
 function getTabTitle() {
   if (route.name === 'workflows') return t('common.workflow', 2);
 
-  return `${document.title}`.replace(' - Automa', '');
+  return `${document.title}`.replace(' - FlowWing', '');
 }
 
 watch(

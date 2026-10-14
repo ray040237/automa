@@ -4,8 +4,8 @@
     "communities": "Comunidades"
   },
   "welcome": {
-    "title": "Bienvenido a Automa! 🎉",
-    "text": "Para empezar, lea la documentación o consulte los flujos de trabajo en Automa Marketplace.",
+    "title": "Bienvenido a FlowWing! 🎉",
+    "text": "Para empezar, lea la documentación o consulte los flujos de trabajo en FlowWing Marketplace.",
     "marketplace": "Marketplace"
   },
   "packages": {
@@ -29,7 +29,7 @@
     "nextRun": "Próxima ejecución",
     "active": "Activar",
     "refresh": "Refrescar",
-    "schedule":{
+    "schedule": {
       "title": "Horario",
       "types": {
         "everyDay": "Todos los días",
@@ -82,7 +82,7 @@
     }
   },
   "updateMessage": {
-    "text1": "Automa ha sido actualizado a v{version},",
+    "text1": "FlowWing ha sido actualizado a v{version},",
     "text2": "ver las novedades."
   },
   "workflows": {
@@ -365,7 +365,7 @@
       },
       "autocomplete": {
         "title": "Autocompletar",
-        "description": "Activar autocompletar en el bloque de entrada (desactivar si hace inestable Automa)"
+        "description": "Activar autocompletar en el bloque de entrada (desactivar si hace inestable FlowWing)"
       },
       "clearCache": {
         "title": "Limpiar cache",
@@ -458,7 +458,7 @@
       "active-tab-removed": "Se ha eliminado la pestaña de flujo de trabajo activo",
       "empty-spreadsheet-range": "El rango de la hoja de cálculo está vacío",
       "stop-timeout": "El flujo de trabajo se detuvo debido a un tiempo de espera",
-      "no-file-access": "Automa no tiene acceso al fichero",
+      "no-file-access": "FlowWing no tiene acceso al fichero",
       "no-workflow": "No se puede encontrar un flujo de trabajo con el ID \"{workflowId}\"",
       "no-match-tab": "No se puede encontrar una pestaña que coincida con el patrón \"{pattern}\"",
       "no-clipboard-acces": "No tiene permiso para acceder al portapapeles",

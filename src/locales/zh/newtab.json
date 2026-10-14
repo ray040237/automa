@@ -4,10 +4,10 @@
     "communities": "社区"
   },
   "welcome": {
-    "title": "欢迎使用 Automa! 🎉",
-    "text": "从阅读文档或浏览 Automa 市场中的工作流开始.",
+    "title": "欢迎使用 FlowWing! 🎉",
+    "text": "从阅读文档或浏览 FlowWing 市场中的工作流开始.",
     "marketplace": "市场",
-    "tutorials": "想了解如何使用 Automa，请观看我们 YouTube 频道上的教程。"
+    "tutorials": "想了解如何使用 FlowWing，请观看我们 YouTube 频道上的教程。"
   },
   "packages": {
     "name": "包 | 包",
@@ -151,7 +151,7 @@
     }
   },
   "updateMessage": {
-    "text1": "Automa 已更新为 v{version},",
+    "text1": "FlowWing 已更新为 v{version},",
     "text2": "看看有什么新东西."
   },
   "workflows": {
@@ -266,7 +266,7 @@
         "encrypt": "用密码加密",
         "schedule": "本地备份计划",
         "alsoBackup": "同时备份",
-        "permissionRequired": "计划备份需要 Automa 拥有“下载”权限才能正常工作",
+        "permissionRequired": "计划备份需要 FlowWing 拥有“下载”权限才能正常工作",
         "allowPermission": "允许“下载”权限",
         "everyDay": "每天",
         "everyWeek": "每周",
@@ -308,7 +308,7 @@
     "about": {
       "version": "版本：{version}",
       "offlineBuild": "离线版本",
-      "description": "Automa 是一款用于浏览器自动化的 Chrome 扩展。从自动填写表单、执行重复任务、截取屏幕截图，到抓取网站数据，这个扩展能用来做什么由您决定。",
+      "description": "FlowWing 是一款用于浏览器自动化的 Chrome 扩展。从自动填写表单、执行重复任务、截取屏幕截图，到抓取网站数据，这个扩展能用来做什么由您决定。",
       "contributors": "贡献者",
       "contributorsDescription": "感谢所有提交 issue、提出建议并帮助本项目变得更好的每一个人。",
       "contributorAvatar": "{name} 的头像",
@@ -728,7 +728,7 @@
       "notification": {
         "title": "工作流通知",
         "description": "执行后显示工作流状态（成功或失败）",
-        "noPermission": "Automa 需要 \"notifications\" 权限才能正常工作"
+        "noPermission": "FlowWing 需要 \"notifications\" 权限才能正常工作"
       },
       "publicId": {
         "title": "工作流公开 Id",
@@ -745,7 +745,7 @@
       },
       "autocomplete": {
         "title": "自动完成",
-        "description": "在输入块中启用自动完成（如果造成 Automa 不稳定请禁用）"
+        "description": "在输入块中启用自动完成（如果造成 FlowWing 不稳定请禁用）"
       },
       "clearCache": {
         "title": "清理缓存",
@@ -788,7 +788,7 @@
       }
     },
     "url": "工作流 URL",
-    "clipboardPermission": "Automa 需要剪贴板权限才能粘贴块",
+    "clipboardPermission": "FlowWing 需要剪贴板权限才能粘贴块",
     "dataTable": {
       "connectTable": "连接到存储表",
       "selectTable": "选择表",
@@ -1005,7 +1005,7 @@
       "active-tab-removed": "工作流活动标签页已删除",
       "empty-spreadsheet-range": "电子表格范围为空",
       "stop-timeout": "工作流程因超时而停止",
-      "no-file-access": "Automa 无权访问该文件",
+      "no-file-access": "FlowWing 无权访问该文件",
       "no-workflow": "找不到含 \"{workflowId}\" ID 的工作流",
       "no-match-tab": "找不到含 \"{pattern}\" 参数的标签页",
       "no-clipboard-acces": "无权访问剪贴板",
@@ -1126,12 +1126,12 @@
     "appSurvey": {
       "testimonial": {
         "title": "您好 👋",
-        "body": "感谢您使用 Automa，如果您有良好的使用体验，愿意给我们写一段推荐语吗？",
+        "body": "感谢您使用 FlowWing，如果您有良好的使用体验，愿意给我们写一段推荐语吗？",
         "button": "写推荐语"
       },
       "survey": {
         "title": "您觉得我们做得怎么样？",
-        "body": "为了把 Automa 做到最好，我们需要您花几分钟时间提供反馈。",
+        "body": "为了把 FlowWing 做到最好，我们需要您花几分钟时间提供反馈。",
         "button": "参与调查"
       }
     },

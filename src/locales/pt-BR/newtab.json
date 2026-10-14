@@ -4,8 +4,8 @@
     "communities": "Comunidades"
   },
   "welcome": {
-    "title": "Bem-vindo ao Automa! 🎉",
-    "text": "Comece lendo a documentação ou navegando pelos Workflows no Automa Marketplace.",
+    "title": "Bem-vindo ao FlowWing! 🎉",
+    "text": "Comece lendo a documentação ou navegando pelos Workflows no FlowWing Marketplace.",
     "marketplace": "Marketplace"
   },
   "packages": {
@@ -82,7 +82,7 @@
     }
   },
   "updateMessage": {
-    "text1": "O Automa foi atualizado para a v{version},",
+    "text1": "O FlowWing foi atualizado para a v{version},",
     "text2": "veja o que há de novo."
   },
   "workflows": {
@@ -204,106 +204,106 @@
         }
       },
       "types": {
-    "finish:success": {
-      "name": "Finalizar (sucesso)",
-      "description": "Execução do Workflow finalizada com sucesso"
+        "finish:success": {
+          "name": "Finalizar (sucesso)",
+          "description": "Execução do Workflow finalizada com sucesso"
+        },
+        "finish:failed": {
+          "name": "Finalizar (falha)",
+          "description": "Execução do Workflow finalizada com erro"
+        }
+      }
     },
-    "finish:failed": {
-      "name": "Finalizar (falha)",
-      "description": "Execução do Workflow finalizada com erro"
-     }
-    }
-  },
-  "previewMode": {
-    "title": "Modo de pré-visualização",
-    "description": "Você está no modo de pré-visualização, as alterações feitas não serão salvas"
-  },
-  "pinWorkflow": {
-    "pin": "Fixar Workflow",
-    "unpin": "Desfixar Workflow",
-    "pinned": "Workflows fixados"
-  },
-  "parameters": {
-    "add": "Adicionar parâmetro",
-    "preferInTab": "Preferir parâmetros de entrada na aba"
-  },
-  "my": "Meus Workflows",
-  "testing": {
-    "title": "Modo de teste",
-    "nextBlock": "Próximo bloco",
-    "startRun": "Iniciar execução em",
-    "disabled": "Salve as alterações primeiro"
-  },
-  "import": "Importar Workflow",
-  "new": "Novo Workflow",
-  "delete": "Excluir Workflow",
-  "browse": "Navegar pelos Workflows",
-  "name": "Nome do Workflow",
-  "rename": "Renomear Workflow",
-  "backupCloud": "Backup do Workflow para a nuvem",
-  "add": "Adicionar Workflow",
-  "clickToEnable": "Clique para habilitar",
-  "toggleSidebar": "Alternar barra lateral",
-  "cantEdit": "Não é possível editar Workflow compartilhado",
-  "undo": "Desfazer",
-  "redo": "Refazer",
-  "autoAlign": {
-    "title": "Alinhar automaticamente"
-  },
-  "blocksFolder": {
-    "title": "Pasta de Blocos",
-    "add": "Adicionar blocos à pasta",
-    "save": "Salvar na pasta"
-  },
-  "searchBlocks": {
-    "title": "Pesquisar blocos no editor"
-  },
-  "conditionBuilder": {
-    "title": "Construtor de condições",
-    "add": "Adicionar condição",
-    "and": "E",
-    "or": "OU",
-    "topAwait": "Suporta await em nível superior e a função \"automaRefData\""
-  },
-  "host": {
-    "title": "Host Workflow",
-    "set": "Definir como Host Workflow",
-    "id": "ID do Host",
-    "add": "Adicionar Host Workflow",
-    "sync": {
-      "title": "Sincronizar",
-      "description": "Sincronizar com Host Workflow"
+    "previewMode": {
+      "title": "Modo de pré-visualização",
+      "description": "Você está no modo de pré-visualização, as alterações feitas não serão salvas"
     },
-    "messages": {
-      "hostExist": "Você já adicionou este host",
-      "notFound": "Não foi possível encontrar um Host Workflow com o ID \"{id}\""
-    }
-  },
-  "type": {
-    "local": "Local",
-    "shared": "Compartilhado",
-    "host": "Host"
-  },
-  "unpublish": {
-    "title": "Despublicar Workflow",
-    "button": "Despublicar",
-    "body": "Tem certeza de que deseja despublicar o Workflow \"{name}\"?"
-  },
-  "share": {
-    "url": "Compartilhar URL",
-    "publish": "Publicar",
-    "sharedAs": "Compartilhado como \"{name}\"",
-    "title": "Compartilhar Workflow",
-    "download": "Salvar Workflow localmente",
-    "edit": "Editar descrição",
-    "fetchLocal": "Buscar Workflow local",
-    "update": "Atualizar",
-    "unpublish": "Despublicar"
-  },
-  "variables": {
-    "title": "Variável | Variáveis",
-    "name": "Nome da variável",
-    "assign": "Atribuir à variável"
+    "pinWorkflow": {
+      "pin": "Fixar Workflow",
+      "unpin": "Desfixar Workflow",
+      "pinned": "Workflows fixados"
+    },
+    "parameters": {
+      "add": "Adicionar parâmetro",
+      "preferInTab": "Preferir parâmetros de entrada na aba"
+    },
+    "my": "Meus Workflows",
+    "testing": {
+      "title": "Modo de teste",
+      "nextBlock": "Próximo bloco",
+      "startRun": "Iniciar execução em",
+      "disabled": "Salve as alterações primeiro"
+    },
+    "import": "Importar Workflow",
+    "new": "Novo Workflow",
+    "delete": "Excluir Workflow",
+    "browse": "Navegar pelos Workflows",
+    "name": "Nome do Workflow",
+    "rename": "Renomear Workflow",
+    "backupCloud": "Backup do Workflow para a nuvem",
+    "add": "Adicionar Workflow",
+    "clickToEnable": "Clique para habilitar",
+    "toggleSidebar": "Alternar barra lateral",
+    "cantEdit": "Não é possível editar Workflow compartilhado",
+    "undo": "Desfazer",
+    "redo": "Refazer",
+    "autoAlign": {
+      "title": "Alinhar automaticamente"
+    },
+    "blocksFolder": {
+      "title": "Pasta de Blocos",
+      "add": "Adicionar blocos à pasta",
+      "save": "Salvar na pasta"
+    },
+    "searchBlocks": {
+      "title": "Pesquisar blocos no editor"
+    },
+    "conditionBuilder": {
+      "title": "Construtor de condições",
+      "add": "Adicionar condição",
+      "and": "E",
+      "or": "OU",
+      "topAwait": "Suporta await em nível superior e a função \"automaRefData\""
+    },
+    "host": {
+      "title": "Host Workflow",
+      "set": "Definir como Host Workflow",
+      "id": "ID do Host",
+      "add": "Adicionar Host Workflow",
+      "sync": {
+        "title": "Sincronizar",
+        "description": "Sincronizar com Host Workflow"
+      },
+      "messages": {
+        "hostExist": "Você já adicionou este host",
+        "notFound": "Não foi possível encontrar um Host Workflow com o ID \"{id}\""
+      }
+    },
+    "type": {
+      "local": "Local",
+      "shared": "Compartilhado",
+      "host": "Host"
+    },
+    "unpublish": {
+      "title": "Despublicar Workflow",
+      "button": "Despublicar",
+      "body": "Tem certeza de que deseja despublicar o Workflow \"{name}\"?"
+    },
+    "share": {
+      "url": "Compartilhar URL",
+      "publish": "Publicar",
+      "sharedAs": "Compartilhado como \"{name}\"",
+      "title": "Compartilhar Workflow",
+      "download": "Salvar Workflow localmente",
+      "edit": "Editar descrição",
+      "fetchLocal": "Buscar Workflow local",
+      "update": "Atualizar",
+      "unpublish": "Despublicar"
+    },
+    "variables": {
+      "title": "Variável | Variáveis",
+      "name": "Nome da variável",
+      "assign": "Atribuir à variável"
     },
     "protect": {
       "title": "Proteger workflow",
@@ -363,7 +363,7 @@
       },
       "autocomplete": {
         "title": "Autocompletar",
-        "description": "Ativar autocompletar no bloco de entrada (desative se causar instabilidade no Automa)"
+        "description": "Ativar autocompletar no bloco de entrada (desative se causar instabilidade no FlowWing)"
       },
       "clearCache": {
         "title": "Limpar cache",
@@ -456,7 +456,7 @@
       "active-tab-removed": "A aba ativa do Workflow foi removida",
       "empty-spreadsheet-range": "O intervalo da planilha está vazio",
       "stop-timeout": "O Workflow foi interrompido devido ao tempo limite",
-      "no-file-access": "O Automa não tem acesso ao arquivo",
+      "no-file-access": "O FlowWing não tem acesso ao arquivo",
       "no-workflow": "Não foi possível encontrar um Workflow com o ID \"{workflowId}\"",
       "no-match-tab": "Não foi possível encontrar uma aba que corresponda ao padrão \"{pattern}\"",
       "no-clipboard-acces": "Sem permissão para acessar a área de transferência",
@@ -471,38 +471,38 @@
       "no-tab": "Não foi possível conectar a uma aba, use o bloco \"Nova aba\" ou \"Aba ativa\" antes de usar o bloco \"{name}\""
     },
     "description": {
-    "text": "{status} em {date} durante {duration}",
-    "status": {
-      "success": "Concluído",
-      "error": "Falhou",
-      "stopped": "Parou"
-    }
-  },
-  "delete": {
-    "title": "Excluir registro",
-    "description": "Tem certeza de que deseja excluir todos os registros selecionados?"
-  },
-  "exportData": {
-    "title": "Exportar dados",
-    "types": {
-      "json": "JSON",
-      "csv": "CSV",
-      "plain-text": "Texto simples"
-    }
-  },
-  "filter": {
-    "title": "Filtro",
-    "byStatus": "Por status",
-    "byDate": {
-      "title": "Por data",
-      "items": {
-        "lastDay": "Último dia",
-        "last7Days": "Últimos sete dias",
-        "last30Days": "Últimos 30 dias"
+      "text": "{status} em {date} durante {duration}",
+      "status": {
+        "success": "Concluído",
+        "error": "Falhou",
+        "stopped": "Parou"
+      }
+    },
+    "delete": {
+      "title": "Excluir registro",
+      "description": "Tem certeza de que deseja excluir todos os registros selecionados?"
+    },
+    "exportData": {
+      "title": "Exportar dados",
+      "types": {
+        "json": "JSON",
+        "csv": "CSV",
+        "plain-text": "Texto simples"
+      }
+    },
+    "filter": {
+      "title": "Filtro",
+      "byStatus": "Por status",
+      "byDate": {
+        "title": "Por data",
+        "items": {
+          "lastDay": "Último dia",
+          "last7Days": "Últimos sete dias",
+          "last30Days": "Últimos 30 dias"
+        }
       }
     }
-  }
-},
+  },
   "components": {
     "pagination": {
       "text1": "Mostrando",

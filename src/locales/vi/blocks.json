@@ -15,7 +15,7 @@
         "selector": "Bộ chọn phần tử",
         "selectorOptions": "Tùy chọn bộ chọn",
         "timeout": "Thời gian chờ (mili giây)",
-        "noPermission": "Automa không có đủ quyền để thực hiện hành động này",
+        "noPermission": "FlowWing không có đủ quyền để thực hiện hành động này",
         "grantPermission": "Cấp phép",
         "action": "Hoạt động",
         "element": {
@@ -268,7 +268,7 @@
         "addFile": "Thêm tập tin",
         "onlyURL": "Chỉ hỗ trợ tải tệp lên từ một URL trong trình duyệt Firefox",
         "requirement": "Xem yêu cầu trước khi sử dụng khối này",
-        "noFileAccess": "Automa không có quyền truy cập tệp"
+        "noFileAccess": "FlowWing không có quyền truy cập tệp"
       },
       "browser-event": {
         "name": "Sự kiện trình duyệt",
@@ -335,7 +335,7 @@
           "targetWebsite": "Mẫu Đối sánh của trang web có phần tử mục tiêu (nhấp để xem thêm các ví dụ về Mẫu Đối sánh)",
           "baseEl": {
             "title": "Phần tử cơ sở (tùy chọn)",
-            "description": "Automa sẽ bắt đầu lại việc quan sát phần tử mục tiêu khi phần tử này thay đổi"
+            "description": "FlowWing sẽ bắt đầu lại việc quan sát phần tử mục tiêu khi phần tử này thay đổi"
           },
           "subtree": {
             "title": "Bao gồm cây con",

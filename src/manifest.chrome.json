@@ -1,10 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Automa",
+  "name": "流翼 FlowWing",
   "minimum_chrome_version": "116",
   "action": {
     "default_popup": "popup.html",
-    "default_icon": "icon-128.png"
+    "default_icon": {
+      "16": "icon-16.png",
+      "32": "icon-32.png",
+      "48": "icon-48.png",
+      "128": "icon-128.png"
+    }
   },
   "side_panel": {
     "default_path": "sidepanel.html"
@@ -14,6 +19,9 @@
     "type": "module"
   },
   "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
     "128": "icon-128.png"
   },
   "commands": {

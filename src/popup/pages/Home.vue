@@ -8,7 +8,7 @@
     class="dark relative z-10 px-5 pt-8 text-white placeholder:text-black"
   >
     <div class="mb-4 flex items-center">
-      <h1 class="text-xl font-semibold text-white">Automa</h1>
+      <h1 class="text-xl font-semibold text-white">FlowWing</h1>
       <div class="grow"></div>
       <ui-button
         v-tooltip.group="t('home.record.startHint')"

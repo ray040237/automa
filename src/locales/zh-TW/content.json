@@ -61,7 +61,7 @@
       "toCancel": "取消"
     },
     "install": {
-      "confirm": "確定要將此工作流程新增至 Automa 嗎？",
+      "confirm": "確定要將此工作流程新增至 FlowWing 嗎？",
       "installed": "工作流程已安裝"
     },
     "blockIdEmpty": "區塊 id 為空"

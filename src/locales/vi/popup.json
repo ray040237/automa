@@ -25,7 +25,7 @@
       "delete": "Xóa quy trình",
       "type": {
         "host": "Máy chủ",
-        "local": "Cục bộ",
+        "local": "cục bộ"
       }
     }
   }

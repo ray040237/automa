@@ -1,12 +1,21 @@
 <img src="src/assets/images/icon-128.png" width="64"/>
 
-# Automa
+# 流翼 FlowWing
+
 <p>
   <img alt="Latest version" src="https://img.shields.io/github/package-json/v/ray040237/automa" />
+  <img alt="Tagline" src="https://img.shields.io/badge/tagline-Pilot%20your%20browser%2C%20automate%20the%20flow.-0B0B0A" />
 </p>
+
+> 商店标题：**流翼 FlowWing — 浏览器自动化**<br />
+> 标语：*Pilot your browser, automate the flow.*
 
 An extension for automating your browser by connecting blocks. <br />
 Auto-fill forms, do a repetitive task, take a screenshot, or scrape website data — the choice is yours. You can even schedule when the automation will execute!
+
+## 安装
+
+尚未上架 Chrome / Firefox 商店，当前请以开发模式本地加载，见下方 [Install Locally](#install-locally)。
 
 ## 关于本仓库（Fork 声明）
 
@@ -20,29 +29,9 @@ Auto-fill forms, do a repetitive task, take a screenshot, or scrape website data
 - **归属**：上游的版权与许可声明全部保留。"Automa" 名称与图标的商标权归上游作者所有，
   本仓库不主张。
 
-## Downloads
-<table cellspacing="0" cellpadding="0">
-  <tr>
-    <td valign="center">
-      <a align="center" href="https://chrome.google.com/webstore/detail/automa/infppggnoaenmfagbfknfkancpbljcca">
-        <img src="https://user-images.githubusercontent.com/22908993/166417152-f870bfbd-1770-4c28-b69d-a7303aebc9a6.png" alt="Chrome web store" />
-        <p align="center">Chrome Web Store</p>
-      </a>
-    </td>
-    <td valign="center">
-      <a href="https://addons.mozilla.org/en-US/firefox/addon/automa/">
-        <img src="https://user-images.githubusercontent.com/22908993/166417727-3481fef4-00e5-4cf0-bb03-27fb880d993c.png" alt="Firefox add-ons" />
-        <p align="center">Firefox Add-ons</p>
-      </a>
-    </td>
-  </tr>
-</table>
-
-## Marketplace
-Browse the Automa marketplace where you can share and download workflows with others. [Go to the marketplace &#187;](https://extension.automa.site/marketplace)
-
-## Automa Chrome Extension Builder
-Automa Chrome Extension Builder (Automa CEB for short) allows you to generate a standalone chrome extension based on Automa workflows. [Go to the documentation &#187;](https://docs.extension.automa.site/extension-builder)
+## Chrome Extension Builder
+上游的 Extension Builder 依赖 `extension.automa.site` 云服务，该服务已随上游停更而下线，
+本 fork 未内置此功能（Cloud 相关块在 offline 构建中不可用）。
 
 
 ## Project setup
@@ -99,7 +88,7 @@ v-remixicon/icons: https://preview-v-remixicon.vercel.app/
 Thanks to everyone who has submitted issues, made suggestions, and generally helped make this a better project.
 
 <a href="https://github.com/AutomaApp/automa/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AutomaApp/automa" />
+  <img src="https://contrib.rocks/image?repo=ray040237/automa" />
 </a>
 
 ## License

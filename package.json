@@ -1,7 +1,7 @@
 {
-  "name": "automa",
-  "version": "1.30.00",
-  "description": "An extension for automating your browser by connecting blocks",
+  "name": "flowwing",
+  "version": "1.0.0",
+  "description": "An extension for automating your browser by connecting blocks. Pilot your browser, automate the flow.",
   "repository": {
     "type": "git",
     "url": "https://github.com/ray040237/automa.git"

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Automa-Dev",
+  "name": "流翼 FlowWing Dev",
   "minimum_chrome_version": "116",
   "action": {
     "default_popup": "popup.html",

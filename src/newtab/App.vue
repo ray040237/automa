@@ -33,7 +33,7 @@
           {{ t('updateMessage.text1', { version: currentVersion }) }}
         </p>
         <a
-          :href="`https://github.com/AutomaApp/automa/releases/latest`"
+          :href="`https://github.com/ray040237/automa/releases/latest`"
           target="_blank"
           rel="noopener"
           class="ml-1 underline"
@@ -51,12 +51,12 @@
       <!-- <div class="mt-4 flex items-center rounded-lg bg-accent p-4 shadow-2xl">
         <v-remixicon name="riInformationLine" class="mr-3 shrink-0" />
         <p>
-          Export your Automa workflows as a standalone extension using
+          Export your FlowWing workflows as a standalone extension using
           <a
             href="https://docs.extension.automa.site/extension-builder/"
             target="_blank"
             class="underline"
-            >Automa Chrome Extension Builder</a
+            >FlowWing Chrome Extension Builder</a
           >
         </p>
       </div> -->
@@ -271,8 +271,8 @@ useHead(() => {
     title: 'Dashboard',
     titleTemplate:
       runningWorkflows > 0
-        ? `%s (${runningWorkflows} Workflows Running) - Automa`
-        : '%s - Automa',
+        ? `%s (${runningWorkflows} Workflows Running) - FlowWing`
+        : '%s - FlowWing',
   };
 });
 

@@ -34,6 +34,7 @@ Object.keys(Module._cache).forEach((key) => {
 const TerserPlugin = require('terser-webpack-plugin');
 const env = require('./utils/env');
 const { applyOfflineCsp } = require('./utils/manifestCsp');
+const packageJSON = require('./package.json');
 
 const ASSET_PATH = process.env.ASSET_PATH || '/';
 
@@ -198,9 +199,12 @@ const options = {
           force: true,
           toType: 'file',
           transform(content) {
+            // 注意：require 只能在文件顶层做 —— CopyWebpackPlugin 的 transform
+            // 内部走的是 webpack 自己的解析，require('../package.json') 会报
+            // "Cannot find module"（实测踩过）。
             const manifestObj = {
-              description: process.env.npm_package_description,
-              version: process.env.npm_package_version,
+              description: packageJSON.description,
+              version: packageJSON.version,
               ...JSON.parse(content.toString()),
             };
             const isChrome = env.BROWSER === 'chrome';
@@ -225,6 +229,26 @@ const options = {
         },
         {
           from: 'src/assets/images/icon-128.png',
+          to: path.join(__dirname, 'build'),
+          force: true,
+        },
+        {
+          from: 'src/assets/images/icon-16.png',
+          to: path.join(__dirname, 'build'),
+          force: true,
+        },
+        {
+          from: 'src/assets/images/icon-32.png',
+          to: path.join(__dirname, 'build'),
+          force: true,
+        },
+        {
+          from: 'src/assets/images/icon-48.png',
+          to: path.join(__dirname, 'build'),
+          force: true,
+        },
+        {
+          from: 'src/assets/images/icon-192.png',
           to: path.join(__dirname, 'build'),
           force: true,
         },

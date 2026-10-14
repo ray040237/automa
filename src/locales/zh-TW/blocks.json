@@ -1,11 +1,11 @@
 {
   "collection": {
-  "blocks": {
-  "export-result": {
-  "name": "匯出結果",
-  "description": "將集合結果匯出為 JSON"
-  }
-  }
+    "blocks": {
+      "export-result": {
+        "name": "匯出結果",
+        "description": "將集合結果匯出為 JSON"
+      }
+    }
   },
   "workflow": {
     "blocks": {
@@ -15,7 +15,7 @@
         "selector": "元素選擇器",
         "selectorOptions": "選擇器選項",
         "timeout": "超時時間（毫秒）",
-        "noPermission": "Automa 沒有足夠的權限執行此操作",
+        "noPermission": "FlowWing 沒有足夠的權限執行此操作",
         "grantPermission": "授予權限",
         "action": "操作",
         "element": {
@@ -37,7 +37,7 @@
             "lineColor": "顏色"
           }
         },
-"toggle": {
+        "toggle": {
           "enable": "啟用區塊",
           "disable": "停用區塊"
         },
@@ -282,7 +282,7 @@
         "addFile": "新增檔案",
         "onlyURL": "Firefox 瀏覽器僅支援從 URL 上傳檔案",
         "requirement": "使用此區塊前請閱讀需求",
-        "noFileAccess": "Automa 沒有存取檔案的權限"
+        "noFileAccess": "FlowWing 沒有存取檔案的權限"
       },
       "browser-event": {
         "name": "瀏覽器事件",
@@ -349,7 +349,7 @@
           "targetWebsite": "目標元素所在網站的 Match Pattern（點擊查看更多 Match Pattern 範例）",
           "baseEl": {
             "title": "基礎元素（選填）",
-            "description": "當此元素變更時，Automa 會重新開始觀察目標元素"
+            "description": "當此元素變更時，FlowWing 會重新開始觀察目標元素"
           },
           "subtree": {
             "title": "包含子樹",

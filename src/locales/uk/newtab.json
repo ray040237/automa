@@ -4,8 +4,8 @@
     "communities": "Спільноти"
   },
   "welcome": {
-    "title": "Ласкаво просимо до Automa! 🎉",
-    "text": "Почніть з перегляду документації або з робочих процесів в Automa Marketplace.",
+    "title": "Ласкаво просимо до FlowWing! 🎉",
+    "text": "Почніть з перегляду документації або з робочих процесів в FlowWing Marketplace.",
     "marketplace": "Marketplace"
   },
   "packages": {
@@ -28,7 +28,7 @@
     "nextRun": "Наступний запуск",
     "active": "Активний",
     "refresh": "Оновити",
-    "schedule":{
+    "schedule": {
       "title": "Розклад",
       "types": {
         "everyDay": "Щодня",
@@ -80,7 +80,7 @@
     }
   },
   "updateMessage": {
-    "text1": "Automa оновлена до v{version},",
+    "text1": "FlowWing оновлена до v{version},",
     "text2": "подивитися, що нового."
   },
   "workflows": {
@@ -326,7 +326,7 @@
       },
       "autocomplete": {
         "title": "Автозаповнення",
-        "description": "Увімкнути автозаповнення у блоці введення (вимкнути, якщо воно робить Automa нестабільним)"
+        "description": "Увімкнути автозаповнення у блоці введення (вимкнути, якщо воно робить FlowWing нестабільним)"
       },
       "clearCache": {
         "title": "Очистити кеш",
@@ -419,7 +419,7 @@
       "active-tab-removed": "Активну вкладку робочого процесу видалено",
       "empty-spreadsheet-range": "Діапазон таблиці порожній",
       "stop-timeout": "Робочий процес зупинено через тайм-аут",
-      "no-file-access": "Automa не має доступу до файлу",
+      "no-file-access": "FlowWing не має доступу до файлу",
       "no-workflow": "Не вдається знайти робочий цикл з ідентифікатором \"{workflowId}\"",
       "no-match-tab": "Не вдається знайти вкладку, що відповідає шаблону \"{pattern}\"",
       "no-clipboard-acces": "Немає дозволу на доступ до буфера обміну",

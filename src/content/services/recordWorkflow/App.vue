@@ -29,7 +29,7 @@
           style="height: 80%; width: 80%; animation-duration: 1.3s"
         ></span>
       </span>
-      <p class="ml-2 font-semibold">Automa</p>
+      <p class="ml-2 font-semibold">FlowWing</p>
       <div class="grow"></div>
       <v-remixicon name="mdiDragHorizontal" />
     </div>

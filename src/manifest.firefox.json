@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "name": "Automa",
+  "name": "流翼 FlowWing",
   "browser_specific_settings": {
     "gecko": {
       "strict_min_version": "91.1.0"
@@ -12,9 +12,17 @@
   },
   "browser_action": {
     "default_popup": "popup.html",
-    "default_icon": "icon-128.png"
+    "default_icon": {
+      "16": "icon-16.png",
+      "32": "icon-32.png",
+      "48": "icon-48.png",
+      "128": "icon-128.png"
+    }
   },
   "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
     "128": "icon-128.png"
   },
   "commands": {

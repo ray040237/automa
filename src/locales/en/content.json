@@ -61,7 +61,7 @@
       "toCancel": "to cancel"
     },
     "install": {
-      "confirm": "Do you want to add this workflow into Automa?",
+      "confirm": "Do you want to add this workflow into FlowWing?",
       "installed": "Workflow installed"
     },
     "blockIdEmpty": "Block id is empty"

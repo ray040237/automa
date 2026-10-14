@@ -15,7 +15,7 @@
         "selector": "Sélecteur d'éléments",
         "selectorOptions": "Options du Sélecteur",
         "timeout": "Délai d'attente (millisecondes)",
-        "noPermission": "Automa n'a pas les droits nécessaires pour effectuer cette action",
+        "noPermission": "FlowWing n'a pas les droits nécessaires pour effectuer cette action",
         "grantPermission": "Accorder les droits",
         "action": "Action",
         "element": {
@@ -275,7 +275,7 @@
         "filePath": "URL ou chemin d'accès au fichier",
         "addFile": "Ajouter un fichier",
         "requirement": "Voir les conditions requises avant d'utiliser ce bloc",
-        "noFileAccess": "Automa n'a pas accès aux fichiers"
+        "noFileAccess": "FlowWing n'a pas accès aux fichiers"
       },
       "browser-event": {
         "name": "Événement du navigateur",
@@ -337,7 +337,7 @@
           "targetWebsite": "La modèle correspondant du site où se trouve l'élément ciblé (cliquer pour voir plus d'exemples de Modèles)",
           "baseEl": {
             "title": "Elément de base (optionnel)",
-            "description": "Automa redémarrera l'observation de l'élément ciblé quand cet élément sera modifié"
+            "description": "FlowWing redémarrera l'observation de l'élément ciblé quand cet élément sera modifié"
           },
           "subtree": {
             "title": "Inclure 'Subtree'",

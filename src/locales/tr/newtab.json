@@ -4,8 +4,8 @@
     "communities": "Topluluklar"
   },
   "welcome": {
-    "title": "Automa'ya Hoş Geldiniz! 🎉",
-    "text": "Belgelendirmeyi okuyarak veya Automa Marketplace'deki iş akışlarını göz atarak başlayın.",
+    "title": "FlowWing'ya Hoş Geldiniz! 🎉",
+    "text": "Belgelendirmeyi okuyarak veya FlowWing Marketplace'deki iş akışlarını göz atarak başlayın.",
     "marketplace": "Marketplace"
   },
   "packages": {
@@ -29,7 +29,7 @@
     "nextRun": "Sonraki çalıştırma",
     "active": "Aktif",
     "refresh": "Yenile",
-    "schedule":{
+    "schedule": {
       "title": "Zamanlama",
       "types": {
         "everyDay": "Her gün",
@@ -81,7 +81,7 @@
     }
   },
   "updateMessage": {
-    "text1": "Automa v{version} sürümüne güncellendi,",
+    "text1": "FlowWing v{version} sürümüne güncellendi,",
     "text2": "yeniliklere göz atın."
   },
   "workflows": {
@@ -364,7 +364,7 @@
       },
       "autocomplete": {
         "title": "Otomatik tamamlama",
-        "description": "Giriş bloğunda otomatik tamamlamayı etkinleştirin (Automa'nın kararsız hale gelirse devre dışı bırakın)"
+        "description": "Giriş bloğunda otomatik tamamlamayı etkinleştirin (FlowWing'nın kararsız hale gelirse devre dışı bırakın)"
       },
       "clearCache": {
         "title": "Önbelleği temizle",
@@ -404,7 +404,7 @@
       "tabLoadTimeout": {
         "title": "Sekme yükleme zaman aşımı",
         "description": "Bir sekmenin yüklenme süresi için maksimum süre milisaniye cinsinden, zaman aşımını devre dışı bırakmak için 0 girin"
-        }
+      }
     }
   },
   "collection": {
@@ -457,7 +457,7 @@
       "active-tab-removed": "İş akışı etkin sekmesi kaldırıldı",
       "empty-spreadsheet-range": "Tablo aralığı boş",
       "stop-timeout": "İş akışı zaman aşımı nedeniyle durduruldu",
-      "no-file-access": "Automa'nın dosyaya erişimi yok",
+      "no-file-access": "FlowWing'nın dosyaya erişimi yok",
       "no-workflow": "ID \"{workflowId}\" ile bir iş akışı bulunamıyor",
       "no-match-tab": "\"{pattern}\" deseniyle eşleşen bir sekme bulunamıyor",
       "no-clipboard-acces": "Pano erişim izni yok",
@@ -514,6 +514,4 @@
       "of": "toplam {page}"
     }
   }
-
-
 }
